@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, MenuItemConstructorOptions, ipcMain, screen, shell } from 'electron';
+import { app, BrowserWindow, Menu, MenuItemConstructorOptions, ipcMain, nativeImage, screen, shell } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Store } from './store';
@@ -131,16 +131,42 @@ export class PetWindow {
     });
   }
 
-  /** 列出用户宠物目录下的 .gif / .svg */
+  /** 列出用户宠物目录下的宠物文件（gif/svg/png/jpg/jpeg/webp） */
   listPets(): string[] {
     try {
       return fs
         .readdirSync(this.userPetsDir())
-        .filter((f) => /\.(gif|svg)$/i.test(f))
+        .filter((f) => /\.(gif|svg|png|jpe?g|webp)$/i.test(f))
         .sort();
     } catch {
       return [];
     }
+  }
+
+  /**
+   * 导入图片生成宠物：自动去除白色背景 → 透明 PNG 存入宠物目录。
+   * @returns 生成的文件名
+   */
+  importImageAsPet(srcPath: string): string {
+    const base =
+      path
+        .basename(srcPath, path.extname(srcPath))
+        .replace(/[^\w\u4e00-\u9fa5-]/g, '_')
+        .slice(0, 40) || 'pet';
+    const dest = path.join(this.userPetsDir(), base + '.png');
+    const img = nativeImage.createFromPath(srcPath);
+    if (img.isEmpty()) throw new Error('无法读取图片');
+    const cleaned = removeWhiteBackground(img);
+    fs.mkdirSync(this.userPetsDir(), { recursive: true });
+    fs.writeFileSync(dest, cleaned.toPNG());
+    return base + '.png';
+  }
+
+  /** 保存 SVG 宠物（宠物工坊） */
+  saveSvgPet(name: string, svg: string): void {
+    const safe = path.basename(name);
+    fs.mkdirSync(this.userPetsDir(), { recursive: true });
+    fs.writeFileSync(path.join(this.userPetsDir(), safe), svg, 'utf-8');
   }
 
   /** 注册宠物相关 IPC（应用启动时调用一次） */
@@ -223,4 +249,23 @@ export class PetWindow {
 
     Menu.buildFromTemplate(template).popup({ window: this.window ?? undefined });
   }
+}
+
+/** 去除近白背景 → 透明（BGRA 像素级处理），用于"图片生成宠物" */
+function removeWhiteBackground(img: Electron.NativeImage): Electron.NativeImage {
+  const size = img.getSize();
+  const bitmap = img.toBitmap(); // BGRA
+  const out = Buffer.from(bitmap);
+  for (let i = 0; i < bitmap.length; i += 4) {
+    if (bitmap[i + 3] === 0) continue; // 原透明保持
+    const r = bitmap[i + 2];
+    const g = bitmap[i + 1];
+    const b = bitmap[i];
+    const min = Math.min(r, g, b);
+    let a = 255;
+    if (min >= 240) a = 0;
+    else if (min >= 215) a = Math.round(255 * ((255 - min) / 25));
+    out[i + 3] = a;
+  }
+  return nativeImage.createFromBitmap(out, size);
 }

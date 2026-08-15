@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'self' file: data:; img-src 'self' file: data:; style-src 'self' 'unsafe-inline'; script-src 'self' file:"
+  />
+  <title>宠物工坊</title>
+  <style>
+    :root { color-scheme: light; }
+    @media (prefers-color-scheme: dark) { :root { color-scheme: dark; } }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: #f7f8fa;
+      color: #24292f;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    @media (prefers-color-scheme: dark) {
+      body { background: #16181d; color: #e6e8ec; }
+    }
+
+    header {
+      padding: 12px 18px;
+      font-size: 15px;
+      font-weight: 600;
+      border-bottom: 1px solid #d0d7de;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    @media (prefers-color-scheme: dark) { header { border-color: #2a2f3a; } }
+    header .hint { font-size: 12px; font-weight: 400; color: #57606a; }
+    @media (prefers-color-scheme: dark) { header .hint { color: #9aa1ad; } }
+
+    .cols { display: flex; flex: 1; min-height: 0; }
+
+    .left {
+      width: 300px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      border-right: 1px solid #d0d7de;
+      overflow-y: auto;
+    }
+    @media (prefers-color-scheme: dark) { .left { border-color: #2a2f3a; } }
+
+    .stage {
+      height: 220px;
+      border-radius: 12px;
+      border: 1px solid #d0d7de;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      background: repeating-conic-gradient(#eef0f4 0% 25%, #ffffff 0% 50%) 50% / 20px 20px;
+    }
+    @media (prefers-color-scheme: dark) {
+      .stage { border-color: #2a2f3a; background: repeating-conic-gradient(#23262e 0% 25%, #16181d 0% 50%) 50% / 20px 20px; }
+    }
+    .stage svg, .stage img { width: 180px; height: 180px; }
+
+    .row { display: flex; gap: 8px; flex-wrap: wrap; }
+    button {
+      padding: 7px 14px;
+      border-radius: 8px;
+      border: 1px solid #d0d7de;
+      background: #ffffff;
+      color: #24292f;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    button:hover { background: #eef0f4; }
+    button.primary { background: #4d7cfe; border-color: #4d7cfe; color: #fff; }
+    button.primary:hover { background: #3d6cf5; }
+    @media (prefers-color-scheme: dark) {
+      button { background: #1d2128; color: #e6e8ec; border-color: #2a2f3a; }
+      button:hover { background: #262b34; }
+      button.primary { background: #4d7cfe; color: #fff; }
+    }
+
+    input[type="text"] {
+      flex: 1;
+      min-width: 120px;
+      padding: 7px 10px;
+      border: 1px solid #d0d7de;
+      border-radius: 8px;
+      background: #fff;
+      color: #24292f;
+      font-size: 13px;
+    }
+    @media (prefers-color-scheme: dark) { input[type="text"] { background: #101216; color: #e6e8ec; border-color: #2a2f3a; } }
+
+    .pets-label { font-size: 13px; color: #57606a; margin-top: 6px; }
+    @media (prefers-color-scheme: dark) { .pets-label { color: #9aa1ad; } }
+    .pets { display: flex; flex-direction: column; gap: 6px; max-height: 180px; overflow-y: auto; }
+    .pet-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 10px;
+      border: 1px solid #d0d7de;
+      border-radius: 8px;
+      background: #fff;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .pet-item:hover { background: #eef0f4; }
+    .pet-item.active { border-color: #4d7cfe; }
+    .pet-item .del { color: #d1242f; cursor: pointer; padding: 0 4px; }
+    @media (prefers-color-scheme: dark) {
+      .pet-item { background: #1d2128; border-color: #2a2f3a; }
+      .pet-item:hover { background: #262b34; }
+    }
+
+    .right { flex: 1; padding: 16px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+    .right label { font-size: 13px; color: #57606a; }
+    @media (prefers-color-scheme: dark) { .right label { color: #9aa1ad; } }
+    textarea {
+      flex: 1;
+      min-height: 0;
+      width: 100%;
+      box-sizing: border-box;
+      resize: none;
+      padding: 10px;
+      border: 1px solid #d0d7de;
+      border-radius: 8px;
+      background: #fff;
+      color: #24292f;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.5;
+      white-space: pre;
+    }
+    @media (prefers-color-scheme: dark) { textarea { background: #101216; color: #e6e8ec; border-color: #2a2f3a; } }
+    .tip { font-size: 11px; color: #8b949e; }
+    @media (prefers-color-scheme: dark) { .tip { color: #6b7280; } }
+    .status { font-size: 12px; color: #1a7f37; min-height: 16px; }
+    @media (prefers-color-scheme: dark) { .status { color: #3fb950; } }
+  </style>
+</head>
+<body>
+  <header>
+    🛠 宠物工坊
+    <span class="hint">自己制作桌面宠物：编辑 SVG 实时预览保存，或导入图片（自动去白底）生成</span>
+  </header>
+  <div class="cols">
+    <div class="left">
+      <div class="stage" id="stage"></div>
+      <div class="row">
+        <button id="btn-apply" class="primary">应用预览</button>
+        <button id="btn-save">保存为宠物…</button>
+      </div>
+      <div class="row">
+        <input type="text" id="save-name" placeholder="宠物名，如 my-pet.svg" spellcheck="false" />
+      </div>
+      <button id="btn-import">导入图片生成宠物（去白底）…</button>
+      <div class="status" id="status"></div>
+      <div class="pets-label">当前宠物（点击切换）</div>
+      <div class="pets" id="pets"></div>
+    </div>
+    <div class="right">
+      <label for="svg-code">SVG 代码（viewBox 保持 0 0 100 100 或 0 0 80 80，背景透明）</label>
+      <textarea id="svg-code" spellcheck="false"></textarea>
+      <div class="tip">保存后会出现在桌面宠物右键菜单 / 设置页宠物栏；也可放 .gif/.png/.jpg 到宠物目录直接使用。</div>
+    </div>
+  </div>
+  <script src="petstudio.js"></script>
+</body>
+</html>

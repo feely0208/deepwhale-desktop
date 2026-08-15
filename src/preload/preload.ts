@@ -40,4 +40,9 @@ contextBridge.exposeInMainWorld('dsh', {
   petSetVisible: (visible: boolean) => ipcRenderer.send('pet:set-visible', visible),
   petSetClickThrough: (enabled: boolean) => ipcRenderer.send('pet:set-click-through', enabled),
   petOpenFolder: () => ipcRenderer.send('pet:open-folder'),
+
+  // ---- 宠物工坊 ----
+  petStudioOpen: () => ipcRenderer.send('petstudio:open'),
+  petStudioSave: (name: string, svg: string) => ipcRenderer.send('petstudio:save', { name, svg }),
+  petStudioImport: () => ipcRenderer.invoke('petstudio:import-image'),
 });

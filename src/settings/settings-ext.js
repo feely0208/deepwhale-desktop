@@ -55,7 +55,10 @@
       '    <div class="dsh-ext-list" id="dsh-ext-pet-list"></div>' +
       '    <label class="dsh-ext-check"><input type="checkbox" id="dsh-ext-pet-visible" /> 显示宠物</label>' +
       '    <label class="dsh-ext-check"><input type="checkbox" id="dsh-ext-pet-clickthrough" /> 穿透点击（可点到宠物后面的内容）</label>' +
-      '    <button class="dsh-ext-btn" id="dsh-ext-pet-open">打开宠物目录…</button>' +
+      '    <div class="dsh-ext-btns">' +
+      '      <button class="dsh-ext-btn" id="dsh-ext-pet-open">打开宠物目录…</button>' +
+      '      <button class="dsh-ext-btn" id="dsh-ext-pet-studio">宠物工坊…</button>' +
+      '    </div>' +
       '  </section>' +
       '  <section class="dsh-ext-section" id="' + SEC_PREFIX + 'usage">' +
       '    <h3>用量与额度</h3>' +
@@ -183,6 +186,7 @@
     petVisibleEl.addEventListener('change', function () { window.dsh.petSetVisible(petVisibleEl.checked); });
     petClickEl.addEventListener('change', function () { window.dsh.petSetClickThrough(petClickEl.checked); });
     document.getElementById('dsh-ext-pet-open').addEventListener('click', function () { window.dsh.petOpenFolder(); });
+    document.getElementById('dsh-ext-pet-studio').addEventListener('click', function () { window.dsh.petStudioOpen(); });
 
     // 用量
     var uStatus = document.getElementById('dsh-ext-u-status');

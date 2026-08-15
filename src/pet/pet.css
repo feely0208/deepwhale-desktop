@@ -31,8 +31,8 @@ body {
 }
 
 .pet-svg {
-  width: 82%;
-  height: 82%;
+  width: 84%;
+  height: 84%;
   overflow: visible;
   filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.22));
 }

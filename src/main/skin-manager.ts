@@ -169,6 +169,14 @@ export class SkinManager {
         --dsw-specific-sidebar-nav-item-active: ${dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'} !important;
         --dsw-specific-sidebar-nav-item-hover: ${dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)'} !important;
       }
+      /* 背景图拓展到左侧工作区栏：该侧淡化，并向主区做渐变过渡 */
+      [class*="sidebarCol"] {
+        background: linear-gradient(
+          to right,
+          ${dark ? `rgba(16, 18, 22, ${Math.min(0.94, alpha + 0.2)})` : `rgba(247, 248, 250, ${Math.min(0.94, alpha + 0.2)})`},
+          ${dark ? `rgba(16, 18, 22, 0.25)` : `rgba(247, 248, 250, 0.18)`}
+        ) !important;
+      }
     `;
     try {
       const key = await win.webContents.insertCSS(css, { cssOrigin: 'author' });

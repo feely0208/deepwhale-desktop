@@ -34,6 +34,7 @@ let mainWin: BrowserWindow | null = null;
 let pet: PetWindow | null = null;
 let tray: Tray | null = null;
 let apiKeyWin: BrowserWindow | null = null;
+let petStudioWin: BrowserWindow | null = null;
 let quitting = false;
 let service: ServiceManager | null = null;
 
@@ -124,6 +125,30 @@ async function pickBackgroundImage(): Promise<void> {
   }
 }
 
+/** 打开"宠物工坊"窗口（自制宠物） */
+function openPetStudio(): void {
+  if (petStudioWin && !petStudioWin.isDestroyed()) {
+    petStudioWin.focus();
+    return;
+  }
+  petStudioWin = new BrowserWindow({
+    width: 780,
+    height: 680,
+    minWidth: 640,
+    minHeight: 520,
+    title: '宠物工坊',
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      preload: path.join(__dirname, '../preload/preload.js'),
+    },
+  });
+  void petStudioWin.loadFile(path.join(__dirname, '../petstudio/petstudio.html'));
+  petStudioWin.on('closed', () => {
+    petStudioWin = null;
+  });
+}
+
 /** 打开 DSH 设置页（应用菜单"设置…" Cmd+,） */
 function openSettingsPage(): void {
   if (!mainWin) return;
@@ -209,6 +234,7 @@ function buildMenuActions(): TrayMenuActions {
       },
     },
     { label: '打开宠物目录…', click: () => pet?.openPetsFolder() },
+    { label: '宠物工坊…', click: () => openPetStudio() },
   ];
 
   return {
@@ -300,6 +326,37 @@ function registerIpc(): void {
     pet?.window?.setIgnoreMouseEvents(enabled, { forward: true });
   });
   ipcMain.on('pet:open-folder', () => pet?.openPetsFolder());
+
+  // ---- 宠物工坊 ----
+  ipcMain.on('petstudio:open', () => openPetStudio());
+  ipcMain.on('petstudio:save', (_e, payload: { name?: string; svg?: string }) => {
+    const name = (payload?.name || '').trim();
+    const svg = payload?.svg || '';
+    if (!name || !/\.svg$/i.test(name)) {
+      dialog.showErrorBox('保存失败', '宠物名需以 .svg 结尾');
+      return;
+    }
+    try {
+      pet?.saveSvgPet(name, svg);
+    } catch (err) {
+      dialog.showErrorBox('保存失败', err instanceof Error ? err.message : String(err));
+    }
+  });
+  ipcMain.handle('petstudio:import-image', async () => {
+    if (!mainWin) return { ok: false, error: '主窗口未就绪' };
+    const res = await dialog.showOpenDialog(mainWin, {
+      title: '选择图片生成宠物（自动去除白色背景）',
+      properties: ['openFile'],
+      filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'] }],
+    });
+    if (res.canceled || !res.filePaths[0]) return { ok: false, canceled: true };
+    try {
+      const name = pet!.importImageAsPet(res.filePaths[0]);
+      return { ok: true, name };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
+  });
 
   ipcMain.on('apikey:close', () => apiKeyWin?.close());
 }

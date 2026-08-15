@@ -1,50 +1,31 @@
-import { BrowserWindow, app, shell } from 'electron';
+import { BrowserWindow, app, nativeTheme, shell } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Store } from './store';
 
 /**
- * 皮肤系统：
- * - 内置主题 = dist/skins/*.css（构建时从 src/skins 复制），菜单单选切换；
- * - 应用方式：insertCSS(css, { cssOrigin: 'author' })，切换前 removeInsertedCSS；
- * - 自定义 CSS：userData/custom.css，优先级最高，fs.watch 监听即时重注入。
+ * 皮肤系统（按用户需求重构）：
+ * - 主题：原生界面 跟随系统 / 浅色 / 深色（nativeTheme.themeSource）；
+ * - 背景皮肤：用户选择一张图片完全覆盖原界面——复制到 userData/skins/，
+ *   对 html/body 做 cover 平铺，并把 DSH 界面层（--dsw-alias-*）改为半透明，
+ *   让图片透出；透明度可调（skinOpacity 0.3~1）；
+ * - 自定义 CSS：userData/custom.css 优先级最高，fs.watch 即时重注入。
  */
 export class SkinManager {
   private insertedKeys: string[] = [];
   private watcher: fs.FSWatcher | null = null;
   private watchTimer: NodeJS.Timeout | null = null;
-  private readonly skinsDir = path.join(__dirname, '../skins');
+  private readonly userSkinsDir = path.join(app.getPath('userData'), 'skins');
   private readonly customCssFile = path.join(app.getPath('userData'), 'custom.css');
 
   constructor(private store: Store) {}
 
-  /** 列出内置皮肤名（去掉 .css 后缀） */
-  listSkins(): string[] {
-    try {
-      return fs
-        .readdirSync(this.skinsDir)
-        .filter((f) => f.endsWith('.css'))
-        .map((f) => f.replace(/\.css$/, ''))
-        .sort();
-    } catch (e) {
-      console.error('[skin] 读取皮肤目录失败:', e);
-      return [];
-    }
-  }
-
-  /** 应用当前皮肤 + 自定义 CSS（在 did-finish-load 后调用） */
+  /** 应用当前主题 + 背景皮肤 + 自定义 CSS（did-finish-load 后调用） */
   async apply(win: BrowserWindow): Promise<void> {
     await this.clear(win);
     this.stopWatch();
 
-    const skin = this.store.get('skin');
-    try {
-      const css = fs.readFileSync(path.join(this.skinsDir, `${skin}.css`), 'utf-8');
-      const key = await win.webContents.insertCSS(css, { cssOrigin: 'author' });
-      this.insertedKeys.push(key);
-    } catch (e) {
-      console.error(`[skin] 皮肤 "${skin}" 加载失败（回退到无皮肤）:`, e);
-    }
+    await this.applyBackground(win);
 
     if (this.store.get('customCssEnabled')) {
       await this.applyCustomCss(win);
@@ -52,8 +33,36 @@ export class SkinManager {
     }
   }
 
-  async setSkin(win: BrowserWindow, name: string): Promise<void> {
-    this.store.set('skin', name);
+  /** 设置原生界面主题（跟随系统/浅色/深色） */
+  async setTheme(win: BrowserWindow, theme: 'system' | 'light' | 'dark'): Promise<void> {
+    this.store.set('theme', theme);
+    nativeTheme.themeSource = theme;
+    await this.apply(win);
+  }
+
+  /** 选择背景图片：复制到 userData/skins/ 并应用 */
+  async setBackgroundFromFile(win: BrowserWindow, srcPath: string): Promise<void> {
+    const ext = path.extname(srcPath).toLowerCase();
+    if (!['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp'].includes(ext)) {
+      throw new Error('不支持的图片格式：' + ext);
+    }
+    fs.mkdirSync(this.userSkinsDir, { recursive: true });
+    const dest = path.join(this.userSkinsDir, 'background' + ext);
+    fs.copyFileSync(srcPath, dest);
+    this.store.set('skinImage', 'background' + ext);
+    await this.apply(win);
+  }
+
+  /** 移除背景皮肤 */
+  async clearBackground(win: BrowserWindow): Promise<void> {
+    this.store.set('skinImage', null);
+    await this.apply(win);
+  }
+
+  /** 调整背景可见度（0.3~1） */
+  async setOpacity(win: BrowserWindow, value: number): Promise<void> {
+    const v = Math.min(1, Math.max(0.3, value));
+    this.store.set('skinOpacity', v);
     await this.apply(win);
   }
 
@@ -76,6 +85,73 @@ export class SkinManager {
       shell.openPath(this.customCssFile);
     } catch (e) {
       console.error('[skin] 打开自定义 CSS 失败:', e);
+    }
+  }
+
+  /** 背景皮肤文件绝对路径（存在则返回，否则 null） */
+  backgroundPath(): string | null {
+    const name = this.store.get('skinImage');
+    if (!name) return null;
+    const file = path.join(this.userSkinsDir, name);
+    return fs.existsSync(file) ? file : null;
+  }
+
+  /** 背景皮肤预览（data URI，供设置页展示） */
+  backgroundPreviewDataUri(): string | null {
+    const file = this.backgroundPath();
+    if (!file) return null;
+    try {
+      const buf = fs.readFileSync(file);
+      const ext = path.extname(file).slice(1).toLowerCase();
+      const mime =
+        ext === 'jpg' || ext === 'jpeg'
+          ? 'image/jpeg'
+          : ext === 'webp'
+            ? 'image/webp'
+            : ext === 'gif'
+              ? 'image/gif'
+              : 'image/png';
+      return 'data:' + mime + ';base64,' + buf.toString('base64');
+    } catch {
+      return null;
+    }
+  }
+
+  private async applyBackground(win: BrowserWindow): Promise<void> {
+    const file = this.backgroundPath();
+    if (!file) return;
+
+    const alpha = Math.min(1, Math.max(0.3, this.store.get('skinOpacity')));
+    const dark = nativeTheme.shouldUseDarkColors;
+    const layer1 = dark ? `rgba(16, 18, 22, ${alpha})` : `rgba(255, 255, 255, ${alpha})`;
+    const layer2 = dark ? `rgba(24, 27, 33, ${alpha})` : `rgba(244, 246, 248, ${alpha})`;
+    const url = 'file://' + file.replace(/ /g, '%20');
+
+    const css = `
+      html, body {
+        background-image: url("${url}") !important;
+        background-size: cover !important;
+        background-position: center !important;
+        background-repeat: no-repeat !important;
+        background-attachment: fixed !important;
+      }
+      html { background-color: transparent !important; }
+      body {
+        background-color: transparent !important;
+        --dsw-alias-bg-base: transparent !important;
+        --dsw-alias-bg-layer-1: ${layer1} !important;
+        --dsw-alias-bg-layer-2: ${layer2} !important;
+        --dsw-alias-bg-overlay: ${layer1} !important;
+        --dsw-specific-sidebar-fill: ${layer2} !important;
+        --dsw-specific-sidebar-nav-item-active: ${dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'} !important;
+        --dsw-specific-sidebar-nav-item-hover: ${dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)'} !important;
+      }
+    `;
+    try {
+      const key = await win.webContents.insertCSS(css, { cssOrigin: 'author' });
+      this.insertedKeys.push(key);
+    } catch (e) {
+      console.error('[skin] 背景皮肤应用失败:', e);
     }
   }
 

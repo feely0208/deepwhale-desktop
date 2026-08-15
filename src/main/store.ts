@@ -12,12 +12,17 @@ export interface Settings {
   command: string;
   /** DSH Web UI 端口 */
   port: number;
-  /** 皮肤名（对应 src/skins/<name>.css） */
-  skin: string;  /** 是否启用 userData/custom.css 自定义样式 */
+  /** 原生界面主题：跟随系统 / 浅色 / 深色 */
+  theme: 'system' | 'light' | 'dark';
+  /** 背景皮肤图片文件名（userData/skins/ 下），null 表示无背景皮肤 */
+  skinImage: string | null;
+  /** 背景皮肤可见度（0.3~1，界面层透明度） */
+  skinOpacity: number;
+  /** 是否启用 userData/custom.css 自定义样式 */
   customCssEnabled: boolean;
   /** 桌面宠物是否显示 */
   petVisible: boolean;
-  /** 自定义宠物 GIF 文件名（assets/pets/ 下），null 表示用默认 CSS 宠物 */
+  /** 自定义宠物文件名（userData/pets/ 下 .gif/.svg），null 表示默认宠物 */
   petGif: string | null;
   /** 宠物窗口穿透点击 */
   clickThrough: boolean;
@@ -36,7 +41,9 @@ export interface Settings {
 const DEFAULTS: Settings = {
   command: 'npx @deepseek-ai/dsh web',
   port: 3080,
-  skin: 'light',
+  theme: 'system',
+  skinImage: null,
+  skinOpacity: 0.85,
   customCssEnabled: false,
   petVisible: true,
   petGif: null,
@@ -64,6 +71,10 @@ export class Store {
       const raw = fs.readFileSync(this.file, 'utf-8');
       const parsed = JSON.parse(raw) as Partial<Settings>;
       this.data = { ...DEFAULTS, ...parsed };
+      // 旧版本兼容：skin 字段迁移为 theme
+      if ('skin' in parsed && !('theme' in parsed)) {
+        this.data.theme = 'system';
+      }
     } catch {
       // 首次运行或文件损坏：使用默认值
     }

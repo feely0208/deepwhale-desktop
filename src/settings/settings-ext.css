@@ -37,10 +37,19 @@
   background: var(--dsw-alias-bg-layer-1);
 }
 
+.dsh-ext-preview-bg {
+  width: 220px;
+  height: 130px;
+}
+
 .dsh-ext-preview img {
   width: 100%;
   height: 100%;
   object-fit: contain;
+}
+
+.dsh-ext-preview-bg img {
+  object-fit: cover;
 }
 
 .dsh-ext-preview .ph {
@@ -100,6 +109,22 @@
 
 .dsh-ext-btn:hover {
   background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.dsh-ext-btns {
+  display: flex;
+  gap: 8px;
+}
+
+.dsh-ext-btns .dsh-ext-btn {
+  margin-top: 0;
+}
+
+.dsh-ext-range {
+  width: 100%;
+  max-width: 420px;
+  accent-color: var(--dsw-alias-brand-primary);
+  margin: 4px 0 8px;
 }
 
 .dsh-ext-grid {

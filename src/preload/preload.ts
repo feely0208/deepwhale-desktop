@@ -24,10 +24,12 @@ contextBridge.exposeInMainWorld('dsh', {
   setApiKey: (key: string) => ipcRenderer.send('usage:set-key', key),
   closeWindow: () => ipcRenderer.send('apikey:close'),
 
-  // ---- 皮肤（设置页扩展） ----
-  skinList: () => ipcRenderer.invoke('skin:list'),
-  skinState: () => ipcRenderer.invoke('skin:state'),
-  skinSet: (name: string) => ipcRenderer.send('skin:set', name),
+  // ---- 主题 / 背景皮肤（设置页扩展） ----
+  themeState: () => ipcRenderer.invoke('theme:state'),
+  themeSet: (theme: 'system' | 'light' | 'dark') => ipcRenderer.send('theme:set', theme),
+  skinPickImage: () => ipcRenderer.send('skin:pick-image'),
+  skinClearImage: () => ipcRenderer.send('skin:clear-image'),
+  skinSetOpacity: (value: number) => ipcRenderer.send('skin:set-opacity', value),
   skinOpenCss: () => ipcRenderer.send('skin:open-css'),
   skinToggleCustomCss: (enabled: boolean) => ipcRenderer.send('skin:toggle-custom-css', enabled),
 

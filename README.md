@@ -24,11 +24,11 @@ npm run dev        # 编译 + 启动桌面壳（自动拉起或复用本机 DSH 
 
 ## 功能说明
 
-### 皮肤系统
-- 通过 DSH 自身的 `--dsw-alias-*` 主题变量换肤，**全界面同步变色**（默认浅色，无黑色块）。
-- 切换入口：托盘菜单 → 皮肤，或 **设置页 → 皮肤** 栏（在 通用设置/模型/插件/Agent 预设 四项之下顺延）。
-- 内置 `light` / `deepseek` / `dark` / `dracula` 四套主题；自定义 CSS（`userData/custom.css`）保存即时重注入。
-- 皮肤列表即 `src/skins/*.css`，新增文件即出现。
+### 主题与背景皮肤
+- **原生界面主题**：跟随系统 / 浅色 / 深色 三档（`nativeTheme`，默认跟随系统）。
+- **背景皮肤**：选一张你喜欢的图片，**完全覆盖原界面**——图片复制到 `userData/skins/`，全窗口 cover 平铺，界面层自动半透明让图透出，背景可见度可调（30%~100%）。
+- 入口：托盘菜单 → 皮肤，或 **设置页 → 皮肤** 栏（在 通用设置/模型/插件/Agent 预设 四项之下顺延）。
+- 自定义 CSS（`userData/custom.css`）保存即时重注入，可做精细微调。
 
 ### 桌面宠物
 - 默认宠物：Codex 风格橙色小团子（SVG 渐变 + CSS 动画：呼吸弹跳 / 眨眼 / 落地压扁，悬停开心蹦跶，随机挥手/打盹）。
@@ -56,7 +56,9 @@ npm run dev        # 编译 + 启动桌面壳（自动拉起或复用本机 DSH 
 | --- | --- | --- |
 | `command` | `npx @deepseek-ai/dsh web` | 拉起 DSH 的命令，可改为本地路径 |
 | `port` | `3080` | DSH Web UI 端口 |
-| `skin` | `light` | 当前皮肤 |
+| `theme` | `system` | 原生界面主题（跟随系统/浅色/深色） |
+| `skinImage` | `null` | 背景皮肤图片文件名（userData/skins/ 下） |
+| `skinOpacity` | `0.85` | 背景可见度（0.3~1） |
 | `customCssEnabled` | `false` | 是否启用自定义 CSS |
 | `petVisible` | `true` | 宠物是否显示 |
 | `petGif` | `null` | 自定义宠物 GIF 文件名 |

@@ -5,7 +5,7 @@
  * - 全部样式跟随 DSH 的 --dsw-alias-* 主题变量，与界面划一。 */
 (function () {
   if (window.__dshSettingsExtInstalled) return;
-  if (!window.dsh || !window.dsh.skinList) return;
+  if (!window.dsh || !window.dsh.themeState || !window.dsh.petState) return;
   window.__dshSettingsExtInstalled = true;
 
   var PANEL_ID = 'dsh-ext-panel';
@@ -71,7 +71,16 @@
       '  </section>' +
       '  <section class="dsh-ext-section" id="' + SEC_PREFIX + 'skin">' +
       '    <h3>皮肤</h3>' +
-      '    <div class="dsh-ext-list" id="dsh-ext-skin-list"></div>' +
+      '    <div class="dsh-ext-row">主题（原生界面）</div>' +
+      '    <div class="dsh-ext-list" id="dsh-ext-theme-list"></div>' +
+      '    <div class="dsh-ext-row">背景图片（完全覆盖原界面）</div>' +
+      '    <div class="dsh-ext-preview dsh-ext-preview-bg" id="dsh-ext-skin-preview"><span class="ph">未设置</span></div>' +
+      '    <div class="dsh-ext-btns">' +
+      '      <button class="dsh-ext-btn" id="dsh-ext-skin-pick">选择图片…</button>' +
+      '      <button class="dsh-ext-btn" id="dsh-ext-skin-clear">移除背景</button>' +
+      '    </div>' +
+      '    <div class="dsh-ext-row">背景可见度：<b id="dsh-ext-skin-opacity-val">85%</b></div>' +
+      '    <input type="range" class="dsh-ext-range" id="dsh-ext-skin-opacity" min="0.3" max="1" step="0.05" />' +
       '    <label class="dsh-ext-check"><input type="checkbox" id="dsh-ext-skin-custom" /> 启用自定义 CSS（userData/custom.css）</label>' +
       '    <button class="dsh-ext-btn" id="dsh-ext-skin-open">打开自定义 CSS…</button>' +
       '  </section>' +
@@ -205,26 +214,46 @@
     window.dsh.onUsageUpdate(renderUsage);
     document.getElementById('dsh-ext-u-refresh').addEventListener('click', function () { window.dsh.usageRefresh(); });
 
-    // 皮肤
-    var skinListEl = document.getElementById('dsh-ext-skin-list');
+    // 皮肤（主题 + 背景图片 + 透明度）
+    var themeListEl = document.getElementById('dsh-ext-theme-list');
+    var skinPreviewEl = document.getElementById('dsh-ext-skin-preview');
+    var opacityEl = document.getElementById('dsh-ext-skin-opacity');
+    var opacityValEl = document.getElementById('dsh-ext-skin-opacity-val');
     var skinCustomEl = document.getElementById('dsh-ext-skin-custom');
 
-    window.dsh.skinState().then(function (state) {
-      skinCustomEl.checked = !!state.customCssEnabled;
-      window.dsh.skinList().then(function (names) {
-        skinListEl.innerHTML = '';
-        names.forEach(function (n) {
-          var div = document.createElement('div');
-          div.className = 'dsh-ext-item' + (state.current === n ? ' active' : '');
-          div.textContent = n;
-          div.addEventListener('click', function () {
-            window.dsh.skinSet(n);
-            Array.prototype.forEach.call(skinListEl.children, function (c) { c.classList.remove('active'); });
-            div.classList.add('active');
-          });
-          skinListEl.appendChild(div);
+    window.dsh.themeState().then(function (state) {
+      var themes = [
+        { id: 'system', label: '跟随系统' },
+        { id: 'light', label: '浅色' },
+        { id: 'dark', label: '深色' },
+      ];
+      themeListEl.innerHTML = '';
+      themes.forEach(function (t) {
+        var div = document.createElement('div');
+        div.className = 'dsh-ext-item' + (state.theme === t.id ? ' active' : '');
+        div.textContent = t.label;
+        div.addEventListener('click', function () {
+          window.dsh.themeSet(t.id);
+          Array.prototype.forEach.call(themeListEl.children, function (c) { c.classList.remove('active'); });
+          div.classList.add('active');
         });
+        themeListEl.appendChild(div);
       });
+      skinCustomEl.checked = !!state.customCssEnabled;
+      opacityEl.value = String(state.skinOpacity);
+      opacityValEl.textContent = Math.round(state.skinOpacity * 100) + '%';
+      if (state.previewDataUri) {
+        skinPreviewEl.innerHTML = '<img src="' + state.previewDataUri + '" alt="bg" />';
+      } else {
+        skinPreviewEl.innerHTML = '<span class="ph">未设置</span>';
+      }
+    });
+    document.getElementById('dsh-ext-skin-pick').addEventListener('click', function () { window.dsh.skinPickImage(); });
+    document.getElementById('dsh-ext-skin-clear').addEventListener('click', function () { window.dsh.skinClearImage(); });
+    opacityEl.addEventListener('input', function () {
+      var v = parseFloat(opacityEl.value);
+      opacityValEl.textContent = Math.round(v * 100) + '%';
+      window.dsh.skinSetOpacity(v);
     });
     skinCustomEl.addEventListener('change', function () { window.dsh.skinToggleCustomCss(skinCustomEl.checked); });
     document.getElementById('dsh-ext-skin-open').addEventListener('click', function () { window.dsh.skinOpenCss(); });

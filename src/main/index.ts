@@ -37,6 +37,12 @@ let apiKeyWin: BrowserWindow | null = null;
 let quitting = false;
 let service: ServiceManager | null = null;
 
+const THEME_OPTIONS: Array<{ id: 'system' | 'light' | 'dark'; label: string }> = [
+  { id: 'system', label: '跟随系统' },
+  { id: 'light', label: '浅色' },
+  { id: 'dark', label: '深色' },
+];
+
 function pushUsageToWindow(snapshot: UsageSnapshot): void {
   if (mainWin && !mainWin.isDestroyed()) {
     mainWin.webContents.send('usage:update', snapshot);
@@ -54,7 +60,7 @@ function notifyLowBalance(threshold: number): void {
   }
 }
 
-/** did-finish-load 回调：应用皮肤 + 注入用量面板 + 注入设置页扩展 */
+/** did-finish-load 回调：应用主题/背景皮肤 + 注入用量面板 + 注入设置页扩展 */
 async function onPageReady(win: BrowserWindow): Promise<void> {
   await skin.apply(win);
   if (store.get('usagePanelVisible')) {
@@ -98,19 +104,54 @@ function openApiKeyDialog(): void {
   });
 }
 
+/** 选择背景图片（原生文件对话框） */
+async function pickBackgroundImage(): Promise<void> {
+  if (!mainWin) return;
+  const res = await dialog.showOpenDialog(mainWin, {
+    title: '选择背景皮肤图片',
+    properties: ['openFile'],
+    filters: [
+      { name: '图片', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'] },
+      { name: '所有文件', extensions: ['*'] },
+    ],
+  });
+  if (res.canceled || !res.filePaths[0]) return;
+  try {
+    await skin.setBackgroundFromFile(mainWin, res.filePaths[0]);
+    rebuildMenus();
+  } catch (e) {
+    dialog.showErrorBox('背景图片设置失败', e instanceof Error ? e.message : String(e));
+  }
+}
+
 /** 构建统一菜单动作（托盘 + macOS 顶栏共用） */
 function buildMenuActions(): TrayMenuActions {
-  const skins = skin.listSkins();
-  const currentSkin = store.get('skin');
-  const skinSubmenu: MenuItemConstructorOptions[] = skins.map((s) => ({
-    label: s,
+  const currentTheme = store.get('theme');
+  const themeSubmenu: MenuItemConstructorOptions[] = THEME_OPTIONS.map((t) => ({
+    label: t.label,
     type: 'radio',
-    checked: s === currentSkin,
+    checked: currentTheme === t.id,
     click: () => {
-      if (mainWin) void skin.setSkin(mainWin, s);
+      if (mainWin) void skin.setTheme(mainWin, t.id);
       rebuildMenus();
     },
   }));
+
+  const skinSubmenu: MenuItemConstructorOptions[] = [
+    { label: '主题', submenu: themeSubmenu },
+    { type: 'separator' },
+    { label: '背景图片…', click: () => void pickBackgroundImage() },
+    {
+      label: '移除背景图片',
+      enabled: !!store.get('skinImage'),
+      click: () => {
+        if (mainWin) void skin.clearBackground(mainWin);
+        rebuildMenus();
+      },
+    },
+    { type: 'separator' },
+    { label: '自定义 CSS…', click: () => skin.openCustomCss() },
+  ];
 
   const pets = pet ? pet.listPets() : [];
   const currentPet = store.get('petGif');
@@ -202,15 +243,25 @@ function registerIpc(): void {
     }
   });
 
-  // ---- 皮肤（设置页/菜单共用） ----
-  ipcMain.handle('skin:list', () => skin.listSkins());
-  ipcMain.handle('skin:state', () => ({
-    current: store.get('skin'),
+  // ---- 主题 / 背景皮肤（设置页/菜单共用） ----
+  ipcMain.handle('theme:state', () => ({
+    theme: store.get('theme'),
+    skinImage: store.get('skinImage'),
+    skinOpacity: store.get('skinOpacity'),
     customCssEnabled: store.get('customCssEnabled'),
+    previewDataUri: skin.backgroundPreviewDataUri(),
   }));
-  ipcMain.on('skin:set', (_e, name: string) => {
-    if (mainWin) void skin.setSkin(mainWin, name);
+  ipcMain.on('theme:set', (_e, theme: 'system' | 'light' | 'dark') => {
+    if (mainWin) void skin.setTheme(mainWin, theme);
     rebuildMenus();
+  });
+  ipcMain.on('skin:pick-image', () => void pickBackgroundImage());
+  ipcMain.on('skin:clear-image', () => {
+    if (mainWin) void skin.clearBackground(mainWin);
+    rebuildMenus();
+  });
+  ipcMain.on('skin:set-opacity', (_e, value: number) => {
+    if (mainWin) void skin.setOpacity(mainWin, value);
   });
   ipcMain.on('skin:open-css', () => skin.openCustomCss());
   ipcMain.on('skin:toggle-custom-css', (_e, enabled: boolean) => {
@@ -247,8 +298,8 @@ if (!app.requestSingleInstanceLock()) {
   app.on('second-instance', () => showMainWindow());
 
   app.whenReady().then(async () => {
-    // 强制 DSH 走浅色主题（页面按 prefers-color-scheme 渲染，深色模式会产生黑块）
-    nativeTheme.themeSource = 'light';
+    // 原生界面主题跟随设置（跟随系统/浅色/深色），默认跟随系统
+    nativeTheme.themeSource = store.get('theme');
 
     pet = new PetWindow(store);
     pet.ensureUserPetsDir();

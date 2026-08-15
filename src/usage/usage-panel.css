@@ -101,3 +101,22 @@
 #dsh-usage-panel .refresh-btn:hover {
   background: rgba(77, 124, 254, 0.12);
 }
+
+/* 深色主题跟随（nativeTheme 主题切换时自动生效） */
+@media (prefers-color-scheme: dark) {
+  #dsh-usage-panel {
+    background: rgba(16, 18, 22, 0.94);
+    color: #e6e8ec;
+    border-color: #2a2f3a;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+  }
+  #dsh-usage-panel .uph .dot { background: #6b7280; }
+  #dsh-usage-panel .uph .dot.ok { background: #3fb950; }
+  #dsh-usage-panel .uph .dot.low { background: #d29922; }
+  #dsh-usage-panel .uph .dot.err { background: #f85149; }
+  #dsh-usage-panel .row .k { color: #9aa1ad; }
+  #dsh-usage-panel .row .v { color: #e6e8ec; }
+  #dsh-usage-panel .err-line { color: #f85149; }
+  #dsh-usage-panel .refresh-btn { color: #7aa2ff; }
+  #dsh-usage-panel .refresh-btn:hover { background: rgba(122, 162, 255, 0.15); }
+}

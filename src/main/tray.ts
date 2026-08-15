@@ -130,6 +130,8 @@ export function buildAppMenuTemplate(a: TrayMenuActions): MenuItemConstructorOpt
 /** 创建托盘 */
 export function createTray(actions: TrayMenuActions): Tray {
   const icon = nativeImage.createFromPath(path.join(__dirname, '../assets/icons/tray.png'));
+  // 模板图：macOS 自动根据菜单栏浅/深色渲染
+  icon.setTemplateImage(true);
   const tray = new Tray(icon.isEmpty() ? nativeImage.createEmpty() : icon);
   tray.setToolTip('DeepWhale Desktop');
   applyMenu(tray, actions);

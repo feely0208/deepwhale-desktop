@@ -46,16 +46,31 @@ function encodePNG(width, height, rgba) {
 
 // ---------- 曲线与多边形 ----------
 const BG = [255, 255, 255, 255];      // 白底
-const WHALE = [77, 124, 254, 255];    // 深鲸蓝 #4d7cfe
-const EYE = [30, 52, 110, 255];       // 深蓝眼睛
+const BODY = [27, 32, 39, 255];       // 虎鲸黑 #1b2027
+const BELLY = [255, 255, 255, 255];   // 白肚皮
+const SPOUT = [157, 184, 232, 255];   // 水花灰蓝 #9db8e8
 const BORDER = [226, 232, 244, 255];  // 极浅描边
 
-// 鲸鱼剪影控制点（0-100 归一化，头朝左），Catmull-Rom 闭合样条
+// 虎鲸剪影控制点（0-100 归一化，头朝左；尾巴张开更明显，深凹口）
 const CTRL = [
-  [12, 50], [28, 30], [52, 26], [76, 38], [88, 52],
-  [97, 34], [90, 58], [97, 76], [82, 64], [54, 74],
+  [12, 50], [28, 30], [52, 26], [76, 38], [88, 50],
+  [99, 28], [92, 58], [99, 80], [84, 66], [56, 74],
   [30, 70], [17, 60],
 ];
+
+// 白肚皮（沿下缘的白色带）
+const BELLY_POLY = [
+  [16, 58], [26, 67], [50, 72], [72, 67], [80, 63],
+  [74, 60], [52, 66], [28, 60], [17, 56],
+];
+
+// 眼斑（虎鲸白色椭圆眼斑）+ 眼睛
+const EYE_PATCH = { cx: 34, cy: 45, rx: 7, ry: 4 };
+const EYE = { cx: 28.5, cy: 45, r: 2.0 };
+
+// 水花线：从喷气孔向上喷的弧形（二次贝塞尔采样）
+const SPOUT_CURVE = { x0: 33, y0: 25, cx: 22, cy: 6, x1: 40, y1: 8 };
+const SPOUT_R = 1.5;
 
 function catmullRom(pts, samplesPerSeg) {
   const out = [];
@@ -89,6 +104,17 @@ function pointInPoly(px, py, poly) {
   return inside;
 }
 
+// 水花曲线采样点
+function spoutPoints() {
+  const { x0, y0, cx, cy, x1, y1 } = SPOUT_CURVE;
+  const pts = [];
+  for (let t = 0; t <= 1; t += 0.06) {
+    const u = 1 - t;
+    pts.push([u * u * x0 + 2 * u * t * cx + t * t * x1, u * u * y0 + 2 * u * t * cy + t * t * y1]);
+  }
+  return pts;
+}
+
 // ---------- 渲染（4x 超采样 → 盒式降采样） ----------
 const SS = 4;
 
@@ -103,18 +129,9 @@ function makeIcon(size) {
   const X = (u) => (u / 100) * big;
   const Y = (u) => (u / 100) * big;
 
-  // 鲸鱼多边形（采样）
-  const poly = catmullRom(CTRL, 24);
-  const eye = [X(26), Y(48)];
-  const eyeR = (4.2 / 100) * big;
-  const finPoly = catmullRom(
-    [
-      [58, 40], [68, 44], [72, 56], [63, 52], [55, 47],
-    ],
-    12
-  );
+  const body = catmullRom(CTRL, 24);
 
-  // 白底圆角方（圆角半径 18%）
+  // 白底圆角方
   const radius = big * 0.18;
   for (let y = 0; y < big; y++) {
     for (let x = 0; x < big; x++) {
@@ -122,28 +139,44 @@ function makeIcon(size) {
       const cy = Math.min(Math.max(y, radius), big - 1 - radius);
       const dx = x - cx;
       const dy = y - cy;
-      const inRound = dx * dx + dy * dy <= radius * radius;
-      if (!inRound) continue;
-      // 描边：距边缘 < 2% 用浅色
+      if (dx * dx + dy * dy > radius * radius) continue;
       const edge = x < big * 0.012 || y < big * 0.012 || x > big * 0.988 || y > big * 0.988;
       putBig(x, y, edge ? BORDER : BG);
     }
   }
 
-  // 鲸鱼
   for (let y = 0; y < big; y++) {
     for (let x = 0; x < big; x++) {
       const u = (x / big) * 100;
       const v = (y / big) * 100;
-      if (pointInPoly(u, v, poly)) putBig(x, y, WHALE);
-      else if (pointInPoly(u, v, finPoly)) putBig(x, y, WHALE);
-      const dx = x - eye[0];
-      const dy = y - eye[1];
-      if (dx * dx + dy * dy <= eyeR * eyeR) putBig(x, y, EYE);
+      if (!pointInPoly(u, v, body)) continue;
+      // 肚皮白带
+      if (pointInPoly(u, v, BELLY_POLY)) { putBig(x, y, BELLY); continue; }
+      // 眼斑
+      const ep = ((u - EYE_PATCH.cx) / EYE_PATCH.rx) ** 2 + ((v - EYE_PATCH.cy) / EYE_PATCH.ry) ** 2;
+      if (ep <= 1) { putBig(x, y, BELLY); continue; }
+      putBig(x, y, BODY);
+    }
+  }
+  // 眼睛（黑，在眼斑前缘）
+  for (let y = 0; y < big; y++) {
+    for (let x = 0; x < big; x++) {
+      const dx = x - X(EYE.cx);
+      const dy = y - Y(EYE.cy);
+      if (dx * dx + dy * dy <= (X(EYE.r)) ** 2) putBig(x, y, BODY);
+    }
+  }
+  // 水花线
+  for (const [sx, sy] of spoutPoints()) {
+    for (let y = 0; y < big; y++) {
+      for (let x = 0; x < big; x++) {
+        const dx = x - X(sx);
+        const dy = y - Y(sy);
+        if (dx * dx + dy * dy <= (X(SPOUT_R)) ** 2) putBig(x, y, SPOUT);
+      }
     }
   }
 
-  // 盒式降采样
   const out = Buffer.alloc(size * size * 4);
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
@@ -165,10 +198,10 @@ function makeIcon(size) {
   return encodePNG(size, size, out);
 }
 
-// 托盘图标：透明底 + 蓝鲸（菜单栏浅/深色下都可见）
+// 托盘：透明底 + 黑色剪影（模板图，macOS 自动适配浅/深菜单栏）
 function makeTrayIcon(size) {
   const big = size * SS;
-  const buf = Buffer.alloc(big * big * 4); // 默认全透明
+  const buf = Buffer.alloc(big * big * 4);
   const putBig = (x, y, c) => {
     if (x < 0 || y < 0 || x >= big || y >= big) return;
     const i = (y * big + x) * 4;
@@ -176,14 +209,21 @@ function makeTrayIcon(size) {
   };
   const X = (u) => (u / 100) * big;
   const Y = (u) => (u / 100) * big;
-  // 鲸鱼整体缩放并居中（剪影用 0-100 坐标，整体占 ~82%）
-  const poly = catmullRom(CTRL, 24);
-  const finPoly = catmullRom([[58, 40], [68, 44], [72, 56], [63, 52], [55, 47]], 12);
+  const body = catmullRom(CTRL, 24);
   for (let y = 0; y < big; y++) {
     for (let x = 0; x < big; x++) {
       const u = (x / big) * 100;
       const v = (y / big) * 100;
-      if (pointInPoly(u, v, poly) || pointInPoly(u, v, finPoly)) putBig(x, y, WHALE);
+      if (pointInPoly(u, v, body)) putBig(x, y, BODY);
+    }
+  }
+  for (const [sx, sy] of spoutPoints()) {
+    for (let y = 0; y < big; y++) {
+      for (let x = 0; x < big; x++) {
+        const dx = x - X(sx);
+        const dy = y - Y(sy);
+        if (dx * dx + dy * dy <= (X(SPOUT_R)) ** 2) putBig(x, y, BODY);
+      }
     }
   }
   const out = Buffer.alloc(size * size * 4);

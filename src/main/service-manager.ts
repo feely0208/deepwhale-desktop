@@ -1,5 +1,8 @@
 import { spawn, ChildProcess } from 'child_process';
+import * as fs from 'fs';
 import * as http from 'http';
+import * as os from 'os';
+import * as path from 'path';
 import kill from 'tree-kill';
 import { EventEmitter } from 'events';
 
@@ -96,9 +99,10 @@ export class ServiceManager extends EventEmitter {
 
   private spawn(): void {
     const { command, args } = parseCommand(this.command);
+    const resolved = resolveExecutable(command);
     const env: NodeJS.ProcessEnv = { ...process.env };
-    console.log(`[service] 启动 DSH: ${this.command}`);
-    this.child = spawn(command, args, {
+    console.log(`[service] 启动 DSH: ${this.command}（可执行文件: ${resolved}）`);
+    this.child = spawn(resolved, args, {
       env,
       // Windows 上 npx 是 .cmd，需要 shell 执行
       shell: process.platform === 'win32',
@@ -114,7 +118,11 @@ export class ServiceManager extends EventEmitter {
       this.emit('exit', code);
     });
     this.child.on('error', (err) => {
-      console.error('[service] 启动 DSH 失败:', err);
+      console.error(
+        '[service] 启动 DSH 失败:',
+        err,
+        '（若从访达/Finder 启动找不到 npx，请在 settings.json 把 command 改为绝对路径，如 /usr/local/bin/npx @deepseek-ai/dsh web）'
+      );
       this.emit('error', err);
     });
   }
@@ -132,6 +140,49 @@ export class ServiceManager extends EventEmitter {
 function parseCommand(cmd: string): { command: string; args: string[] } {
   const parts = cmd.trim().split(/\s+/).filter(Boolean);
   return { command: parts[0] ?? 'npx', args: parts.slice(1) };
+}
+
+/**
+ * 解析可执行文件绝对路径。
+ * Finder 启动的 App PATH 极简（/usr/bin:/bin:/usr/sbin:/sbin），
+ * npx 常装在 /usr/local/bin 或 ~/.nvm 下，这里做 PATH 搜索 + 常见位置兜底。
+ */
+function resolveExecutable(command: string): string {
+  if (command.includes('/') || command.includes('\\')) return command;
+
+  const pathDirs = (process.env.PATH || '').split(path.delimiter).filter(Boolean);
+  const exts = process.platform === 'win32' ? ['', '.cmd', '.exe', '.bat'] : [''];
+  for (const dir of pathDirs) {
+    for (const ext of exts) {
+      const candidate = path.join(dir, command + ext);
+      try {
+        if (fs.existsSync(candidate)) return candidate;
+      } catch {
+        // 目录不可读，继续
+      }
+    }
+  }
+
+  if (command === 'npx') {
+    const home = os.homedir();
+    // ~/.nvm/versions/node/<ver>/bin/npx（取最新版本）
+    try {
+      const nvmDir = path.join(home, '.nvm', 'versions', 'node');
+      if (fs.existsSync(nvmDir)) {
+        const versions = fs.readdirSync(nvmDir).sort().reverse();
+        for (const v of versions) {
+          const c = path.join(nvmDir, v, 'bin', 'npx');
+          if (fs.existsSync(c)) return c;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    for (const c of ['/usr/local/bin/npx', '/opt/homebrew/bin/npx', '/usr/bin/npx']) {
+      if (fs.existsSync(c)) return c;
+    }
+  }
+  return command; // 原样返回，让 spawn 报 ENOENT
 }
 
 function sleep(ms: number): Promise<void> {

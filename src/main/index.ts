@@ -8,6 +8,7 @@ import {
   Notification,
   Tray,
 } from 'electron';
+import * as path from 'path';
 import { Store } from './store';
 import { ServiceManager } from './service-manager';
 import { createMainWindow } from './window';
@@ -30,6 +31,7 @@ const usage = new UsageManager(
 let mainWin: BrowserWindow | null = null;
 let pet: PetWindow | null = null;
 let tray: Tray | null = null;
+let apiKeyWin: BrowserWindow | null = null;
 let quitting = false;
 let service: ServiceManager | null = null;
 
@@ -64,6 +66,33 @@ function showMainWindow(): void {
     mainWin.show();
     mainWin.focus();
   }
+}
+
+/** 打开"设置 API Key…"模态窗（safeStorage 加密保存） */
+function openApiKeyDialog(): void {
+  if (apiKeyWin && !apiKeyWin.isDestroyed()) {
+    apiKeyWin.focus();
+    return;
+  }
+  apiKeyWin = new BrowserWindow({
+    width: 460,
+    height: 300,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    title: '设置 API Key',
+    parent: mainWin ?? undefined,
+    modal: !!mainWin,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      preload: path.join(__dirname, '../preload/preload.js'),
+    },
+  });
+  void apiKeyWin.loadFile(path.join(__dirname, '../apikey/apikey.html'));
+  apiKeyWin.on('closed', () => {
+    apiKeyWin = null;
+  });
 }
 
 /** 构建统一菜单动作（托盘 + macOS 顶栏共用） */
@@ -131,6 +160,7 @@ function buildMenuActions(): TrayMenuActions {
     showMainWindow,
     onQuit: () => app.quit(),
     onOpenCustomCss: () => skin.openCustomCss(),
+    onSetApiKey: () => openApiKeyDialog(),
     onToggleUsagePanel: (visible) => {
       store.set('usagePanelVisible', visible);
       if (mainWin) {
@@ -165,6 +195,7 @@ function registerIpc(): void {
       dialog.showErrorBox('API Key 保存失败', err instanceof Error ? err.message : String(err));
     }
   });
+  ipcMain.on('apikey:close', () => apiKeyWin?.close());
 }
 
 // 单实例：多个实例会互相争抢 3080 端口

@@ -5,6 +5,7 @@ export interface TrayMenuActions {
   showMainWindow: () => void;
   onQuit: () => void;
   onOpenCustomCss: () => void;
+  onSetApiKey: () => void;
   onToggleUsagePanel: (visible: boolean) => void;
   onRefreshUsage: () => void;
   /** 皮肤子菜单（单选，radio 项已由调用方构建） */
@@ -32,6 +33,7 @@ export function buildMenuTemplate(a: TrayMenuActions): MenuItemConstructorOption
       click: (item) => a.onToggleUsagePanel(item.checked),
     },
     { label: '立即刷新余额', click: () => a.onRefreshUsage() },
+    { label: '设置 API Key…', click: () => a.onSetApiKey() },
     { label: '自定义 CSS…', click: () => a.onOpenCustomCss() },
     { type: 'separator' },
     { label: '退出', click: () => a.onQuit() },

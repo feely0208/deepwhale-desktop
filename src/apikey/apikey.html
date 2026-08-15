@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'self' file: data:; style-src 'self' 'unsafe-inline'; script-src 'self' file:"
+  />
+  <title>设置 API Key</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: #161a22;
+      color: #d7dce2;
+    }
+    h1 { font-size: 15px; margin: 0 0 4px; }
+    p.desc { font-size: 12px; color: #8b93a1; margin: 0 0 14px; line-height: 1.6; }
+    input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 8px 10px;
+      border: 1px solid #23262e;
+      border-radius: 6px;
+      background: #0f1115;
+      color: #d7dce2;
+      font-size: 13px;
+      outline: none;
+    }
+    input:focus { border-color: #4d7cfe; }
+    .row { display: flex; gap: 8px; margin-top: 14px; justify-content: flex-end; }
+    button {
+      padding: 6px 14px;
+      border-radius: 6px;
+      border: 1px solid #23262e;
+      background: #1d2330;
+      color: #d7dce2;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    button.primary { background: #4d7cfe; border-color: #4d7cfe; color: #fff; }
+    button:hover { filter: brightness(1.1); }
+    .hint { font-size: 11px; color: #8b93a1; margin-top: 12px; line-height: 1.7; }
+  </style>
+</head>
+<body>
+  <h1>DeepSeek API Key</h1>
+  <p class="desc">用于查询余额（额度）与用量。优先使用环境变量 <code>DEEPSEEK_API_KEY</code>；此处填写会用系统钥匙串加密保存。</p>
+  <input id="key" type="password" placeholder="sk-..." autocomplete="off" spellcheck="false" />
+  <div class="row">
+    <button id="clear">清除</button>
+    <button id="cancel">取消</button>
+    <button id="save" class="primary">保存</button>
+  </div>
+  <div class="hint">
+    留空保存 = 清除已保存的 Key。<br />
+    Key 只用于主进程请求 api.deepseek.com，绝不写入 settings.json / 日志 / 面板。
+  </div>
+  <script src="apikey.js"></script>
+</body>
+</html>

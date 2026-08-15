@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
 /**
- * 最小 IPC 桥：宠物页与注入的用量面板共用。
+ * 最小 IPC 桥：宠物页、注入的用量面板、API Key 设置窗共用。
  * contextIsolation 开启时，页面只能访问这里显式暴露的 API，不暴露 ipcRenderer 本体。
  */
 contextBridge.exposeInMainWorld('dsh', {
@@ -19,4 +19,8 @@ contextBridge.exposeInMainWorld('dsh', {
     // 返回取消订阅函数
     return () => ipcRenderer.removeListener('usage:update', listener);
   },
+
+  // ---- API Key 设置窗 ----
+  setApiKey: (key: string) => ipcRenderer.send('usage:set-key', key),
+  closeWindow: () => ipcRenderer.send('apikey:close'),
 });

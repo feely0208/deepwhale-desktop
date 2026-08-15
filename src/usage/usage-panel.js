@@ -20,6 +20,12 @@
     '  <div class="row"><span class="k">赠送 / 充值</span><span class="v" id="dsh-up-split">—</span></div>' +
     '  <div class="row"><span class="k">今日请求</span><span class="v" id="dsh-up-requests">0</span></div>' +
     '  <div class="row"><span class="k">累计 tokens（估）</span><span class="v" id="dsh-up-tokens">0</span></div>' +
+    '  <div class="bars">' +
+    '    <div class="bar-caption">余额充足度（满格 ¥10）</div>' +
+    '    <div class="bar"><i class="bar-fill" id="dsh-up-bar"></i></div>' +
+    '    <div class="bar-caption">额度构成（赠送 / 充值）</div>' +
+    '    <div class="bar seg" id="dsh-up-seg"></div>' +
+    '  </div>' +
     '  <div class="err-line" id="dsh-up-err" hidden></div>' +
     '  <div class="refresh-btn" id="dsh-up-refresh">立即刷新</div>' +
     '</div>';
@@ -32,6 +38,8 @@
   var reqEl = panel.querySelector('#dsh-up-requests');
   var tokEl = panel.querySelector('#dsh-up-tokens');
   var errEl = panel.querySelector('#dsh-up-err');
+  var upBar = panel.querySelector('#dsh-up-bar');
+  var upSeg = panel.querySelector('#dsh-up-seg');
 
   var collapsed = false;
   try {
@@ -62,6 +70,24 @@
     return String(n);
   }
 
+  function renderBars(data) {
+    var first = data.balanceInfos && data.balanceInfos[0];
+    if (!first) return;
+    var total = parseFloat(first.totalBalance) || 0;
+    var granted = parseFloat(first.grantedBalance) || 0;
+    var topped = parseFloat(first.toppedUpBalance) || 0;
+    var pct = Math.min(100, Math.max(0, (total / 10) * 100));
+    upBar.style.width = pct.toFixed(0) + '%';
+    upBar.className = 'bar-fill' + (pct >= 50 ? ' ok' : pct >= 25 ? ' warn' : ' err');
+    if (total > 0) {
+      var g = Math.min(100, (granted / total) * 100).toFixed(1);
+      var t = Math.min(100, (topped / total) * 100).toFixed(1);
+      upSeg.innerHTML = '<i class="seg-granted" style="width:' + g + '%"></i><i class="seg-topped" style="width:' + t + '%"></i>';
+    } else {
+      upSeg.innerHTML = '';
+    }
+  }
+
   function update(data) {
     if (!data) return;
     if (data.error) {
@@ -71,6 +97,8 @@
       errEl.hidden = false;
       totalEl.textContent = '—';
       splitEl.textContent = '—';
+      upBar.style.width = '0%';
+      upSeg.innerHTML = '';
       return;
     }
     errEl.hidden = true;
@@ -89,6 +117,7 @@
     }
     reqEl.textContent = String(data.todayRequests || 0);
     tokEl.textContent = fmtTokens((data.totalInputTokens || 0) + (data.totalOutputTokens || 0));
+    renderBars(data);
   }
 
   // 供主进程直接推送（executeJavaScript 可调用）

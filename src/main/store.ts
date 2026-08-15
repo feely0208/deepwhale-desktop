@@ -16,7 +16,7 @@ export interface Settings {
   theme: 'system' | 'light' | 'dark';
   /** 背景皮肤图片文件名（userData/skins/ 下），null 表示无背景皮肤 */
   skinImage: string | null;
-  /** 背景皮肤可见度（0.3~1，界面层透明度） */
+  /** 背景皮肤可见度（0.3~1，界面层透明度；越小图越透出） */
   skinOpacity: number;
   /** 是否启用 userData/custom.css 自定义样式 */
   customCssEnabled: boolean;
@@ -43,7 +43,7 @@ const DEFAULTS: Settings = {
   port: 3080,
   theme: 'system',
   skinImage: null,
-  skinOpacity: 0.85,
+  skinOpacity: 0.55,
   customCssEnabled: false,
   petVisible: true,
   petGif: null,

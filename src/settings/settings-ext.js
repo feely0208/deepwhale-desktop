@@ -66,6 +66,12 @@
       '      <div class="row"><span class="k">今日请求</span><span id="dsh-ext-u-req">0</span></div>' +
       '      <div class="row"><span class="k">累计 tokens（估）</span><span id="dsh-ext-u-tok">0</span></div>' +
       '    </div>' +
+      '    <div class="dsh-ext-bars">' +
+      '      <div class="dsh-ext-bar-caption">余额充足度（满格 ¥10）</div>' +
+      '      <div class="dsh-ext-bar"><i class="dsh-ext-bar-fill" id="dsh-ext-u-bar"></i></div>' +
+      '      <div class="dsh-ext-bar-caption">额度构成（赠送 / 充值）</div>' +
+      '      <div class="dsh-ext-bar dsh-ext-bar-seg" id="dsh-ext-u-seg"></div>' +
+      '    </div>' +
       '    <div class="dsh-ext-err" id="dsh-ext-u-err" hidden></div>' +
       '    <button class="dsh-ext-btn" id="dsh-ext-u-refresh">立即刷新</button>' +
       '  </section>' +
@@ -185,11 +191,32 @@
     var uReq = document.getElementById('dsh-ext-u-req');
     var uTok = document.getElementById('dsh-ext-u-tok');
     var uErr = document.getElementById('dsh-ext-u-err');
+    var uBar = document.getElementById('dsh-ext-u-bar');
+    var uSeg = document.getElementById('dsh-ext-u-seg');
 
     function fmtTokens(n) {
       if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
       if (n >= 1e3) return (n / 1e3).toFixed(1) + 'k';
       return String(n);
+    }
+    function renderBars(data) {
+      var first = data.balanceInfos && data.balanceInfos[0];
+      if (!first) return;
+      var total = parseFloat(first.totalBalance) || 0;
+      var granted = parseFloat(first.grantedBalance) || 0;
+      var topped = parseFloat(first.toppedUpBalance) || 0;
+      // 余额充足度：满格 ¥10
+      var pct = Math.min(100, Math.max(0, (total / 10) * 100));
+      uBar.style.width = pct.toFixed(0) + '%';
+      uBar.className = 'dsh-ext-bar-fill' + (pct >= 50 ? ' ok' : pct >= 25 ? ' warn' : ' err');
+      // 额度构成：赠送 / 充值 两段
+      if (total > 0) {
+        var g = Math.min(100, (granted / total) * 100).toFixed(1);
+        var t = Math.min(100, (topped / total) * 100).toFixed(1);
+        uSeg.innerHTML = '<i class="seg-granted" style="width:' + g + '%"></i><i class="seg-topped" style="width:' + t + '%"></i>';
+      } else {
+        uSeg.innerHTML = '';
+      }
     }
     function renderUsage(data) {
       if (!data) return;
@@ -197,6 +224,8 @@
         uErr.textContent = data.error;
         uErr.hidden = false;
         uStatus.textContent = '未连接';
+        uBar.style.width = '0%';
+        uSeg.innerHTML = '';
         return;
       }
       uErr.hidden = true;
@@ -210,6 +239,7 @@
       }
       uReq.textContent = String(data.todayRequests || 0);
       uTok.textContent = fmtTokens((data.totalInputTokens || 0) + (data.totalOutputTokens || 0));
+      renderBars(data);
     }
     window.dsh.onUsageUpdate(renderUsage);
     document.getElementById('dsh-ext-u-refresh').addEventListener('click', function () { window.dsh.usageRefresh(); });

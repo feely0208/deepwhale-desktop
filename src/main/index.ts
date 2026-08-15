@@ -364,14 +364,19 @@ if (!app.requestSingleInstanceLock()) {
               await new Promise(r => setTimeout(r, 1500));
               const has = (id) => !!document.getElementById(id);
               const petNav = document.getElementById('dsh-ext-nav-pet');
-              let activated = false;
+              let activated = false, petItems = 0, themeItems = 0, usageRows = 0;
               if (petNav) {
                 petNav.click();
-                await new Promise(r => setTimeout(r, 400));
+                await new Promise(r => setTimeout(r, 700));
                 const panel = document.getElementById('dsh-ext-panel');
                 activated = !!panel && panel.style.display !== 'none';
+                petItems = document.querySelectorAll('#dsh-ext-pet-list .dsh-ext-item').length;
+                const skinNav = document.getElementById('dsh-ext-nav-skin');
+                if (skinNav) { skinNav.click(); await new Promise(r => setTimeout(r, 400)); themeItems = document.querySelectorAll('#dsh-ext-theme-list .dsh-ext-item').length; }
+                const usageNav = document.getElementById('dsh-ext-nav-usage');
+                if (usageNav) { usageNav.click(); await new Promise(r => setTimeout(r, 400)); usageRows = document.querySelectorAll('#dsh-ext-usage-body .row').length || document.querySelectorAll('#dsh-ext-panel .dsh-ext-grid .row').length; }
               }
-              return JSON.stringify({ navPet: has('dsh-ext-nav-pet'), navUsage: has('dsh-ext-nav-usage'), navSkin: has('dsh-ext-nav-skin'), panel: has('dsh-ext-panel'), activated });
+              return JSON.stringify({ navPet: has('dsh-ext-nav-pet'), navUsage: has('dsh-ext-nav-usage'), navSkin: has('dsh-ext-nav-skin'), panel: has('dsh-ext-panel'), activated, petItems, themeItems, usageRows });
             })()`);
             console.log('[smoke] settings-ext:', r);
           } catch (e) {

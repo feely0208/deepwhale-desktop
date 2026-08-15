@@ -1,4 +1,4 @@
-import { BrowserWindow, app, nativeTheme, shell } from 'electron';
+import { BrowserWindow, app, nativeImage, nativeTheme, shell } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Store } from './store';
@@ -96,23 +96,45 @@ export class SkinManager {
     return fs.existsSync(file) ? file : null;
   }
 
-  /** 背景皮肤预览（data URI，供设置页展示） */
+  /** 背景皮肤预览（data URI，供设置页展示；压缩到 600px 内） */
   backgroundPreviewDataUri(): string | null {
     const file = this.backgroundPath();
     if (!file) return null;
+    return this.buildDataUri(file, 600);
+  }
+
+  /**
+   * 把背景图编码为 data URI（http 页面禁止加载 file:// 子资源，必须内联）。
+   * 用 nativeImage 压缩到 maxDim 内再编码，避免超大 CSS。
+   * GIF 保留原样（可动图）。
+   */
+  private buildDataUri(file: string, maxDim: number): string | null {
     try {
-      const buf = fs.readFileSync(file);
-      const ext = path.extname(file).slice(1).toLowerCase();
-      const mime =
-        ext === 'jpg' || ext === 'jpeg'
-          ? 'image/jpeg'
-          : ext === 'webp'
-            ? 'image/webp'
-            : ext === 'gif'
-              ? 'image/gif'
-              : 'image/png';
-      return 'data:' + mime + ';base64,' + buf.toString('base64');
-    } catch {
+      const ext = path.extname(file).toLowerCase();
+      if (ext === '.gif') {
+        const buf = fs.readFileSync(file);
+        return 'data:image/gif;base64,' + buf.toString('base64');
+      }
+      const img = nativeImage.createFromPath(file);
+      if (img.isEmpty()) return null;
+      const size = img.getSize();
+      let resized = img;
+      if (size.width > maxDim || size.height > maxDim) {
+        const scale = maxDim / Math.max(size.width, size.height);
+        resized = img.resize({
+          width: Math.max(1, Math.round(size.width * scale)),
+          height: Math.max(1, Math.round(size.height * scale)),
+          quality: 'best',
+        });
+      }
+      if (ext === '.jpg' || ext === '.jpeg') {
+        const buf = resized.toJPEG(88);
+        return 'data:image/jpeg;base64,' + buf.toString('base64');
+      }
+      const buf = resized.toPNG();
+      return 'data:image/png;base64,' + buf.toString('base64');
+    } catch (e) {
+      console.error('[skin] 背景图编码失败:', e);
       return null;
     }
   }
@@ -125,11 +147,12 @@ export class SkinManager {
     const dark = nativeTheme.shouldUseDarkColors;
     const layer1 = dark ? `rgba(16, 18, 22, ${alpha})` : `rgba(255, 255, 255, ${alpha})`;
     const layer2 = dark ? `rgba(24, 27, 33, ${alpha})` : `rgba(244, 246, 248, ${alpha})`;
-    const url = 'file://' + file.replace(/ /g, '%20');
+    const dataUri = this.buildDataUri(file, 2560);
+    if (!dataUri) return;
 
     const css = `
       html, body {
-        background-image: url("${url}") !important;
+        background-image: url("${dataUri}") !important;
         background-size: cover !important;
         background-position: center !important;
         background-repeat: no-repeat !important;

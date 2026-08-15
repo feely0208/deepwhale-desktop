@@ -151,6 +151,55 @@
   word-break: break-all;
 }
 
+/* 用量绿色进度条 */
+.dsh-ext-bars {
+  margin: 12px 0 4px;
+  max-width: 420px;
+}
+
+.dsh-ext-bar-caption {
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary);
+  margin: 8px 0 4px;
+}
+
+.dsh-ext-bar {
+  height: 8px;
+  border-radius: 5px;
+  background: var(--dsw-alias-bg-layer-2);
+  overflow: hidden;
+  display: flex;
+}
+
+.dsh-ext-bar-fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--dsw-alias-state-success-primary);
+  transition: width 0.4s ease;
+}
+
+.dsh-ext-bar-fill.warn {
+  background: var(--dsw-alias-state-warn-primary);
+}
+
+.dsh-ext-bar-fill.err {
+  background: var(--dsw-alias-state-error-primary);
+}
+
+.dsh-ext-bar-seg i {
+  display: block;
+  height: 100%;
+}
+
+.dsh-ext-bar-seg .seg-granted {
+  background: #7acb8a;
+}
+
+.dsh-ext-bar-seg .seg-topped {
+  background: var(--dsw-alias-state-success-primary);
+}
+
 /* 导航 active 态（我们的三项） */
 .dsh-ext-nav-active {
   background: var(--dsw-alias-interactive-bg-hover) !important;

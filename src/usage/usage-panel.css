@@ -120,3 +120,61 @@
   #dsh-usage-panel .refresh-btn { color: #7aa2ff; }
   #dsh-usage-panel .refresh-btn:hover { background: rgba(122, 162, 255, 0.15); }
 }
+
+/* 用量绿色进度条 */
+#dsh-usage-panel .bars {
+  margin: 8px 12px 2px;
+}
+
+#dsh-usage-panel .bar-caption {
+  font-size: 11px;
+  color: #57606a;
+  margin: 6px 0 3px;
+}
+
+#dsh-usage-panel .bar {
+  height: 6px;
+  border-radius: 4px;
+  background: #eef0f4;
+  overflow: hidden;
+  display: flex;
+}
+
+#dsh-usage-panel .bar-fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: #1a7f37;
+  transition: width 0.4s ease;
+}
+
+#dsh-usage-panel .bar-fill.warn {
+  background: #9a6700;
+}
+
+#dsh-usage-panel .bar-fill.err {
+  background: #d1242f;
+}
+
+#dsh-usage-panel .bar.seg i {
+  display: block;
+  height: 100%;
+}
+
+#dsh-usage-panel .bar.seg .seg-granted {
+  background: #7acb8a;
+}
+
+#dsh-usage-panel .bar.seg .seg-topped {
+  background: #1a7f37;
+}
+
+@media (prefers-color-scheme: dark) {
+  #dsh-usage-panel .bar-caption { color: #9aa1ad; }
+  #dsh-usage-panel .bar { background: #23262e; }
+  #dsh-usage-panel .bar-fill { background: #3fb950; }
+  #dsh-usage-panel .bar-fill.warn { background: #d29922; }
+  #dsh-usage-panel .bar-fill.err { background: #f85149; }
+  #dsh-usage-panel .bar.seg .seg-granted { background: #6ec27c; }
+  #dsh-usage-panel .bar.seg .seg-topped { background: #3fb950; }
+}

@@ -70,7 +70,7 @@
       '      <div class="row"><span class="k">累计 tokens（估）</span><span id="dsh-ext-u-tok">0</span></div>' +
       '    </div>' +
       '    <div class="dsh-ext-bars">' +
-      '      <div class="dsh-ext-bar-caption">余额充足度（满格 ¥10）</div>' +
+      '      <div class="dsh-ext-bar-caption">余额充足度</div>' +
       '      <div class="dsh-ext-bar"><i class="dsh-ext-bar-fill" id="dsh-ext-u-bar"></i></div>' +
       '      <div class="dsh-ext-bar-caption">额度构成（赠送 / 充值）</div>' +
       '      <div class="dsh-ext-bar dsh-ext-bar-seg" id="dsh-ext-u-seg"></div>' +
@@ -211,7 +211,7 @@
       var total = parseFloat(first.totalBalance) || 0;
       var granted = parseFloat(first.grantedBalance) || 0;
       var topped = parseFloat(first.toppedUpBalance) || 0;
-      // 余额充足度：满格 ¥10
+      // 余额充足度：以 ¥10 为满格参考
       var pct = Math.min(100, Math.max(0, (total / 10) * 100));
       uBar.style.width = pct.toFixed(0) + '%';
       uBar.className = 'dsh-ext-bar-fill' + (pct >= 50 ? ' ok' : pct >= 25 ? ' warn' : ' err');
@@ -316,13 +316,15 @@
     Array.prototype.forEach.call(panelEl.querySelectorAll('.dsh-ext-section'), function (s) {
       s.style.display = s.id === SEC_PREFIX + id ? 'block' : 'none';
     });
-    // 清除所有导航项的高亮色块（含克隆残留与 DSH 自己的 active 状态）
+    // 选中态：仅当前选中项显示高亮色块，其余全部清除（含 DSH 自己的 active 残留）
     var navList = findNavList();
     if (navList) {
       Array.prototype.forEach.call(navList.querySelectorAll('button'), function (b) {
-        b.classList.remove('dsh-ext-nav-active');
+        b.classList.remove('dsh-ext-nav-on');
         b.className = String(b.className || '').replace(/active/gi, '').replace(/\s+/g, ' ').trim();
       });
+      var cell = document.getElementById(NAV_PREFIX + id);
+      if (cell) cell.classList.add('dsh-ext-nav-on');
     }
     // 首次打开用量栏时主动刷新一次
     if (id === 'usage') window.dsh.usageRefresh();

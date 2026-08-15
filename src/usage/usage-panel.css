@@ -51,11 +51,27 @@
 }
 
 #dsh-usage-panel .uph .arrow {
+  color: #1a7f37;
+  font-weight: 700;
+  font-size: 14px;
   transition: transform 0.2s;
+}
+
+#dsh-usage-panel .uph:hover .arrow {
+  color: #0f6b2c;
 }
 
 #dsh-usage-panel.collapsed .uph .arrow {
   transform: rotate(-90deg);
+}
+
+@media (prefers-color-scheme: dark) {
+  #dsh-usage-panel .uph .arrow {
+    color: #3fb950;
+  }
+  #dsh-usage-panel .uph:hover .arrow {
+    color: #6bd47a;
+  }
 }
 
 #dsh-usage-panel .upb {
@@ -178,3 +194,4 @@
   #dsh-usage-panel .bar.seg .seg-granted { background: #6ec27c; }
   #dsh-usage-panel .bar.seg .seg-topped { background: #3fb950; }
 }
+

@@ -200,6 +200,7 @@
   background: var(--dsw-alias-state-success-primary);
 }
 
-.dsh-ext-nav-active {
-  /* 已移除：用户要求导航项上不显示色块 */
+/* 导航选中态：仅当前选中项显示高亮 */
+.dsh-ext-nav-on {
+  background: var(--dsw-alias-interactive-bg-hover) !important;
 }

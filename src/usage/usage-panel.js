@@ -21,7 +21,7 @@
     '  <div class="row"><span class="k">今日请求</span><span class="v" id="dsh-up-requests">0</span></div>' +
     '  <div class="row"><span class="k">累计 tokens（估）</span><span class="v" id="dsh-up-tokens">0</span></div>' +
     '  <div class="bars">' +
-    '    <div class="bar-caption">余额充足度（满格 ¥10）</div>' +
+    '    <div class="bar-caption">余额充足度</div>' +
     '    <div class="bar"><i class="bar-fill" id="dsh-up-bar"></i></div>' +
     '    <div class="bar-caption">额度构成（赠送 / 充值）</div>' +
     '    <div class="bar seg" id="dsh-up-seg"></div>' +

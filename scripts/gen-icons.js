@@ -165,6 +165,48 @@ function makeIcon(size) {
   return encodePNG(size, size, out);
 }
 
+// 托盘图标：透明底 + 蓝鲸（菜单栏浅/深色下都可见）
+function makeTrayIcon(size) {
+  const big = size * SS;
+  const buf = Buffer.alloc(big * big * 4); // 默认全透明
+  const putBig = (x, y, c) => {
+    if (x < 0 || y < 0 || x >= big || y >= big) return;
+    const i = (y * big + x) * 4;
+    buf[i] = c[0]; buf[i + 1] = c[1]; buf[i + 2] = c[2]; buf[i + 3] = c[3];
+  };
+  const X = (u) => (u / 100) * big;
+  const Y = (u) => (u / 100) * big;
+  // 鲸鱼整体缩放并居中（剪影用 0-100 坐标，整体占 ~82%）
+  const poly = catmullRom(CTRL, 24);
+  const finPoly = catmullRom([[58, 40], [68, 44], [72, 56], [63, 52], [55, 47]], 12);
+  for (let y = 0; y < big; y++) {
+    for (let x = 0; x < big; x++) {
+      const u = (x / big) * 100;
+      const v = (y / big) * 100;
+      if (pointInPoly(u, v, poly) || pointInPoly(u, v, finPoly)) putBig(x, y, WHALE);
+    }
+  }
+  const out = Buffer.alloc(size * size * 4);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      let r = 0, g = 0, b = 0, a = 0;
+      for (let sy = 0; sy < SS; sy++) {
+        for (let sx = 0; sx < SS; sx++) {
+          const i = ((y * SS + sy) * big + (x * SS + sx)) * 4;
+          r += buf[i]; g += buf[i + 1]; b += buf[i + 2]; a += buf[i + 3];
+        }
+      }
+      const n = SS * SS;
+      const o = (y * size + x) * 4;
+      out[o] = Math.round(r / n);
+      out[o + 1] = Math.round(g / n);
+      out[o + 2] = Math.round(b / n);
+      out[o + 3] = Math.round(a / n);
+    }
+  }
+  return encodePNG(size, size, out);
+}
+
 const outDir = path.join(__dirname, '..', 'assets', 'icons');
 fs.mkdirSync(outDir, { recursive: true });
 const targets = [
@@ -172,10 +214,12 @@ const targets = [
   ['icon-256.png', 256],
   ['icon-32.png', 32],
   ['icon-16.png', 16],
-  ['tray.png', 32],
 ];
 for (const [name, size] of targets) {
   fs.writeFileSync(path.join(outDir, name), makeIcon(size));
   console.log('generated', name, size + 'x' + size);
 }
+// 托盘：透明底蓝鲸
+fs.writeFileSync(path.join(outDir, 'tray.png'), makeTrayIcon(32));
+console.log('generated tray.png 32x32 (透明底)');
 console.log('icons done ->', outDir);

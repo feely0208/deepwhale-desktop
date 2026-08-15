@@ -10,49 +10,59 @@
       "frames": 6
     },
     {
-      "state": "running-right",
+      "state": "walking",
       "row": 1,
       "frames": 8
     },
     {
-      "state": "running-left",
+      "state": "walking-left",
       "row": 2,
       "frames": 8
     },
     {
-      "state": "waving",
+      "state": "fast-walking",
       "row": 3,
-      "frames": 4
+      "frames": 8
     },
     {
-      "state": "jumping",
+      "state": "fast-walking-left",
       "row": 4,
-      "frames": 5
+      "frames": 8
     },
     {
-      "state": "failed",
+      "state": "jogging",
       "row": 5,
       "frames": 8
     },
     {
-      "state": "waiting",
+      "state": "jogging-left",
       "row": 6,
-      "frames": 6
+      "frames": 8
     },
     {
-      "state": "review",
+      "state": "fast-running",
       "row": 7,
-      "frames": 6
+      "frames": 8
     },
     {
-      "state": "look",
+      "state": "fast-running-left",
       "row": 8,
-      "frames": 6
+      "frames": 8
     },
     {
       "state": "working",
       "row": 9,
       "frames": 6
+    },
+    {
+      "state": "waving",
+      "row": 10,
+      "frames": 4
+    },
+    {
+      "state": "jumping",
+      "row": 11,
+      "frames": 5
     }
   ]
 }

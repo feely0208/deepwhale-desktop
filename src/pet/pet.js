@@ -126,7 +126,16 @@
     var dx = e.screenX - lastX;
     lastX = e.screenX;
     if (isSprite) {
-      setSpriteState(Math.abs(dx) < 2 ? 'jumping' : dx > 0 ? 'running-right' : 'running-left', { speed: Math.max(60, frameMs - 40) });
+      // 按拖动速度切换动作：走路 < 快走 < 慢跑 < 快跑；方向决定左/右
+      var dir = dx >= 0 ? '' : '-left';
+      var adx = Math.abs(dx);
+      var st;
+      if (adx < 3) st = 'jumping';
+      else if (adx < 8) st = 'walking' + dir;
+      else if (adx < 15) st = 'fast-walking' + dir;
+      else if (adx < 24) st = 'jogging' + dir;
+      else st = 'fast-running' + dir;
+      setSpriteState(st, { speed: Math.max(60, frameMs - 40) });
     }
     window.dsh.petDragMove();
   });

@@ -16,3 +16,6 @@ Thumbs.db
 # 编辑器
 .vscode/
 .idea/
+
+# 根目录截图等杂项
+/*.png

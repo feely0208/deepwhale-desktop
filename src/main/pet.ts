@@ -25,7 +25,7 @@ export class PetWindow {
     return this.win && !this.win.isDestroyed() ? this.win : null;
   }
 
-  /** 用户宠物目录（可写）：首次启动时用内置示例填充 */
+  /** 用户宠物目录（可写）：首次启动时用内置示例填充（文件 + 帧动画宠物目录） */
   userPetsDir(): string {
     return path.join(app.getPath('userData'), 'pets');
   }
@@ -35,8 +35,14 @@ export class PetWindow {
       const dir = this.userPetsDir();
       if (fs.existsSync(dir)) return;
       fs.mkdirSync(dir, { recursive: true });
-      for (const f of fs.readdirSync(this.builtinPetsDir)) {
-        fs.copyFileSync(path.join(this.builtinPetsDir, f), path.join(dir, f));
+      for (const entry of fs.readdirSync(this.builtinPetsDir, { withFileTypes: true })) {
+        const src = path.join(this.builtinPetsDir, entry.name);
+        const dest = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          fs.cpSync(src, dest, { recursive: true });
+        } else {
+          fs.copyFileSync(src, dest);
+        }
       }
       console.log('[pet] 已初始化用户宠物目录:', dir);
     } catch (e) {
@@ -80,9 +86,10 @@ export class PetWindow {
       return existing;
     }
 
+    const scale = Math.min(2, Math.max(0.6, this.store.get('petScale')));
     const win = new BrowserWindow({
-      width: 180,
-      height: 180,
+      width: Math.round(180 * scale),
+      height: Math.round(180 * scale),
       transparent: true,
       frame: false,
       alwaysOnTop: true,
@@ -97,8 +104,13 @@ export class PetWindow {
     });
 
     const file = this.store.get('petGif');
+    const frameMs = this.store.get('petFrameMs');
     void win.loadFile(path.join(__dirname, '../pet/pet.html'), {
-      query: file ? (this.isSpritePet(file) ? { sprite: file } : { src: this.petFileUrl(file) }) : {},
+      query: file
+        ? this.isSpritePet(file)
+          ? { sprite: file, frameMs: String(frameMs) }
+          : { src: this.petFileUrl(file) }
+        : {},
     });
 
     // 初始位置：主屏工作区右下角
@@ -136,9 +148,27 @@ export class PetWindow {
 
   reload(): void {
     const file = this.store.get('petGif');
+    const frameMs = this.store.get('petFrameMs');
     this.window?.loadFile(path.join(__dirname, '../pet/pet.html'), {
-      query: file ? (this.isSpritePet(file) ? { sprite: file } : { src: this.petFileUrl(file) }) : {},
+      query: file
+        ? this.isSpritePet(file)
+          ? { sprite: file, frameMs: String(frameMs) }
+          : { src: this.petFileUrl(file) }
+        : {},
     });
+  }
+
+  /** 应用宠物配置（帧率/大小）：更新窗口尺寸并重载 */
+  applyConfig(): void {
+    const win = this.window;
+    if (!win) return;
+    const scale = Math.min(2, Math.max(0.6, this.store.get('petScale')));
+    const w = Math.round(180 * scale);
+    const h = Math.round(180 * scale);
+    // 保持右下角位置不变
+    const b = win.getBounds();
+    win.setBounds({ x: b.x + b.width - w, y: b.y + b.height - h, width: w, height: h });
+    this.reload();
   }
 
   /** 是否为帧动画宠物（目录内含 manifest.json） */
@@ -255,28 +285,17 @@ export class PetWindow {
     const pets = this.listPets();
     const current = this.store.get('petGif');
 
-    const petItems: MenuItemConstructorOptions[] = [
-      {
-        label: '默认宠物（橙色小团子）',
+    const petItems: MenuItemConstructorOptions[] = pets.map(
+      (p): MenuItemConstructorOptions => ({
+        label: p,
         type: 'radio',
-        checked: !current,
+        checked: current === p,
         click: () => {
-          this.store.set('petGif', null);
+          this.store.set('petGif', p);
           this.reload();
         },
-      },
-      ...pets.map(
-        (p): MenuItemConstructorOptions => ({
-          label: p,
-          type: 'radio',
-          checked: current === p,
-          click: () => {
-            this.store.set('petGif', p);
-            this.reload();
-          },
-        })
-      ),
-    ];
+      })
+    );
 
     const template: MenuItemConstructorOptions[] = [
       { label: '宠物皮肤', submenu: petItems },

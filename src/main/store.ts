@@ -22,8 +22,12 @@ export interface Settings {
   customCssEnabled: boolean;
   /** 桌面宠物是否显示 */
   petVisible: boolean;
-  /** 自定义宠物文件名（userData/pets/ 下 .gif/.svg），null 表示默认宠物 */
+  /** 桌面宠物：当前宠物名（默认 AI小助理 帧动画宠物） */
   petGif: string | null;
+  /** 帧动画宠物播放速度（每帧毫秒） */
+  petFrameMs: number;
+  /** 宠物显示大小（0.6~2 倍，窗口尺寸） */
+  petScale: number;
   /** 宠物窗口穿透点击 */
   clickThrough: boolean;
   /** 关主窗口时最小化到托盘而非退出 */
@@ -46,7 +50,9 @@ const DEFAULTS: Settings = {
   skinOpacity: 0.55,
   customCssEnabled: false,
   petVisible: true,
-  petGif: null,
+  petGif: 'AI小助理',
+  petFrameMs: 130,
+  petScale: 1,
   clickThrough: false,
   closeToTray: true,
   usagePanelVisible: true,

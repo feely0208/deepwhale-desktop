@@ -68,9 +68,7 @@
   function refreshPets() {
     window.dsh.petState().then(function (state) {
       petsEl.innerHTML = '';
-      var items = [{ name: null, label: '默认宠物（橙色泪滴）' }].concat(
-        (state.list || []).map(function (n) { return { name: n, label: n }; })
-      );
+      var items = (state.list || []).map(function (n) { return { name: n, label: n }; });
       items.forEach(function (it) {
         var div = document.createElement('div');
         div.className = 'pet-item' + (state.current === it.name ? ' active' : '');

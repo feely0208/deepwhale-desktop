@@ -190,28 +190,17 @@ function buildMenuActions(): TrayMenuActions {
 
   const pets = pet ? pet.listPets() : [];
   const currentPet = store.get('petGif');
-  const petSubmenuItems: MenuItemConstructorOptions[] = [
-    {
-      label: '默认宠物（橙色小团子）',
+  const petSubmenuItems: MenuItemConstructorOptions[] = pets.map(
+    (p): MenuItemConstructorOptions => ({
+      label: p,
       type: 'radio',
-      checked: !currentPet,
+      checked: currentPet === p,
       click: () => {
-        store.set('petGif', null);
+        store.set('petGif', p);
         pet?.reload();
       },
-    },
-    ...pets.map(
-      (p): MenuItemConstructorOptions => ({
-        label: p,
-        type: 'radio',
-        checked: currentPet === p,
-        click: () => {
-          store.set('petGif', p);
-          pet?.reload();
-        },
-      })
-    ),
-  ];
+    })
+  );
   const petSubmenu: MenuItemConstructorOptions[] = [
     {
       label: '显示宠物',
@@ -313,9 +302,20 @@ function registerIpc(): void {
     current: store.get('petGif'),
     visible: store.get('petVisible'),
     clickThrough: store.get('clickThrough'),
+    frameMs: store.get('petFrameMs'),
+    scale: store.get('petScale'),
     list: pet?.listPets() ?? [],
     previewDataUri: pet?.previewDataUri() ?? null,
   }));
+  ipcMain.on('pet:set-config', (_e, payload: { frameMs?: number; scale?: number }) => {
+    if (typeof payload?.frameMs === 'number') {
+      store.set('petFrameMs', Math.min(400, Math.max(50, Math.round(payload.frameMs))));
+    }
+    if (typeof payload?.scale === 'number') {
+      store.set('petScale', Math.min(2, Math.max(0.6, payload.scale)));
+    }
+    pet?.applyConfig();
+  });
   ipcMain.on('pet:set-visible', (_e, visible: boolean) => {
     if (visible) pet?.show();
     else pet?.hide();

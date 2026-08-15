@@ -40,6 +40,7 @@ contextBridge.exposeInMainWorld('dsh', {
   petSelect: (name: string | null) => ipcRenderer.send('pet:select-pet', name),
   petSetVisible: (visible: boolean) => ipcRenderer.send('pet:set-visible', visible),
   petSetClickThrough: (enabled: boolean) => ipcRenderer.send('pet:set-click-through', enabled),
+  petSetConfig: (frameMs: number, scale: number) => ipcRenderer.send('pet:set-config', { frameMs, scale }),
   petOpenFolder: () => ipcRenderer.send('pet:open-folder'),
 
   // ---- 宠物工坊 ----

@@ -50,11 +50,15 @@
       '<div id="' + PANEL_ID + '" class="dsh-ext-panel" style="display:none">' +
       '  <section class="dsh-ext-section" id="' + SEC_PREFIX + 'pet">' +
       '    <h3>宠物</h3>' +
-      '    <div class="dsh-ext-row">当前宠物：<b id="dsh-ext-pet-current">默认宠物（橙色小团子）</b></div>' +
-      '    <div class="dsh-ext-preview" id="dsh-ext-pet-preview"><span class="ph">默认团子</span></div>' +
+      '    <div class="dsh-ext-row">当前宠物：<b id="dsh-ext-pet-current">—</b></div>' +
+      '    <div class="dsh-ext-preview" id="dsh-ext-pet-preview"><span class="ph">—</span></div>' +
       '    <div class="dsh-ext-list" id="dsh-ext-pet-list"></div>' +
       '    <label class="dsh-ext-check"><input type="checkbox" id="dsh-ext-pet-visible" /> 显示宠物</label>' +
       '    <label class="dsh-ext-check"><input type="checkbox" id="dsh-ext-pet-clickthrough" /> 穿透点击（可点到宠物后面的内容）</label>' +
+      '    <div class="dsh-ext-row">动画帧率：<b id="dsh-ext-pet-fps-val">130ms/帧</b></div>' +
+      '    <input type="range" class="dsh-ext-range" id="dsh-ext-pet-frame" min="60" max="300" step="10" />' +
+      '    <div class="dsh-ext-row">宠物大小：<b id="dsh-ext-pet-scale-val">100%</b></div>' +
+      '    <input type="range" class="dsh-ext-range" id="dsh-ext-pet-scale" min="0.6" max="2" step="0.1" />' +
       '    <div class="dsh-ext-btns">' +
       '      <button class="dsh-ext-btn" id="dsh-ext-pet-open">打开宠物目录…</button>' +
       '      <button class="dsh-ext-btn" id="dsh-ext-pet-studio">宠物工坊…</button>' +
@@ -154,39 +158,53 @@
     var petPreviewEl = document.getElementById('dsh-ext-pet-preview');
     var petVisibleEl = document.getElementById('dsh-ext-pet-visible');
     var petClickEl = document.getElementById('dsh-ext-pet-clickthrough');
+    var frameEl = document.getElementById('dsh-ext-pet-frame');
+    var frameValEl = document.getElementById('dsh-ext-pet-fps-val');
+    var scaleEl = document.getElementById('dsh-ext-pet-scale');
+    var scaleValEl = document.getElementById('dsh-ext-pet-scale-val');
 
     function renderPets(state) {
       var current = state.current;
-      var items = [
-        { name: null, label: '默认宠物（橙色小团子）' }
-      ].concat((state.list || []).map(function (n) { return { name: n, label: n }; }));
-
       petListEl.innerHTML = '';
-      items.forEach(function (it) {
+      (state.list || []).forEach(function (n) {
         var div = document.createElement('div');
-        div.className = 'dsh-ext-item' + (current === it.name ? ' active' : '');
-        div.textContent = it.label;
+        div.className = 'dsh-ext-item' + (current === n ? ' active' : '');
+        div.textContent = n;
         div.addEventListener('click', function () {
-          window.dsh.petSelect(it.name);
-          petCurrentEl.textContent = it.label;
+          window.dsh.petSelect(n);
+          petCurrentEl.textContent = n;
           Array.prototype.forEach.call(petListEl.children, function (c) { c.classList.remove('active'); });
           div.classList.add('active');
         });
         petListEl.appendChild(div);
       });
-      petCurrentEl.textContent = current ? current : '默认宠物（橙色小团子）';
+      petCurrentEl.textContent = current || '—';
       petVisibleEl.checked = !!state.visible;
       petClickEl.checked = !!state.clickThrough;
+      var fm = state.frameMs || 130;
+      frameEl.value = String(fm);
+      frameValEl.textContent = fm + 'ms/帧';
+      var sc = state.scale || 1;
+      scaleEl.value = String(sc);
+      scaleValEl.textContent = Math.round(sc * 100) + '%';
       if (state.previewDataUri) {
         petPreviewEl.innerHTML = '<img src="' + state.previewDataUri + '" alt="pet" />';
       } else {
-        petPreviewEl.innerHTML = '<span class="ph">' + (current ? 'GIF 不支持预览' : '默认团子') + '</span>';
+        petPreviewEl.innerHTML = '<span class="ph">' + (current || '—') + '</span>';
       }
     }
 
     window.dsh.petState().then(renderPets);
     petVisibleEl.addEventListener('change', function () { window.dsh.petSetVisible(petVisibleEl.checked); });
     petClickEl.addEventListener('change', function () { window.dsh.petSetClickThrough(petClickEl.checked); });
+    frameEl.addEventListener('input', function () { frameValEl.textContent = frameEl.value + 'ms/帧'; });
+    frameEl.addEventListener('change', function () {
+      window.dsh.petSetConfig(parseInt(frameEl.value, 10), parseFloat(scaleEl.value));
+    });
+    scaleEl.addEventListener('input', function () { scaleValEl.textContent = Math.round(parseFloat(scaleEl.value) * 100) + '%'; });
+    scaleEl.addEventListener('change', function () {
+      window.dsh.petSetConfig(parseInt(frameEl.value, 10), parseFloat(scaleEl.value));
+    });
     document.getElementById('dsh-ext-pet-open').addEventListener('click', function () { window.dsh.petOpenFolder(); });
     document.getElementById('dsh-ext-pet-studio').addEventListener('click', function () { window.dsh.petStudioOpen(); });
 

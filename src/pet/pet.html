@@ -11,53 +11,10 @@
 </head>
 <body>
   <div id="pet" class="pet" title="右键菜单">
-    <div class="pet-stage">
-      <!-- 默认宠物：Codex 风格橙色泪滴（依据基图像素分析绘制，SVG 渐变 + CSS 动画） -->
-      <svg id="default-pet" class="pet-svg" viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <linearGradient id="drop-body" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#ffc39b" />
-            <stop offset="36%" stop-color="#ff8a3d" />
-            <stop offset="100%" stop-color="#ed6a14" />
-          </linearGradient>
-          <radialGradient id="drop-shine" cx="35%" cy="26%" r="62%">
-            <stop offset="0%" stop-color="#ffffff" stop-opacity="0.55" />
-            <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
-          </radialGradient>
-        </defs>
-
-        <!-- 泪滴身体：顶部圆润 → 中间最宽 → 底部收尖 -->
-        <path class="body" d="M40 5 C53 5 63 15 63 27 C63 43 56 57 44 72 C42.5 74 37.5 74 36 72 C24 57 17 43 17 27 C17 15 27 5 40 5 Z" fill="url(#drop-body)" />
-        <path class="body" d="M40 5 C53 5 63 15 63 27 C63 43 56 57 44 72 C42.5 74 37.5 74 36 72 C24 57 17 43 17 27 C17 15 27 5 40 5 Z" fill="url(#drop-shine)" />
-
-        <!-- 顶部高光 -->
-        <ellipse cx="30" cy="21" rx="7" ry="4" fill="#ffffff" opacity="0.5" transform="rotate(-20 30 21)" />
-
-        <!-- 眼睛 + 高光 -->
-        <g class="eye" fill="#2b1a0e">
-          <ellipse cx="32" cy="38" rx="4" ry="5.2" />
-          <ellipse cx="48" cy="38" rx="4" ry="5.2" />
-        </g>
-        <circle cx="33.6" cy="35.6" r="1.6" fill="#ffffff" />
-        <circle cx="49.6" cy="35.6" r="1.6" fill="#ffffff" />
-
-        <!-- 腮红 -->
-        <ellipse cx="22" cy="47" rx="4.4" ry="2.6" fill="#ff9d6b" opacity="0.75" />
-        <ellipse cx="58" cy="47" rx="4.4" ry="2.6" fill="#ff9d6b" opacity="0.75" />
-
-        <!-- 微笑 -->
-        <path d="M37 49 Q40 53 43 49" stroke="#2b1a0e" stroke-width="2.2" stroke-linecap="round" fill="none" />
-      </svg>
-
-      <!-- 地面阴影（随弹跳伸缩） -->
-      <div class="pet-shadow"></div>
-    </div>
-
-    <!-- 自定义宠物（用户宠物目录的 .gif/.svg/.png/.jpg/.webp，来自主进程 query 参数） -->
-    <img id="custom-pet" class="pet-custom" alt="pet" hidden />
-
-    <!-- 帧动画宠物（spritesheet 标准：manifest.json + spritesheet.png，来自主进程 query 参数） -->
+    <!-- 帧动画宠物（spritesheet 标准：manifest.json + spritesheet.png） -->
     <canvas id="sprite-pet" class="pet-sprite" width="192" height="208" hidden></canvas>
+    <!-- 普通自定义宠物（.gif/.svg/.png/.jpg/.webp） -->
+    <img id="custom-pet" class="pet-custom" alt="pet" hidden />
   </div>
   <script src="pet.js"></script>
 </body>

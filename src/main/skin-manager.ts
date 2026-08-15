@@ -157,6 +157,7 @@ export class SkinManager {
         background-position: center !important;
         background-repeat: no-repeat !important;
         background-attachment: fixed !important;
+        ${dark ? 'filter: brightness(0.92);' : 'filter: brightness(1.38) saturate(0.95);'}
       }
       html { background-color: transparent !important; }
       body {

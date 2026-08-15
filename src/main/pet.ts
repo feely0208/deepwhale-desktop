@@ -180,14 +180,14 @@ export class PetWindow {
     }
   }
 
-  /** 列出用户宠物目录下的宠物（文件 + 帧动画宠物目录） */
+  /** 列出用户宠物目录下的宠物（文件 + 帧动画宠物目录；排除工坊模板） */
   listPets(): string[] {
     const names: string[] = [];
     try {
       names.push(
         ...fs
           .readdirSync(this.userPetsDir())
-          .filter((f) => /\.(gif|svg|png|jpe?g|webp)$/i.test(f))
+          .filter((f) => /\.(gif|svg|png|jpe?g|webp)$/i.test(f) && !/template/i.test(f))
           .sort()
       );
     } catch {
@@ -195,7 +195,11 @@ export class PetWindow {
     }
     try {
       for (const d of fs.readdirSync(this.userPetsDir(), { withFileTypes: true })) {
-        if (d.isDirectory() && fs.existsSync(path.join(this.userPetsDir(), d.name, 'manifest.json'))) {
+        if (
+          d.isDirectory() &&
+          fs.existsSync(path.join(this.userPetsDir(), d.name, 'manifest.json')) &&
+          !/template/i.test(d.name)
+        ) {
           names.push(d.name);
         }
       }

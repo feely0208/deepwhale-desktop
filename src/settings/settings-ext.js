@@ -111,7 +111,9 @@
     defs.forEach(function (def) {
       var cell = template.cloneNode(true);
       cell.id = NAV_PREFIX + def.id;
-      cell.className = (cell.className || '').replace(/\bactive\b/gi, '').replace(/\s+/g, ' ').trim();
+      cell.className = (cell.className || '').replace(/active/gi, '').replace(/\s+/g, ' ').trim();
+      // 清掉克隆自"选中态"的残留子元素（高亮色块等）
+      cell.querySelectorAll('[class*="active"]').forEach(function (el) { el.remove(); });
       var label = cell.querySelector('[class*="navLabel"]');
       if (label) label.textContent = def.label;
       else cell.textContent = def.label;
@@ -309,18 +311,17 @@
     Array.prototype.forEach.call(content.children, function (c) {
       if (c !== panelEl) c.style.display = 'none';
     });
-    // 显示对应分栏
-    panelEl.style.display = '';
+    // 显示对应分栏（必须用 block，空字符串会被 CSS 类 .dsh-ext-section{display:none} 兜底隐藏）
+    panelEl.style.display = 'block';
     Array.prototype.forEach.call(panelEl.querySelectorAll('.dsh-ext-section'), function (s) {
-      s.style.display = (s.id === SEC_PREFIX + id) ? '' : 'none';
+      s.style.display = s.id === SEC_PREFIX + id ? 'block' : 'none';
     });
-    // 导航 active 态
+    // 清除所有导航项的高亮色块（含克隆残留与 DSH 自己的 active 状态）
     var navList = findNavList();
     if (navList) {
       Array.prototype.forEach.call(navList.querySelectorAll('button'), function (b) {
-        if (b.id && b.id.indexOf(NAV_PREFIX) === 0) {
-          b.classList.toggle('dsh-ext-nav-active', b.id === NAV_PREFIX + id);
-        }
+        b.classList.remove('dsh-ext-nav-active');
+        b.className = String(b.className || '').replace(/active/gi, '').replace(/\s+/g, ' ').trim();
       });
     }
     // 首次打开用量栏时主动刷新一次

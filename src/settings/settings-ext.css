@@ -200,7 +200,6 @@
   background: var(--dsw-alias-state-success-primary);
 }
 
-/* 导航 active 态（我们的三项） */
 .dsh-ext-nav-active {
-  background: var(--dsw-alias-interactive-bg-hover) !important;
+  /* 已移除：用户要求导航项上不显示色块 */
 }

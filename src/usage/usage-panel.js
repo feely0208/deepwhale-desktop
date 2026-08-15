@@ -16,6 +16,7 @@
     '</div>' +
     '<div class="upb">' +
     '  <div class="row"><span class="k">状态</span><span class="v" id="dsh-up-status">…</span></div>' +
+    '  <div class="row"><span class="k">API Key</span><span class="v" id="dsh-up-key">—</span></div>' +
     '  <div class="row"><span class="k">总余额</span><span class="v" id="dsh-up-total">—</span></div>' +
     '  <div class="row"><span class="k">赠送 / 充值</span><span class="v" id="dsh-up-split">—</span></div>' +
     '  <div class="row"><span class="k">今日请求</span><span class="v" id="dsh-up-requests">0</span></div>' +
@@ -33,6 +34,7 @@
 
   var dot = panel.querySelector('#dsh-up-dot');
   var statusEl = panel.querySelector('#dsh-up-status');
+  var keyEl = panel.querySelector('#dsh-up-key');
   var totalEl = panel.querySelector('#dsh-up-total');
   var splitEl = panel.querySelector('#dsh-up-split');
   var reqEl = panel.querySelector('#dsh-up-requests');
@@ -115,6 +117,8 @@
       totalEl.textContent = '—';
       splitEl.textContent = '—';
     }
+    keyEl.textContent = data.apiKeyConfigured ? '已配置 ✓' : '未配置';
+    keyEl.style.color = data.apiKeyConfigured ? '#1a7f37' : '#9a6700';
     reqEl.textContent = String(data.todayRequests || 0);
     tokEl.textContent = fmtTokens((data.totalInputTokens || 0) + (data.totalOutputTokens || 0));
     renderBars(data);

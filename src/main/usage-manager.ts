@@ -77,9 +77,12 @@ export class UsageManager {
     const fromEnv = process.env.DEEPSEEK_API_KEY;
     if (fromEnv) return fromEnv;
     const enc = this.store.get('apiKeyEncrypted');
-    if (enc && safeStorage.isEncryptionAvailable()) {
+    if (enc) {
       try {
-        return safeStorage.decryptString(Buffer.from(enc, 'base64'));
+        if (safeStorage.isEncryptionAvailable()) {
+          return safeStorage.decryptString(Buffer.from(enc, 'base64'));
+        }
+        return Buffer.from(enc, 'base64').toString('utf-8'); // 兜底：可逆混淆
       } catch {
         return null;
       }
@@ -87,17 +90,30 @@ export class UsageManager {
     return null;
   }
 
-  /** 手动设置 API Key（safeStorage 加密后入 store，绝不明文落盘） */
+  /** 手动设置 API Key：优先 safeStorage 加密；不可用时退化为可逆混淆存储（不落明文） */
   setApiKey(key: string): void {
     if (!key) {
       this.store.set('apiKeyEncrypted', null);
+      console.log('[usage] API Key 已清除');
       return;
     }
-    if (!safeStorage.isEncryptionAvailable()) {
-      throw new Error('系统安全存储不可用，无法保存 API Key');
+    console.log('[usage] setApiKey 收到 key，长度', key.length);
+    try {
+      if (safeStorage.isEncryptionAvailable()) {
+        this.store.set('apiKeyEncrypted', safeStorage.encryptString(key).toString('base64'));
+        console.log('[usage] safeStorage 加密成功，已写入 store');
+      } else {
+        // 兜底：可逆混淆（不是安全方案，但避免明文）
+        const obfuscated = Buffer.from(key, 'utf-8').toString('base64');
+        this.store.set('apiKeyEncrypted', obfuscated);
+        console.log('[usage] safeStorage 不可用，使用兜底混淆存储');
+      }
+      this.store.save();
+      console.log('[usage] API Key 已保存');
+    } catch (e) {
+      console.error('[usage] API Key 保存失败:', e);
+      throw e;
     }
-    this.store.set('apiKeyEncrypted', safeStorage.encryptString(key).toString('base64'));
-    console.log('[usage] API Key 已保存（safeStorage 加密）');
     void this.refresh();
   }
 

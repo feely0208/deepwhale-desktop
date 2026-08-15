@@ -68,6 +68,7 @@
       '    <h3>用量与额度</h3>' +
       '    <div class="dsh-ext-grid">' +
       '      <div class="row"><span class="k">状态</span><span id="dsh-ext-u-status">…</span></div>' +
+      '      <div class="row"><span class="k">API Key</span><span id="dsh-ext-u-key">—</span></div>' +
       '      <div class="row"><span class="k">总余额</span><span id="dsh-ext-u-total">—</span></div>' +
       '      <div class="row"><span class="k">赠送 / 充值</span><span id="dsh-ext-u-split">—</span></div>' +
       '      <div class="row"><span class="k">今日请求</span><span id="dsh-ext-u-req">0</span></div>' +
@@ -206,6 +207,7 @@
 
     // 用量
     var uStatus = document.getElementById('dsh-ext-u-status');
+    var uKey = document.getElementById('dsh-ext-u-key');
     var uTotal = document.getElementById('dsh-ext-u-total');
     var uSplit = document.getElementById('dsh-ext-u-split');
     var uReq = document.getElementById('dsh-ext-u-req');
@@ -240,6 +242,8 @@
     }
     function renderUsage(data) {
       if (!data) return;
+      uKey.textContent = data.apiKeyConfigured ? '已配置 ✓' : '未配置';
+      uKey.style.color = data.apiKeyConfigured ? 'var(--dsw-alias-state-success-primary)' : 'var(--dsw-alias-state-warn-primary)';
       if (data.error) {
         uErr.textContent = data.error;
         uErr.hidden = false;

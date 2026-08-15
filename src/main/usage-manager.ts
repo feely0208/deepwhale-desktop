@@ -97,6 +97,7 @@ export class UsageManager {
       throw new Error('系统安全存储不可用，无法保存 API Key');
     }
     this.store.set('apiKeyEncrypted', safeStorage.encryptString(key).toString('base64'));
+    console.log('[usage] API Key 已保存（safeStorage 加密）');
     void this.refresh();
   }
 

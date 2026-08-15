@@ -9,6 +9,7 @@ import {
   Notification,
   Tray,
 } from 'electron';
+import * as fs from 'fs';
 import * as path from 'path';
 import { Store } from './store';
 import { ServiceManager } from './service-manager';
@@ -243,11 +244,16 @@ function registerIpc(): void {
     usage.recordUsage(payload?.inputTokens ?? 0, payload?.outputTokens ?? 0);
   });
   ipcMain.on('usage:set-key', (_e, key: string) => {
+    fs.appendFileSync('/tmp/dsh-key.log', Date.now() + ' IPC usage:set-key 收到, key长度=' + (key ? key.length : 0) + '\n');
     try {
       usage.setApiKey(key);
     } catch (err) {
+      fs.appendFileSync('/tmp/dsh-key.log', Date.now() + ' setApiKey 抛出异常: ' + (err instanceof Error ? err.message : String(err)) + '\n');
       dialog.showErrorBox('API Key 保存失败', err instanceof Error ? err.message : String(err));
     }
+  });
+  ipcMain.on('usage:log', (_e, msg: string) => {
+    fs.appendFileSync('/tmp/dsh-key.log', Date.now() + ' [page] ' + msg + '\n');
   });
 
   // ---- 主题 / 背景皮肤（设置页/菜单共用） ----

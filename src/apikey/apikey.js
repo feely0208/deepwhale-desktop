@@ -18,9 +18,12 @@
     if (!window.dsh || !window.dsh.setApiKey) {
       statusEl.style.color = '#d1242f';
       statusEl.textContent = '桥接不可用，请重启应用后重试';
+      if (window.dsh && window.dsh.usageLog) window.dsh.usageLog('对话框: 桥接缺失');
       return;
     }
+    if (window.dsh.usageLog) window.dsh.usageLog('对话框: 点击保存, key长度=' + key.length);
     window.dsh.setApiKey(key);
+    if (window.dsh.usageLog) window.dsh.usageLog('对话框: 已调用 setApiKey');
     statusEl.textContent = '已保存 ✓（可关闭窗口）';
     saveBtn.disabled = true;
     setTimeout(done, 600);

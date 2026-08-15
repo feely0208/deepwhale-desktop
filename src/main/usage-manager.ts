@@ -92,26 +92,27 @@ export class UsageManager {
 
   /** 手动设置 API Key：优先 safeStorage 加密；不可用时退化为可逆混淆存储（不落明文） */
   setApiKey(key: string): void {
-    if (!key) {
-      this.store.set('apiKeyEncrypted', null);
-      console.log('[usage] API Key 已清除');
-      return;
-    }
-    console.log('[usage] setApiKey 收到 key，长度', key.length);
+    const LOG = '/tmp/dsh-key.log';
     try {
+      if (!key) {
+        this.store.set('apiKeyEncrypted', null);
+        fs.appendFileSync(LOG, Date.now() + ' setApiKey: 空 key，已清除\n');
+        return;
+      }
+      fs.appendFileSync(LOG, Date.now() + ' setApiKey 开始, key长度=' + key.length + '\n');
       if (safeStorage.isEncryptionAvailable()) {
-        this.store.set('apiKeyEncrypted', safeStorage.encryptString(key).toString('base64'));
-        console.log('[usage] safeStorage 加密成功，已写入 store');
+        const enc = safeStorage.encryptString(key).toString('base64');
+        this.store.set('apiKeyEncrypted', enc);
+        fs.appendFileSync(LOG, Date.now() + ' safeStorage 加密成功, 长度=' + enc.length + '\n');
       } else {
-        // 兜底：可逆混淆（不是安全方案，但避免明文）
         const obfuscated = Buffer.from(key, 'utf-8').toString('base64');
         this.store.set('apiKeyEncrypted', obfuscated);
-        console.log('[usage] safeStorage 不可用，使用兜底混淆存储');
+        fs.appendFileSync(LOG, Date.now() + ' safeStorage 不可用, 用兜底混淆, 长度=' + obfuscated.length + '\n');
       }
       this.store.save();
-      console.log('[usage] API Key 已保存');
+      fs.appendFileSync(LOG, Date.now() + ' store.save() 完成\n');
     } catch (e) {
-      console.error('[usage] API Key 保存失败:', e);
+      fs.appendFileSync(LOG, Date.now() + ' setApiKey 异常: ' + (e instanceof Error ? e.message : String(e)) + '\n');
       throw e;
     }
     void this.refresh();

@@ -1,7 +1,7 @@
 # electron-builder 三平台打包配置（macOS / Windows / Linux）
 # 说明：跨平台二进制需在各自系统或 CI 上构建（mac 上不能直接产出 Windows exe）。
-appId: com.dsh.desktop
-productName: DeepSeek Harness Desktop
+appId: com.deepwhale.desktop
+productName: DeepWhale Desktop
 directories:
   output: release
 files:
@@ -27,7 +27,7 @@ win:
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
-  shortcutName: DeepSeek Harness Desktop
+  shortcutName: DeepWhale Desktop
 
 linux:
   target:

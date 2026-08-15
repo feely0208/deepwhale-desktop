@@ -1,10 +1,11 @@
-// 生成应用/托盘图标（纯 Node、零依赖）：深色圆角底 + 原创卡通小鲸鱼（借鉴 DeepSeek 鲸鱼造型）
+// 生成应用/托盘图标（纯 Node、零依赖）：白底 + 流线型蓝色鲸鱼剪影（DeepSeek 风格极简）
+// 4x 超采样 + 盒式降采样实现抗锯齿，曲线用 Catmull-Rom 样条。
 // 用法：npm run icons
 const zlib = require('zlib');
 const fs = require('fs');
 const path = require('path');
 
-// ---------- 极简 PNG 编码器 ----------
+// ---------- PNG 编码 ----------
 const CRC_TABLE = (() => {
   const t = new Int32Array(256);
   for (let n = 0; n < 256; n++) {
@@ -14,13 +15,11 @@ const CRC_TABLE = (() => {
   }
   return t;
 })();
-
 function crc32(buf) {
   let c = -1;
   for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
   return (c ^ -1) >>> 0;
 }
-
 function chunk(type, data) {
   const len = Buffer.alloc(4);
   len.writeUInt32BE(data.length, 0);
@@ -29,7 +28,6 @@ function chunk(type, data) {
   crcBuf.writeUInt32BE(crc32(Buffer.concat([typeBuf, data])), 0);
   return Buffer.concat([len, typeBuf, data, crcBuf]);
 }
-
 function encodePNG(width, height, rgba) {
   const sig = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   const ihdr = Buffer.alloc(13);
@@ -46,94 +44,125 @@ function encodePNG(width, height, rgba) {
   return Buffer.concat([sig, chunk('IHDR', ihdr), chunk('IDAT', idat), chunk('IEND', Buffer.alloc(0))]);
 }
 
-// ---------- 绘制（0-100 归一化坐标） ----------
-const BG = [14, 28, 51, 255];        // 深海军蓝底 #0e1c33
-const WHALE = [219, 238, 254, 255];  // 鲸身 浅蓝白 #dbeafe
-const BELLY = [157, 184, 232, 255];  // 肚皮 #9db8e8
-const DARK = [22, 35, 61, 255];      // 眼/鳍 #16233d
-const SPOUT = [255, 255, 255, 255];  // 水花
+// ---------- 曲线与多边形 ----------
+const BG = [255, 255, 255, 255];      // 白底
+const WHALE = [77, 124, 254, 255];    // 深鲸蓝 #4d7cfe
+const EYE = [30, 52, 110, 255];       // 深蓝眼睛
+const BORDER = [226, 232, 244, 255];  // 极浅描边
+
+// 鲸鱼剪影控制点（0-100 归一化，头朝左），Catmull-Rom 闭合样条
+const CTRL = [
+  [12, 50], [28, 30], [52, 26], [76, 38], [88, 52],
+  [97, 34], [90, 58], [97, 76], [82, 64], [54, 74],
+  [30, 70], [17, 60],
+];
+
+function catmullRom(pts, samplesPerSeg) {
+  const out = [];
+  const n = pts.length;
+  for (let i = 0; i < n; i++) {
+    const p0 = pts[(i - 1 + n) % n];
+    const p1 = pts[i];
+    const p2 = pts[(i + 1) % n];
+    const p3 = pts[(i + 2) % n];
+    for (let s = 0; s < samplesPerSeg; s++) {
+      const t = s / samplesPerSeg;
+      const t2 = t * t;
+      const t3 = t2 * t;
+      const x =
+        0.5 * (2 * p1[0] + (-p0[0] + p2[0]) * t + (2 * p0[0] - 5 * p1[0] + 4 * p2[0] - p3[0]) * t2 + (-p0[0] + 3 * p1[0] - 3 * p2[0] + p3[0]) * t3);
+      const y =
+        0.5 * (2 * p1[1] + (-p0[1] + p2[1]) * t + (2 * p0[1] - 5 * p1[1] + 4 * p2[1] - p3[1]) * t2 + (-p0[1] + 3 * p1[1] - 3 * p2[1] + p3[1]) * t3);
+      out.push([x, y]);
+    }
+  }
+  return out;
+}
+
+function pointInPoly(px, py, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i][0], yi = poly[i][1];
+    const xj = poly[j][0], yj = poly[j][1];
+    if (yi > py !== yj > py && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+// ---------- 渲染（4x 超采样 → 盒式降采样） ----------
+const SS = 4;
 
 function makeIcon(size) {
-  const buf = Buffer.alloc(size * size * 4);
-  const put = (x, y, c) => {
-    if (x < 0 || y < 0 || x >= size || y >= size) return;
-    const i = (y * size + x) * 4;
+  const big = size * SS;
+  const buf = Buffer.alloc(big * big * 4);
+  const putBig = (x, y, c) => {
+    if (x < 0 || y < 0 || x >= big || y >= big) return;
+    const i = (y * big + x) * 4;
     buf[i] = c[0]; buf[i + 1] = c[1]; buf[i + 2] = c[2]; buf[i + 3] = c[3];
   };
-  const X = (u) => Math.round((u / 100) * size);
-  const Y = (u) => Math.round((u / 100) * size);
+  const X = (u) => (u / 100) * big;
+  const Y = (u) => (u / 100) * big;
 
-  // 圆角方底
-  const radius = Math.max(2, Math.round(size * 0.2));
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const cx = Math.min(Math.max(x, radius), size - 1 - radius);
-      const cy = Math.min(Math.max(y, radius), size - 1 - radius);
+  // 鲸鱼多边形（采样）
+  const poly = catmullRom(CTRL, 24);
+  const eye = [X(26), Y(48)];
+  const eyeR = (4.2 / 100) * big;
+  const finPoly = catmullRom(
+    [
+      [58, 40], [68, 44], [72, 56], [63, 52], [55, 47],
+    ],
+    12
+  );
+
+  // 白底圆角方（圆角半径 18%）
+  const radius = big * 0.18;
+  for (let y = 0; y < big; y++) {
+    for (let x = 0; x < big; x++) {
+      const cx = Math.min(Math.max(x, radius), big - 1 - radius);
+      const cy = Math.min(Math.max(y, radius), big - 1 - radius);
       const dx = x - cx;
       const dy = y - cy;
-      if (dx * dx + dy * dy <= radius * radius) put(x, y, BG);
+      const inRound = dx * dx + dy * dy <= radius * radius;
+      if (!inRound) continue;
+      // 描边：距边缘 < 2% 用浅色
+      const edge = x < big * 0.012 || y < big * 0.012 || x > big * 0.988 || y > big * 0.988;
+      putBig(x, y, edge ? BORDER : BG);
     }
   }
 
-  // 椭圆/圆
-  const fillEllipse = (cx, cy, rx, ry, color) => {
-    for (let y = Math.max(0, Y(cy) - Y(ry)); y <= Math.min(size - 1, Y(cy) + Y(ry)); y++) {
-      for (let x = Math.max(0, X(cx) - X(rx)); x <= Math.min(size - 1, X(cx) + X(rx)); x++) {
-        const nx = (x - X(cx)) / Math.max(1, X(rx));
-        const ny = (y - Y(cy)) / Math.max(1, Y(ry));
-        if (nx * nx + ny * ny <= 1) put(x, y, color);
-      }
+  // 鲸鱼
+  for (let y = 0; y < big; y++) {
+    for (let x = 0; x < big; x++) {
+      const u = (x / big) * 100;
+      const v = (y / big) * 100;
+      if (pointInPoly(u, v, poly)) putBig(x, y, WHALE);
+      else if (pointInPoly(u, v, finPoly)) putBig(x, y, WHALE);
+      const dx = x - eye[0];
+      const dy = y - eye[1];
+      if (dx * dx + dy * dy <= eyeR * eyeR) putBig(x, y, EYE);
     }
-  };
-  const fillCircle = (cx, cy, r, color) => fillEllipse(cx, cy, r, r, color);
-
-  // 三角形
-  const fillTri = (p1, p2, p3, color) => {
-    const xs = [X(p1[0]), X(p2[0]), X(p3[0])];
-    const ys = [Y(p1[1]), Y(p2[1]), Y(p3[1])];
-    const minX = Math.max(0, Math.min(...xs));
-    const maxX = Math.min(size - 1, Math.max(...xs));
-    const minY = Math.max(0, Math.min(...ys));
-    const maxY = Math.min(size - 1, Math.max(...ys));
-    const sign = (ax, ay, bx, by, px, py) => (bx - ax) * (py - ay) - (by - ay) * (px - ax);
-    const d1 = sign(xs[0], ys[0], xs[1], ys[1], xs[0] + 1, ys[0]);
-    const d2 = sign(xs[1], ys[1], xs[2], ys[2], xs[1] + 1, ys[1]);
-    const d3 = sign(xs[2], ys[2], xs[0], ys[0], xs[2] + 1, ys[2]);
-    const hasNeg = d1 < 0 || d2 < 0 || d3 < 0;
-    const hasPos = d1 > 0 || d2 > 0 || d3 > 0;
-    for (let y = minY; y <= maxY; y++) {
-      for (let x = minX; x <= maxX; x++) {
-        const a = sign(xs[0], ys[0], xs[1], ys[1], x, y);
-        const b = sign(xs[1], ys[1], xs[2], ys[2], x, y);
-        const c = sign(xs[2], ys[2], xs[0], ys[0], x, y);
-        const hasNeg2 = a < 0 || b < 0 || c < 0;
-        const hasPos2 = a > 0 || b > 0 || c > 0;
-        if (!(hasNeg2 && hasPos2)) put(x, y, color);
-      }
-    }
-  };
-
-  // 鲸鱼（头朝左，正在游）
-  fillEllipse(46, 58, 36, 21, WHALE);           // 身体
-  fillEllipse(44, 66, 24, 10, BELLY);           // 肚皮
-  fillCircle(20, 44, 13, WHALE);                // 头部圆润
-  fillTri([80, 50], [96, 34], [90, 56], WHALE); // 尾鳍上
-  fillTri([80, 50], [96, 66], [90, 58], WHALE); // 尾鳍下
-  fillEllipse(30, 56, 7, 4, DARK);              // 胸鳍
-  fillCircle(22, 44, 4.2, DARK);                // 眼睛
-  fillCircle(20.5, 42.5, 1.4, SPOUT);           // 眼睛高光
-  // 微笑（近似短弧）
-  for (let i = 0; i < 5; i++) {
-    const px = 16 + i * 1.6;
-    const py = 54 + Math.round(Math.abs(i - 2) * 0.8);
-    put(X(px), Y(py), DARK);
   }
-  // 水花
-  fillCircle(15, 22, 4, SPOUT);
-  fillCircle(10, 16, 2.6, SPOUT);
-  fillCircle(21, 15, 2.6, SPOUT);
 
-  return encodePNG(size, size, buf);
+  // 盒式降采样
+  const out = Buffer.alloc(size * size * 4);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      let r = 0, g = 0, b = 0, a = 0;
+      for (let sy = 0; sy < SS; sy++) {
+        for (let sx = 0; sx < SS; sx++) {
+          const i = ((y * SS + sy) * big + (x * SS + sx)) * 4;
+          r += buf[i]; g += buf[i + 1]; b += buf[i + 2]; a += buf[i + 3];
+        }
+      }
+      const n = SS * SS;
+      const o = (y * size + x) * 4;
+      out[o] = Math.round(r / n);
+      out[o + 1] = Math.round(g / n);
+      out[o + 2] = Math.round(b / n);
+      out[o + 3] = Math.round(a / n);
+    }
+  }
+  return encodePNG(size, size, out);
 }
 
 const outDir = path.join(__dirname, '..', 'assets', 'icons');

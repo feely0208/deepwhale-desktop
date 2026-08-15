@@ -131,7 +131,7 @@ export function buildAppMenuTemplate(a: TrayMenuActions): MenuItemConstructorOpt
 export function createTray(actions: TrayMenuActions): Tray {
   const icon = nativeImage.createFromPath(path.join(__dirname, '../assets/icons/tray.png'));
   const tray = new Tray(icon.isEmpty() ? nativeImage.createEmpty() : icon);
-  tray.setToolTip('DeepSeek Harness Desktop');
+  tray.setToolTip('DeepWhale Desktop');
   applyMenu(tray, actions);
   tray.on('double-click', () => actions.showMainWindow());
   return tray;

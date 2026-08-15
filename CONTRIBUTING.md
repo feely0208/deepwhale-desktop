@@ -1,6 +1,6 @@
 # 贡献指南（Contributing）
 
-欢迎参与 **DeepSeek Harness Desktop** 的开发！无论是修 Bug、加功能、写文档还是提 Issue，都感谢你的贡献。
+欢迎参与 **DeepWhale Desktop（深鲸桌面）** 的开发！无论是修 Bug、加功能、写文档还是提 Issue，都感谢你的贡献。
 
 ## 开发环境
 

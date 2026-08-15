@@ -1,4 +1,4 @@
-# DeepSeek Harness Desktop
+# DeepWhale Desktop（深鲸桌面）
 
 > 把 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）的 Web UI 装进 Electron 原生窗口的跨平台桌面壳。
 > Cross-platform desktop shell that wraps the DeepSeek Harness (DSH) web UI into a native Electron window.

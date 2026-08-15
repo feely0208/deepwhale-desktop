@@ -17,7 +17,7 @@ export function createMainWindow(options: MainWindowOptions): BrowserWindow {
     height: 820,
     minWidth: 900,
     minHeight: 600,
-    title: 'DeepSeek Harness Desktop',
+    title: 'DeepWhale Desktop',
     autoHideMenuBar: true,
     icon: path.join(__dirname, '../assets/icons/icon.png'),
     backgroundColor: '#0f1115',

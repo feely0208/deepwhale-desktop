@@ -69,6 +69,12 @@
       '    <div class="dsh-ext-grid">' +
       '      <div class="row"><span class="k">状态</span><span id="dsh-ext-u-status">…</span></div>' +
       '      <div class="row"><span class="k">API Key</span><span id="dsh-ext-u-key">—</span></div>' +
+      '      <div class="dsh-ext-row">配置 API Key（加密保存）：</div>' +
+      '      <input type="password" class="dsh-ext-key-input" id="dsh-ext-u-key-input" placeholder="sk-..." spellcheck="false" autocomplete="off" />' +
+      '      <div class="dsh-ext-btns">' +
+      '        <button class="dsh-ext-btn" id="dsh-ext-u-key-save">保存 Key</button>' +
+      '        <button class="dsh-ext-btn" id="dsh-ext-u-key-clear">清除</button>' +
+      '      </div>' +
       '      <div class="row"><span class="k">总余额</span><span id="dsh-ext-u-total">—</span></div>' +
       '      <div class="row"><span class="k">赠送 / 充值</span><span id="dsh-ext-u-split">—</span></div>' +
       '      <div class="row"><span class="k">今日请求</span><span id="dsh-ext-u-req">0</span></div>' +
@@ -213,6 +219,15 @@
     var uReq = document.getElementById('dsh-ext-u-req');
     var uTok = document.getElementById('dsh-ext-u-tok');
     var uErr = document.getElementById('dsh-ext-u-err');
+    var uKeyInput = document.getElementById('dsh-ext-u-key-input');
+    document.getElementById('dsh-ext-u-key-save').addEventListener('click', function () {
+      var k = uKeyInput.value.trim();
+      if (k) { window.dsh.setApiKey(k); uKeyInput.value = ''; window.dsh.usageRefresh(); }
+    });
+    document.getElementById('dsh-ext-u-key-clear').addEventListener('click', function () {
+      window.dsh.setApiKey('');
+      window.dsh.usageRefresh();
+    });
     var uBar = document.getElementById('dsh-ext-u-bar');
     var uSeg = document.getElementById('dsh-ext-u-seg');
 

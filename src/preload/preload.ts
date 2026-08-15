@@ -14,7 +14,6 @@ contextBridge.exposeInMainWorld('dsh', {
 
   // ---- 用量面板 ----
   usageRefresh: () => ipcRenderer.send('usage:refresh'),
-  usageLog: (msg: string) => ipcRenderer.send('usage:log', msg),
   onUsageUpdate: (callback: (data: unknown) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, data: unknown) => callback(data);
     ipcRenderer.on('usage:update', listener);

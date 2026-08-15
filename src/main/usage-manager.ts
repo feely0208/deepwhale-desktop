@@ -92,27 +92,20 @@ export class UsageManager {
 
   /** 手动设置 API Key：优先 safeStorage 加密；不可用时退化为可逆混淆存储（不落明文） */
   setApiKey(key: string): void {
-    const LOG = '/tmp/dsh-key.log';
     try {
       if (!key) {
         this.store.set('apiKeyEncrypted', null);
-        fs.appendFileSync(LOG, Date.now() + ' setApiKey: 空 key，已清除\n');
         return;
       }
-      fs.appendFileSync(LOG, Date.now() + ' setApiKey 开始, key长度=' + key.length + '\n');
       if (safeStorage.isEncryptionAvailable()) {
-        const enc = safeStorage.encryptString(key).toString('base64');
-        this.store.set('apiKeyEncrypted', enc);
-        fs.appendFileSync(LOG, Date.now() + ' safeStorage 加密成功, 长度=' + enc.length + '\n');
+        this.store.set('apiKeyEncrypted', safeStorage.encryptString(key).toString('base64'));
       } else {
-        const obfuscated = Buffer.from(key, 'utf-8').toString('base64');
-        this.store.set('apiKeyEncrypted', obfuscated);
-        fs.appendFileSync(LOG, Date.now() + ' safeStorage 不可用, 用兜底混淆, 长度=' + obfuscated.length + '\n');
+        // 兜底：可逆混淆（避免明文落盘；非安全方案，仅当系统安全存储不可用时）
+        this.store.set('apiKeyEncrypted', Buffer.from(key, 'utf-8').toString('base64'));
       }
       this.store.save();
-      fs.appendFileSync(LOG, Date.now() + ' store.save() 完成\n');
     } catch (e) {
-      fs.appendFileSync(LOG, Date.now() + ' setApiKey 异常: ' + (e instanceof Error ? e.message : String(e)) + '\n');
+      console.error('[usage] API Key 保存失败:', e);
       throw e;
     }
     void this.refresh();

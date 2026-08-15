@@ -1,0 +1,68 @@
+{
+  "displayName": "绿领",
+  "cellWidth": 192,
+  "cellHeight": 208,
+  "columns": 8,
+  "rows": [
+    {
+      "state": "idle",
+      "row": 0,
+      "frames": 6
+    },
+    {
+      "state": "walking",
+      "row": 1,
+      "frames": 8
+    },
+    {
+      "state": "walking-left",
+      "row": 2,
+      "frames": 8
+    },
+    {
+      "state": "fast-walking",
+      "row": 3,
+      "frames": 8
+    },
+    {
+      "state": "fast-walking-left",
+      "row": 4,
+      "frames": 8
+    },
+    {
+      "state": "jogging",
+      "row": 5,
+      "frames": 8
+    },
+    {
+      "state": "jogging-left",
+      "row": 6,
+      "frames": 8
+    },
+    {
+      "state": "fast-running",
+      "row": 7,
+      "frames": 8
+    },
+    {
+      "state": "fast-running-left",
+      "row": 8,
+      "frames": 8
+    },
+    {
+      "state": "working",
+      "row": 9,
+      "frames": 6
+    },
+    {
+      "state": "waving",
+      "row": 10,
+      "frames": 4
+    },
+    {
+      "state": "jumping",
+      "row": 11,
+      "frames": 5
+    }
+  ]
+}

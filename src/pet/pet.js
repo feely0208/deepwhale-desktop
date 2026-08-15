@@ -85,7 +85,7 @@
     spriteActionTimer = setTimeout(function () {
       if (spriteState === 'idle') {
         var r = Math.random();
-        var action = r < 0.55 ? 'waving' : 'jumping';
+        var action = r < 0.45 ? 'working' : r < 0.75 ? 'waving' : 'jumping';
         setSpriteState(action);
         setTimeout(function () {
           if (spriteState === action) setSpriteState('idle');
@@ -126,11 +126,16 @@
     var dx = e.screenX - lastX;
     lastX = e.screenX;
     if (isSprite) {
-      // 方向决定左/右跑；拖动越快播放越快（走路→快走→慢跑→快跑 = 播放速率递增）
-      var st = dx >= 0 ? 'running-right' : 'running-left';
+      // 按拖动速度切换动作：走路 < 快走 < 慢跑 < 快跑；方向决定左/右
+      var dir = dx >= 0 ? '' : '-left';
       var adx = Math.abs(dx);
-      var spd = Math.max(50, Math.min(220, 220 - adx * 6));
-      setSpriteState(st, { speed: spd });
+      var st;
+      if (adx < 3) st = 'jumping';
+      else if (adx < 8) st = 'walking' + dir;
+      else if (adx < 15) st = 'fast-walking' + dir;
+      else if (adx < 24) st = 'jogging' + dir;
+      else st = 'fast-running' + dir;
+      setSpriteState(st, { speed: Math.max(60, frameMs - 40) });
     }
     window.dsh.petDragMove();
   });

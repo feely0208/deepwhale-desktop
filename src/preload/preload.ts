@@ -27,7 +27,6 @@ contextBridge.exposeInMainWorld('dsh', {
 
   // ---- 主题 / 背景皮肤（设置页扩展） ----
   themeState: () => ipcRenderer.invoke('theme:state'),
-  themeSet: (theme: 'system' | 'light' | 'dark') => ipcRenderer.send('theme:set', theme),
   skinPickImage: () => ipcRenderer.send('skin:pick-image'),
   skinClearImage: () => ipcRenderer.send('skin:clear-image'),
   skinSetOpacity: (value: number) => ipcRenderer.send('skin:set-opacity', value),

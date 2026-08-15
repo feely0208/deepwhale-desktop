@@ -38,12 +38,6 @@ let petStudioWin: BrowserWindow | null = null;
 let quitting = false;
 let service: ServiceManager | null = null;
 
-const THEME_OPTIONS: Array<{ id: 'system' | 'light' | 'dark'; label: string }> = [
-  { id: 'system', label: '跟随系统' },
-  { id: 'light', label: '浅色' },
-  { id: 'dark', label: '深色' },
-];
-
 function pushUsageToWindow(snapshot: UsageSnapshot): void {
   if (mainWin && !mainWin.isDestroyed()) {
     mainWin.webContents.send('usage:update', snapshot);
@@ -161,20 +155,7 @@ function openSettingsPage(): void {
 
 /** 构建统一菜单动作（托盘 + macOS 顶栏共用） */
 function buildMenuActions(): TrayMenuActions {
-  const currentTheme = store.get('theme');
-  const themeSubmenu: MenuItemConstructorOptions[] = THEME_OPTIONS.map((t) => ({
-    label: t.label,
-    type: 'radio',
-    checked: currentTheme === t.id,
-    click: () => {
-      if (mainWin) void skin.setTheme(mainWin, t.id);
-      rebuildMenus();
-    },
-  }));
-
   const skinSubmenu: MenuItemConstructorOptions[] = [
-    { label: '主题', submenu: themeSubmenu },
-    { type: 'separator' },
     { label: '背景图片…', click: () => void pickBackgroundImage() },
     {
       label: '移除背景图片',
@@ -184,8 +165,6 @@ function buildMenuActions(): TrayMenuActions {
         rebuildMenus();
       },
     },
-    { type: 'separator' },
-    { label: '自定义 CSS…', click: () => skin.openCustomCss() },
   ];
 
   const pets = pet ? pet.listPets() : [];
@@ -273,16 +252,11 @@ function registerIpc(): void {
 
   // ---- 主题 / 背景皮肤（设置页/菜单共用） ----
   ipcMain.handle('theme:state', () => ({
-    theme: store.get('theme'),
     skinImage: store.get('skinImage'),
     skinOpacity: store.get('skinOpacity'),
     customCssEnabled: store.get('customCssEnabled'),
     previewDataUri: skin.backgroundPreviewDataUri(),
   }));
-  ipcMain.on('theme:set', (_e, theme: 'system' | 'light' | 'dark') => {
-    if (mainWin) void skin.setTheme(mainWin, theme);
-    rebuildMenus();
-  });
   ipcMain.on('skin:pick-image', () => void pickBackgroundImage());
   ipcMain.on('skin:clear-image', () => {
     if (mainWin) void skin.clearBackground(mainWin);

@@ -147,15 +147,12 @@ export class SkinManager {
     const dataUri = this.buildDataUri(file, 2560);
     if (!dataUri) return;
 
-    // 背景图放在 body::before（z-index:-1），滤镜只作用于背景图、不影响内容；
-    // 层色与滤镜全部跟随 DSH 实时主题（body[data-ds-dark-theme] 属性），
-    // 在 DSH 通用设置里切换浅色/深色即刻生效，不再依赖 nativeTheme。
+    // 背景图放在 body::before（z-index:-1），滤镜只作用于背景图、不影响内容。
+    // 深浅色模式都显示背景皮肤；层色/滤镜跟随 DSH 实时主题属性（data-ds-dark-theme），
+    // 不改变 DSH 本身的基础深浅色外观。
     const css = `
       html { background-color: transparent !important; }
-      body {
-        background-color: transparent !important;
-        --dsh-skin-alpha: ${alpha};
-      }
+      body { background-color: transparent !important; --dsh-skin-alpha: ${alpha}; }
       body::before {
         content: '' !important;
         position: fixed !important;
@@ -168,7 +165,7 @@ export class SkinManager {
         background-attachment: fixed !important;
         pointer-events: none !important;
       }
-      /* 浅色（DSH 非深色属性）：提亮背景图，白色半透明层 */
+      /* 浅色：提亮背景图，白色半透明层（不改变浅色外观） */
       body:not([data-ds-dark-theme])::before {
         filter: brightness(1.38) saturate(0.95) !important;
       }

@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('dsh', {
   petDragMove: () => ipcRenderer.send('pet:drag-move'),
   petDragEnd: () => ipcRenderer.send('pet:drag-end'),
   petContextMenu: () => ipcRenderer.send('pet:context-menu'),
+  petSpriteInfo: (name: string) => ipcRenderer.invoke('pet:sprite-info', name),
 
   // ---- 用量面板 ----
   usageRefresh: () => ipcRenderer.send('usage:refresh'),

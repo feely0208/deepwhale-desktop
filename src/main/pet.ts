@@ -50,16 +50,26 @@ export class PetWindow {
     void shell.openPath(this.userPetsDir());
   }
 
-  /** SVG 宠物预览（data URI，供设置页展示）；GIF 不支持预览返回 null */
+  /** 宠物预览（data URI，供设置页展示）：SVG 直接读；帧动画宠物读目录 preview.png；其余返回 null */
   previewDataUri(): string | null {
     const name = this.store.get('petGif');
-    if (!name || !/\.svg$/i.test(name)) return null;
+    if (!name) return null;
     try {
-      const buf = fs.readFileSync(path.join(this.userPetsDir(), name));
-      return 'data:image/svg+xml;base64,' + buf.toString('base64');
+      if (/\.svg$/i.test(name)) {
+        const buf = fs.readFileSync(path.join(this.userPetsDir(), name));
+        return 'data:image/svg+xml;base64,' + buf.toString('base64');
+      }
+      if (this.isSpritePet(name)) {
+        const p = path.join(this.userPetsDir(), name, 'preview.png');
+        if (fs.existsSync(p)) {
+          const buf = fs.readFileSync(p);
+          return 'data:image/png;base64,' + buf.toString('base64');
+        }
+      }
     } catch {
-      return null;
+      // ignore
     }
+    return null;
   }
 
   create(): BrowserWindow {
@@ -88,7 +98,7 @@ export class PetWindow {
 
     const file = this.store.get('petGif');
     void win.loadFile(path.join(__dirname, '../pet/pet.html'), {
-      query: file ? { src: this.petFileUrl(file) } : {},
+      query: file ? (this.isSpritePet(file) ? { sprite: file } : { src: this.petFileUrl(file) }) : {},
     });
 
     // 初始位置：主屏工作区右下角
@@ -127,20 +137,42 @@ export class PetWindow {
   reload(): void {
     const file = this.store.get('petGif');
     this.window?.loadFile(path.join(__dirname, '../pet/pet.html'), {
-      query: file ? { src: this.petFileUrl(file) } : {},
+      query: file ? (this.isSpritePet(file) ? { sprite: file } : { src: this.petFileUrl(file) }) : {},
     });
   }
 
-  /** 列出用户宠物目录下的宠物文件（gif/svg/png/jpg/jpeg/webp） */
-  listPets(): string[] {
+  /** 是否为帧动画宠物（目录内含 manifest.json） */
+  isSpritePet(name: string): boolean {
     try {
-      return fs
-        .readdirSync(this.userPetsDir())
-        .filter((f) => /\.(gif|svg|png|jpe?g|webp)$/i.test(f))
-        .sort();
+      return fs.existsSync(path.join(this.userPetsDir(), name, 'manifest.json'));
     } catch {
-      return [];
+      return false;
     }
+  }
+
+  /** 列出用户宠物目录下的宠物（文件 + 帧动画宠物目录） */
+  listPets(): string[] {
+    const names: string[] = [];
+    try {
+      names.push(
+        ...fs
+          .readdirSync(this.userPetsDir())
+          .filter((f) => /\.(gif|svg|png|jpe?g|webp)$/i.test(f))
+          .sort()
+      );
+    } catch {
+      // ignore
+    }
+    try {
+      for (const d of fs.readdirSync(this.userPetsDir(), { withFileTypes: true })) {
+        if (d.isDirectory() && fs.existsSync(path.join(this.userPetsDir(), d.name, 'manifest.json'))) {
+          names.push(d.name);
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return names.sort();
   }
 
   /**
@@ -197,6 +229,21 @@ export class PetWindow {
     ipcMain.on('pet:select-pet', (_e, name: string | null) => {
       this.store.set('petGif', name);
       this.reload();
+    });
+
+    // 帧动画宠物：返回 manifest + spritesheet data URI
+    ipcMain.handle('pet:sprite-info', (_e, name: string) => {
+      const dir = path.join(this.userPetsDir(), name);
+      try {
+        const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf-8'));
+        const sheetFile = path.join(dir, 'spritesheet.png');
+        if (!fs.existsSync(sheetFile)) return null;
+        const buf = fs.readFileSync(sheetFile);
+        return { manifest, sheetDataUri: 'data:image/png;base64,' + buf.toString('base64') };
+      } catch (e) {
+        console.error('[pet] 帧动画宠物加载失败:', e);
+        return null;
+      }
     });
   }
 

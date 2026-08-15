@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'self' file: data:; img-src 'self' file: data:; style-src 'self' 'unsafe-inline'; script-src 'self' file:"
+  />
+  <title>dsh pet</title>
+  <link rel="stylesheet" href="pet.css" />
+</head>
+<body>
+  <div id="pet" class="pet" title="右键菜单">
+    <!-- 默认宠物：CSS/内联 SVG 像素小人（无需外部素材） -->
+    <svg id="default-pet" class="pet-svg" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+      <rect class="antenna-ball" x="15" y="1" width="2" height="2" rx="1" fill="#8a63ff" />
+      <rect x="15" y="3" width="2" height="4" fill="#4d7cfe" />
+      <rect class="head" x="7" y="7" width="18" height="17" rx="3" fill="#4d7cfe" />
+      <rect class="eye" x="11" y="12" width="3" height="4" rx="1" fill="#ffffff" />
+      <rect class="eye" x="18" y="12" width="3" height="4" rx="1" fill="#ffffff" />
+      <rect class="cheek" x="9" y="18" width="2" height="2" rx="1" fill="#ff7eb6" opacity="0.8" />
+      <rect class="cheek" x="21" y="18" width="2" height="2" rx="1" fill="#ff7eb6" opacity="0.8" />
+      <rect x="13" y="19" width="6" height="2" rx="1" fill="#0f1115" />
+      <rect x="10" y="25" width="4" height="5" rx="1" fill="#3a5fd8" />
+      <rect x="18" y="25" width="4" height="5" rx="1" fill="#3a5fd8" />
+    </svg>
+    <img id="gif-pet" class="pet-gif" alt="pet" hidden />
+  </div>
+  <script src="pet.js"></script>
+</body>
+</html>

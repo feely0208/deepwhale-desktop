@@ -1,0 +1,48 @@
+/* Dracula 主题：紫粉经典配色 */
+:root {
+  --dsh-bg: #282a36;
+  --dsh-bg-soft: #343746;
+  --dsh-bg-hover: #3d4050;
+  --dsh-fg: #f8f8f2;
+  --dsh-muted: #9ea3b4;
+  --dsh-accent: #bd93f9;
+  --dsh-accent-2: #ff79c6;
+  --dsh-border: #44475a;
+  --dsh-radius: 8px;
+  --dsh-font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+body {
+  background-color: var(--dsh-bg) !important;
+  color: var(--dsh-fg) !important;
+  font-family: var(--dsh-font) !important;
+}
+
+a {
+  color: var(--dsh-accent) !important;
+}
+
+code, pre {
+  background-color: var(--dsh-bg-soft) !important;
+  border-color: var(--dsh-border) !important;
+}
+
+button, input, textarea, select {
+  background-color: var(--dsh-bg-soft) !important;
+  color: var(--dsh-fg) !important;
+  border-color: var(--dsh-border) !important;
+  border-radius: var(--dsh-radius) !important;
+}
+
+button:hover {
+  background-color: var(--dsh-bg-hover) !important;
+}
+
+::selection {
+  background-color: var(--dsh-accent) !important;
+  color: #282a36 !important;
+}
+
+* {
+  scrollbar-color: var(--dsh-border) transparent !important;
+}

@@ -1,0 +1,48 @@
+/* 亮色主题：清爽白底 */
+:root {
+  --dsh-bg: #f7f8fa;
+  --dsh-bg-soft: #ffffff;
+  --dsh-bg-hover: #eef0f4;
+  --dsh-fg: #24292f;
+  --dsh-muted: #6b7280;
+  --dsh-accent: #0969da;
+  --dsh-accent-2: #8250df;
+  --dsh-border: #d0d7de;
+  --dsh-radius: 6px;
+  --dsh-font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+body {
+  background-color: var(--dsh-bg) !important;
+  color: var(--dsh-fg) !important;
+  font-family: var(--dsh-font) !important;
+}
+
+a {
+  color: var(--dsh-accent) !important;
+}
+
+code, pre {
+  background-color: var(--dsh-bg-soft) !important;
+  border-color: var(--dsh-border) !important;
+}
+
+button, input, textarea, select {
+  background-color: var(--dsh-bg-soft) !important;
+  color: var(--dsh-fg) !important;
+  border-color: var(--dsh-border) !important;
+  border-radius: var(--dsh-radius) !important;
+}
+
+button:hover {
+  background-color: var(--dsh-bg-hover) !important;
+}
+
+::selection {
+  background-color: var(--dsh-accent) !important;
+  color: #fff !important;
+}
+
+* {
+  scrollbar-color: var(--dsh-border) transparent !important;
+}

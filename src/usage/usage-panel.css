@@ -1,0 +1,103 @@
+/* 注入式用量面板样式（主进程 insertCSS 注入，类名统一 dsh-up-* 前缀） */
+#dsh-usage-panel {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2147483646;
+  width: 248px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #d7dce2;
+  background: rgba(15, 17, 21, 0.94);
+  border: 1px solid #23262e;
+  border-radius: 10px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+#dsh-usage-panel .uph {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+#dsh-usage-panel .uph .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #9aa0a6;
+  flex: none;
+}
+
+#dsh-usage-panel .uph .dot.ok {
+  background: #3fb950;
+}
+
+#dsh-usage-panel .uph .dot.low {
+  background: #d29922;
+}
+
+#dsh-usage-panel .uph .dot.err {
+  background: #f85149;
+}
+
+#dsh-usage-panel .uph .title {
+  flex: 1;
+  font-weight: 600;
+}
+
+#dsh-usage-panel .uph .arrow {
+  transition: transform 0.2s;
+}
+
+#dsh-usage-panel.collapsed .uph .arrow {
+  transform: rotate(-90deg);
+}
+
+#dsh-usage-panel .upb {
+  padding: 2px 12px 10px;
+  display: grid;
+  gap: 4px;
+}
+
+#dsh-usage-panel.collapsed .upb {
+  display: none;
+}
+
+#dsh-usage-panel .row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+#dsh-usage-panel .row .k {
+  color: #8b93a1;
+}
+
+#dsh-usage-panel .row .v {
+  color: #d7dce2;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+#dsh-usage-panel .err-line {
+  color: #f85149;
+  word-break: break-all;
+}
+
+#dsh-usage-panel .refresh-btn {
+  margin-top: 4px;
+  padding: 4px;
+  text-align: center;
+  border-radius: 6px;
+  color: #4d7cfe;
+  cursor: pointer;
+}
+
+#dsh-usage-panel .refresh-btn:hover {
+  background: rgba(77, 124, 254, 0.15);
+}

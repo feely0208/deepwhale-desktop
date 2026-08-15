@@ -1,0 +1,50 @@
+/* DeepSeek 主题（默认）：蓝紫主色 + 深色底
+ * 说明：DSH Web UI 的 CSS 变量/类名在实现时按实际页面 inspect 校准，
+ * 首版用 CSS 变量 + 通用选择器兜底，保证"换配色/字体/背景"立即可见。 */
+:root {
+  --dsh-bg: #0f1115;
+  --dsh-bg-soft: #161a22;
+  --dsh-bg-hover: #1d2330;
+  --dsh-fg: #d7dce2;
+  --dsh-muted: #8b93a1;
+  --dsh-accent: #4d7cfe;
+  --dsh-accent-2: #8a63ff;
+  --dsh-border: #23262e;
+  --dsh-radius: 8px;
+  --dsh-font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+body {
+  background-color: var(--dsh-bg) !important;
+  color: var(--dsh-fg) !important;
+  font-family: var(--dsh-font) !important;
+}
+
+a {
+  color: var(--dsh-accent) !important;
+}
+
+code, pre {
+  background-color: var(--dsh-bg-soft) !important;
+  border-color: var(--dsh-border) !important;
+}
+
+button, input, textarea, select {
+  background-color: var(--dsh-bg-soft) !important;
+  color: var(--dsh-fg) !important;
+  border-color: var(--dsh-border) !important;
+  border-radius: var(--dsh-radius) !important;
+}
+
+button:hover {
+  background-color: var(--dsh-bg-hover) !important;
+}
+
+::selection {
+  background-color: var(--dsh-accent) !important;
+  color: #fff !important;
+}
+
+* {
+  scrollbar-color: var(--dsh-border) transparent !important;
+}

@@ -1,0 +1,64 @@
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+}
+
+.pet {
+  position: absolute;
+  inset: 0;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.pet:active {
+  cursor: grabbing;
+}
+
+.pet-svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.pet-gif {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+/* —— 默认宠物的 CSS 动画 —— */
+@keyframes idle {
+  0%, 100% { transform: translateY(0); }
+  25% { transform: translateY(-4px); }
+  75% { transform: translateY(-1px); }
+}
+
+@keyframes blink {
+  0%, 91%, 100% { transform: scaleY(1); }
+  94% { transform: scaleY(0.1); }
+}
+
+@keyframes glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+#default-pet {
+  animation: idle 3s ease-in-out infinite;
+}
+
+#default-pet .eye {
+  animation: blink 3.4s infinite;
+  transform-origin: center;
+}
+
+#default-pet .antenna-ball {
+  animation: glow 1.8s ease-in-out infinite;
+}

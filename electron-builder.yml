@@ -1,0 +1,38 @@
+# electron-builder 三平台打包配置（macOS / Windows / Linux）
+# 说明：跨平台二进制需在各自系统或 CI 上构建（mac 上不能直接产出 Windows exe）。
+appId: com.dsh.desktop
+productName: DeepSeek Harness Desktop
+directories:
+  output: release
+files:
+  - dist/**/*
+  - assets/**/*
+  - package.json
+asar: true
+npmRebuild: false
+
+mac:
+  target:
+    - dmg
+    - zip
+  category: public.app-category.developer-tools
+  icon: assets/icons/icon.png
+  darkModeSupport: true
+
+win:
+  target:
+    - nsis
+  icon: assets/icons/icon.png
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  shortcutName: DeepSeek Harness Desktop
+
+linux:
+  target:
+    - AppImage
+    - deb
+  category: Development
+  icon: assets/icons/icon.png
+  maintainer: dsh-desktop contributors

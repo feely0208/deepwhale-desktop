@@ -15,7 +15,7 @@ import { ServiceManager } from './service-manager';
 import { createMainWindow } from './window';
 import { SkinManager } from './skin-manager';
 import { PetWindow } from './pet';
-import { createTray, applyMenu, buildMenuTemplate, TrayMenuActions } from './tray';
+import { createTray, applyMenu, buildAppMenuTemplate, TrayMenuActions } from './tray';
 import { UsageManager, UsageSnapshot } from './usage-manager';
 import { injectSettingsExtension } from './settings-inject';
 
@@ -124,6 +124,16 @@ async function pickBackgroundImage(): Promise<void> {
   }
 }
 
+/** 打开 DSH 设置页（应用菜单"设置…" Cmd+,） */
+function openSettingsPage(): void {
+  if (!mainWin) return;
+  mainWin.show();
+  mainWin.focus();
+  void mainWin.webContents.executeJavaScript(
+    `(() => { const els = [...document.querySelectorAll('span')].filter(e => e.textContent.trim() === '设置'); if (els[0]) { els[0].click(); return true; } return false; })()`
+  );
+}
+
 /** 构建统一菜单动作（托盘 + macOS 顶栏共用） */
 function buildMenuActions(): TrayMenuActions {
   const currentTheme = store.get('theme');
@@ -206,6 +216,8 @@ function buildMenuActions(): TrayMenuActions {
     onQuit: () => app.quit(),
     onOpenCustomCss: () => skin.openCustomCss(),
     onSetApiKey: () => openApiKeyDialog(),
+    onOpenSettings: () => openSettingsPage(),
+    onOpenPetsFolder: () => pet?.openPetsFolder(),
     onToggleUsagePanel: (visible) => {
       store.set('usagePanelVisible', visible);
       if (mainWin) {
@@ -224,7 +236,8 @@ function buildMenuActions(): TrayMenuActions {
 function rebuildMenus(): void {
   if (!tray) return;
   applyMenu(tray, buildMenuActions());
-  Menu.setApplicationMenu(Menu.buildFromTemplate(buildMenuTemplate(buildMenuActions())));
+  // 应用菜单（macOS 顶栏/窗口菜单栏）：完整 macOS 结构（应用/文件/编辑/窗口/帮助）
+  Menu.setApplicationMenu(Menu.buildFromTemplate(buildAppMenuTemplate(buildMenuActions())));
 }
 
 function registerIpc(): void {

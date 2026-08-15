@@ -1,4 +1,4 @@
-/* 注入式用量面板样式（主进程 insertCSS 注入，类名统一 dsh-up-* 前缀） */
+/* 注入式用量面板样式（浅色，与 DSH 白色界面划一） */
 #dsh-usage-panel {
   position: fixed;
   right: 16px;
@@ -8,11 +8,11 @@
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
   font-size: 12px;
   line-height: 1.5;
-  color: #d7dce2;
-  background: rgba(15, 17, 21, 0.94);
-  border: 1px solid #23262e;
+  color: #24292f;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid #d0d7de;
   border-radius: 10px;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 6px 24px rgba(31, 35, 40, 0.14);
   overflow: hidden;
 }
 
@@ -34,15 +34,15 @@
 }
 
 #dsh-usage-panel .uph .dot.ok {
-  background: #3fb950;
+  background: #1a7f37;
 }
 
 #dsh-usage-panel .uph .dot.low {
-  background: #d29922;
+  background: #9a6700;
 }
 
 #dsh-usage-panel .uph .dot.err {
-  background: #f85149;
+  background: #d1242f;
 }
 
 #dsh-usage-panel .uph .title {
@@ -75,17 +75,17 @@
 }
 
 #dsh-usage-panel .row .k {
-  color: #8b93a1;
+  color: #57606a;
 }
 
 #dsh-usage-panel .row .v {
-  color: #d7dce2;
+  color: #24292f;
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
 
 #dsh-usage-panel .err-line {
-  color: #f85149;
+  color: #d1242f;
   word-break: break-all;
 }
 
@@ -99,5 +99,5 @@
 }
 
 #dsh-usage-panel .refresh-btn:hover {
-  background: rgba(77, 124, 254, 0.15);
+  background: rgba(77, 124, 254, 0.12);
 }

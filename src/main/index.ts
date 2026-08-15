@@ -5,6 +5,7 @@ import {
   ipcMain,
   Menu,
   MenuItemConstructorOptions,
+  nativeTheme,
   Notification,
   Tray,
 } from 'electron';
@@ -16,6 +17,7 @@ import { SkinManager } from './skin-manager';
 import { PetWindow } from './pet';
 import { createTray, applyMenu, buildMenuTemplate, TrayMenuActions } from './tray';
 import { UsageManager, UsageSnapshot } from './usage-manager';
+import { injectSettingsExtension } from './settings-inject';
 
 /** 冒烟测试模式：自动启动、打印关键事件、8 秒后退出（供 CI/自动化验证） */
 const SMOKE = !!process.env.DSH_DESKTOP_SMOKE;
@@ -52,13 +54,14 @@ function notifyLowBalance(threshold: number): void {
   }
 }
 
-/** did-finish-load 回调：应用皮肤 + 注入用量面板 */
+/** did-finish-load 回调：应用皮肤 + 注入用量面板 + 注入设置页扩展 */
 async function onPageReady(win: BrowserWindow): Promise<void> {
   await skin.apply(win);
   if (store.get('usagePanelVisible')) {
     await usage.applyPanel(win);
   }
-  if (SMOKE) console.log('[smoke] page ready (skin + usage panel injected)');
+  await injectSettingsExtension(win);
+  if (SMOKE) console.log('[smoke] page ready (skin + usage panel + settings ext injected)');
 }
 
 function showMainWindow(): void {
@@ -109,25 +112,25 @@ function buildMenuActions(): TrayMenuActions {
     },
   }));
 
-  const gifs = pet ? pet.listPets() : [];
-  const currentGif = store.get('petGif');
-  const gifSubmenu: MenuItemConstructorOptions[] = [
+  const pets = pet ? pet.listPets() : [];
+  const currentPet = store.get('petGif');
+  const petSubmenuItems: MenuItemConstructorOptions[] = [
     {
-      label: '默认宠物（CSS 动画）',
+      label: '默认宠物（橙色小团子）',
       type: 'radio',
-      checked: !currentGif,
+      checked: !currentPet,
       click: () => {
         store.set('petGif', null);
         pet?.reload();
       },
     },
-    ...gifs.map(
-      (g): MenuItemConstructorOptions => ({
-        label: g,
+    ...pets.map(
+      (p): MenuItemConstructorOptions => ({
+        label: p,
         type: 'radio',
-        checked: currentGif === g,
+        checked: currentPet === p,
         click: () => {
-          store.set('petGif', g);
+          store.set('petGif', p);
           pet?.reload();
         },
       })
@@ -144,7 +147,7 @@ function buildMenuActions(): TrayMenuActions {
         rebuildMenus();
       },
     },
-    { label: '宠物皮肤', submenu: gifSubmenu },
+    { label: '宠物皮肤', submenu: petSubmenuItems },
     {
       label: '穿透点击',
       type: 'checkbox',
@@ -185,6 +188,8 @@ function rebuildMenus(): void {
 
 function registerIpc(): void {
   pet?.registerIpc();
+
+  // ---- 用量 ----
   ipcMain.on('usage:refresh', () => void usage.refresh());
   ipcMain.on('usage:record', (_e, payload: { inputTokens?: number; outputTokens?: number }) => {
     usage.recordUsage(payload?.inputTokens ?? 0, payload?.outputTokens ?? 0);
@@ -196,6 +201,42 @@ function registerIpc(): void {
       dialog.showErrorBox('API Key 保存失败', err instanceof Error ? err.message : String(err));
     }
   });
+
+  // ---- 皮肤（设置页/菜单共用） ----
+  ipcMain.handle('skin:list', () => skin.listSkins());
+  ipcMain.handle('skin:state', () => ({
+    current: store.get('skin'),
+    customCssEnabled: store.get('customCssEnabled'),
+  }));
+  ipcMain.on('skin:set', (_e, name: string) => {
+    if (mainWin) void skin.setSkin(mainWin, name);
+    rebuildMenus();
+  });
+  ipcMain.on('skin:open-css', () => skin.openCustomCss());
+  ipcMain.on('skin:toggle-custom-css', (_e, enabled: boolean) => {
+    if (mainWin) void skin.setCustomCssEnabled(mainWin, enabled);
+  });
+
+  // ---- 宠物（设置页/菜单共用） ----
+  ipcMain.handle('pet:list', () => pet?.listPets() ?? []);
+  ipcMain.handle('pet:state', () => ({
+    current: store.get('petGif'),
+    visible: store.get('petVisible'),
+    clickThrough: store.get('clickThrough'),
+    list: pet?.listPets() ?? [],
+    previewDataUri: pet?.previewDataUri() ?? null,
+  }));
+  ipcMain.on('pet:set-visible', (_e, visible: boolean) => {
+    if (visible) pet?.show();
+    else pet?.hide();
+    rebuildMenus();
+  });
+  ipcMain.on('pet:set-click-through', (_e, enabled: boolean) => {
+    store.set('clickThrough', enabled);
+    pet?.window?.setIgnoreMouseEvents(enabled, { forward: true });
+  });
+  ipcMain.on('pet:open-folder', () => pet?.openPetsFolder());
+
   ipcMain.on('apikey:close', () => apiKeyWin?.close());
 }
 
@@ -206,6 +247,9 @@ if (!app.requestSingleInstanceLock()) {
   app.on('second-instance', () => showMainWindow());
 
   app.whenReady().then(async () => {
+    // 强制 DSH 走浅色主题（页面按 prefers-color-scheme 渲染，深色模式会产生黑块）
+    nativeTheme.themeSource = 'light';
+
     pet = new PetWindow(store);
     pet.ensureUserPetsDir();
     registerIpc();
@@ -246,6 +290,32 @@ if (!app.requestSingleInstanceLock()) {
     rebuildMenus();
 
     if (SMOKE) {
+      // 端到端检查：打开设置页 → 验证注入的"宠物/用量/皮肤"导航项与面板激活
+      setTimeout(() => {
+        void (async () => {
+          try {
+            const r = await mainWin!.webContents.executeJavaScript(`(async () => {
+              const clickTxt = (txt) => { const els = [...document.querySelectorAll('span')].filter(e => e.textContent.trim() === txt); if (els[0]) { els[0].click(); return true; } return false; };
+              clickTxt('设置');
+              await new Promise(r => setTimeout(r, 1500));
+              const has = (id) => !!document.getElementById(id);
+              const petNav = document.getElementById('dsh-ext-nav-pet');
+              let activated = false;
+              if (petNav) {
+                petNav.click();
+                await new Promise(r => setTimeout(r, 400));
+                const panel = document.getElementById('dsh-ext-panel');
+                activated = !!panel && panel.style.display !== 'none';
+              }
+              return JSON.stringify({ navPet: has('dsh-ext-nav-pet'), navUsage: has('dsh-ext-nav-usage'), navSkin: has('dsh-ext-nav-skin'), panel: has('dsh-ext-panel'), activated });
+            })()`);
+            console.log('[smoke] settings-ext:', r);
+          } catch (e) {
+            console.error('[smoke] settings-ext 检查失败:', e);
+          }
+        })();
+      }, 2500);
+
       setTimeout(() => {
         console.log('[smoke] ok');
         app.quit();

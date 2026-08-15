@@ -25,19 +25,21 @@ npm run dev        # 编译 + 启动桌面壳（自动拉起或复用本机 DSH 
 ## 功能说明
 
 ### 皮肤系统
-- 托盘菜单 → 皮肤：内置 `deepseek` / `dark` / `light` / `dracula` 四套主题（单选切换，即时生效）。
-- 自定义 CSS：托盘菜单 → 自定义 CSS…，打开 `userData/custom.css`，保存后自动重注入（优先级最高）。
-- 皮肤列表即 `src/skins/*.css`，新增文件即出现在菜单中。
+- 通过 DSH 自身的 `--dsw-alias-*` 主题变量换肤，**全界面同步变色**（默认浅色，无黑色块）。
+- 切换入口：托盘菜单 → 皮肤，或 **设置页 → 皮肤** 栏（在 通用设置/模型/插件/Agent 预设 四项之下顺延）。
+- 内置 `light` / `deepseek` / `dark` / `dracula` 四套主题；自定义 CSS（`userData/custom.css`）保存即时重注入。
+- 皮肤列表即 `src/skins/*.css`，新增文件即出现。
 
 ### 桌面宠物
-- 默认宠物：Codex 风格橙色小团子（SVG + CSS 动画：呼吸弹跳 / 眨眼 / 落地压扁，鼠标悬停会开心蹦跶）。
+- 默认宠物：Codex 风格橙色小团子（SVG 渐变 + CSS 动画：呼吸弹跳 / 眨眼 / 落地压扁，悬停开心蹦跶，随机挥手/打盹）。
+- 切换入口：右键宠物，或 **设置页 → 宠物** 栏（含预览 / 开关 / 穿透点击 / 打开目录）。
 - **自制宠物**：托盘菜单 → 宠物 → "打开宠物目录…"（或右键宠物 → 打开宠物目录），把 `.gif` **或 `.svg`** 丢进弹出的目录，右键宠物 → 宠物皮肤 即可切换。
-  - 首次启动会把内置示例（`cat.svg`、`frog.svg`、`_TEMPLATE.svg`）自动复制到该目录（`userData/pets`）。
+  - 首次启动会把内置示例（`_TEMPLATE.svg`）自动复制到该目录（`userData/pets`）。
   - SVG 宠物最容易上手：复制 `_TEMPLATE.svg` 改名编辑即可，支持在文件里写 CSS 动画。
 - 右键宠物：切换皮肤 / 穿透点击（可点到宠物后面的内容）/ 隐藏。
 
 ### 用量与额度面板
-- 右下角可折叠面板：总余额 / 赠送余额 / 充值余额 / 今日请求数 / 累计 tokens（估）。
+- 右下角可折叠面板 + 设置页 → 用量 栏：总余额 / 赠送余额 / 充值余额 / 今日请求数 / 累计 tokens（估）。
 - 额度来源：官方接口 `GET https://api.deepseek.com/user/balance`。
 - 用量来源：首版本地统计（解析 DSH 日志中的 token 计数），在线明细待 DeepSeek 开放用量 API 后接入。
 - 低余额提醒：余额低于阈值（默认 ¥5）时系统通知一次，面板状态点标红。
@@ -54,7 +56,7 @@ npm run dev        # 编译 + 启动桌面壳（自动拉起或复用本机 DSH 
 | --- | --- | --- |
 | `command` | `npx @deepseek-ai/dsh web` | 拉起 DSH 的命令，可改为本地路径 |
 | `port` | `3080` | DSH Web UI 端口 |
-| `skin` | `deepseek` | 当前皮肤 |
+| `skin` | `light` | 当前皮肤 |
 | `customCssEnabled` | `false` | 是否启用自定义 CSS |
 | `petVisible` | `true` | 宠物是否显示 |
 | `petGif` | `null` | 自定义宠物 GIF 文件名 |

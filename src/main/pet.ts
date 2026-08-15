@@ -50,6 +50,18 @@ export class PetWindow {
     void shell.openPath(this.userPetsDir());
   }
 
+  /** SVG 宠物预览（data URI，供设置页展示）；GIF 不支持预览返回 null */
+  previewDataUri(): string | null {
+    const name = this.store.get('petGif');
+    if (!name || !/\.svg$/i.test(name)) return null;
+    try {
+      const buf = fs.readFileSync(path.join(this.userPetsDir(), name));
+      return 'data:image/svg+xml;base64,' + buf.toString('base64');
+    } catch {
+      return null;
+    }
+  }
+
   create(): BrowserWindow {
     const existing = this.window;
     if (existing) {

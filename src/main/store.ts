@@ -13,8 +13,7 @@ export interface Settings {
   /** DSH Web UI 端口 */
   port: number;
   /** 皮肤名（对应 src/skins/<name>.css） */
-  skin: string;
-  /** 是否启用 userData/custom.css 自定义样式 */
+  skin: string;  /** 是否启用 userData/custom.css 自定义样式 */
   customCssEnabled: boolean;
   /** 桌面宠物是否显示 */
   petVisible: boolean;
@@ -37,7 +36,7 @@ export interface Settings {
 const DEFAULTS: Settings = {
   command: 'npx @deepseek-ai/dsh web',
   port: 3080,
-  skin: 'deepseek',
+  skin: 'light',
   customCssEnabled: false,
   petVisible: true,
   petGif: null,

@@ -12,48 +12,48 @@
 <body>
   <div id="pet" class="pet" title="右键菜单">
     <div class="pet-stage">
-      <!-- 默认宠物：Codex 风格橙色小团子（SVG + CSS 动画，无需外部素材） -->
-      <svg id="default-pet" class="pet-svg" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+      <!-- 默认宠物：Codex 风格橙色团子（SVG 渐变 + CSS 动画，无需外部素材） -->
+      <svg id="default-pet" class="pet-svg" viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
         <defs>
-          <radialGradient id="blob-grad" cx="38%" cy="32%" r="80%">
-            <stop offset="0%" stop-color="#ffb37a" />
-            <stop offset="55%" stop-color="#ff8a3d" />
-            <stop offset="100%" stop-color="#f26b1d" />
+          <linearGradient id="blob-body" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#ffc39b" />
+            <stop offset="32%" stop-color="#ff8a3d" />
+            <stop offset="100%" stop-color="#ed6a14" />
+          </linearGradient>
+          <radialGradient id="blob-shine" cx="35%" cy="26%" r="65%">
+            <stop offset="0%" stop-color="#ffffff" stop-opacity="0.55" />
+            <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
           </radialGradient>
         </defs>
 
-        <!-- 小短手 -->
-        <ellipse class="arm" cx="17" cy="58" rx="6" ry="9" fill="#f26b1d" />
-        <ellipse class="arm" cx="83" cy="58" rx="6" ry="9" fill="#f26b1d" />
+        <!-- 身体（水滴形团子） -->
+        <path class="body" d="M40 5 C57 5 71 20 71 38 C71 57 58 74 40 74 C22 74 9 57 9 38 C9 20 23 5 40 5 Z" fill="url(#blob-body)" />
+        <path class="body" d="M40 5 C57 5 71 20 71 38 C71 57 58 74 40 74 C22 74 9 57 9 38 C9 20 23 5 40 5 Z" fill="url(#blob-shine)" />
 
-        <!-- 身体（豆形团子） -->
-        <path class="body" d="M50 13 C72 13 91 31 91 52 C91 74 72 91 50 91 C28 91 9 74 9 52 C9 31 28 13 50 13 Z" fill="url(#blob-grad)" />
-
-        <!-- 腮红 -->
-        <ellipse class="cheek" cx="28" cy="60" rx="5" ry="3" fill="#ffb27d" opacity="0.65" />
-        <ellipse class="cheek" cx="72" cy="60" rx="5" ry="3" fill="#ffb27d" opacity="0.65" />
+        <!-- 顶部高光 -->
+        <ellipse cx="30" cy="23" rx="8" ry="4.6" fill="#ffffff" opacity="0.5" transform="rotate(-18 30 23)" />
 
         <!-- 眼睛 + 高光 -->
-        <g class="eye" fill="#3a2418">
-          <ellipse cx="38" cy="48" rx="4.6" ry="5.6" />
-          <ellipse cx="62" cy="48" rx="4.6" ry="5.6" />
+        <g class="eye" fill="#2b1a0e">
+          <ellipse cx="31" cy="40" rx="4.2" ry="5.4" />
+          <ellipse cx="49" cy="40" rx="4.2" ry="5.4" />
         </g>
-        <circle class="eye-glow" cx="40" cy="45.5" r="1.6" fill="#ffffff" />
-        <circle class="eye-glow" cx="64" cy="45.5" r="1.6" fill="#ffffff" />
+        <circle cx="32.6" cy="37.6" r="1.7" fill="#ffffff" />
+        <circle cx="50.6" cy="37.6" r="1.7" fill="#ffffff" />
+
+        <!-- 腮红 -->
+        <ellipse cx="21" cy="50" rx="4.6" ry="2.7" fill="#ff9d6b" opacity="0.75" />
+        <ellipse cx="59" cy="50" rx="4.6" ry="2.7" fill="#ff9d6b" opacity="0.75" />
 
         <!-- 微笑 -->
-        <path d="M44 61 Q50 68 56 61" stroke="#3a2418" stroke-width="3" stroke-linecap="round" fill="none" />
-
-        <!-- 小脚 -->
-        <ellipse cx="38" cy="88" rx="7" ry="3.4" fill="#d95d1a" />
-        <ellipse cx="62" cy="88" rx="7" ry="3.4" fill="#d95d1a" />
+        <path d="M37 51 Q40 55 43 51" stroke="#2b1a0e" stroke-width="2.2" stroke-linecap="round" fill="none" />
       </svg>
 
       <!-- 地面阴影（随弹跳伸缩） -->
       <div class="pet-shadow"></div>
     </div>
 
-    <!-- 自定义宠物（assets/pets/ 下的 .gif 或 .svg，来自主进程 query 参数） -->
+    <!-- 自定义宠物（用户宠物目录的 .gif 或 .svg，来自主进程 query 参数） -->
     <img id="custom-pet" class="pet-custom" alt="pet" hidden />
   </div>
   <script src="pet.js"></script>

@@ -24,15 +24,17 @@ body {
   position: absolute;
   inset: 0;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: center;
+  padding-bottom: 6%;
+  box-sizing: border-box;
 }
 
 .pet-svg {
-  width: 88%;
-  height: 88%;
+  width: 82%;
+  height: 82%;
   overflow: visible;
-  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.25));
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.22));
 }
 
 .pet-custom {
@@ -46,13 +48,13 @@ body {
 
 .pet-shadow {
   position: absolute;
-  bottom: 4%;
+  bottom: 2%;
   left: 50%;
-  width: 52%;
-  height: 9px;
-  margin-left: -26%;
+  width: 48%;
+  height: 8px;
+  margin-left: -24%;
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.28);
+  background: rgba(0, 0, 0, 0.26);
   filter: blur(1.5px);
   transform-origin: center;
 }
@@ -60,44 +62,51 @@ body {
 /* —— 默认宠物动画：呼吸弹跳 + 落地压扁 —— */
 @keyframes idle {
   0%, 100% { transform: translateY(0) scale(1, 1) rotate(0deg); }
-  22% { transform: translateY(-9px) scale(1, 1) rotate(-1.5deg); }
-  38% { transform: translateY(0) scale(1.07, 0.9) rotate(0deg); }
-  55% { transform: translateY(-4px) scale(1, 1) rotate(1deg); }
+  22% { transform: translateY(-8px) scale(1, 1) rotate(-1.2deg); }
+  38% { transform: translateY(0) scale(1.06, 0.9) rotate(0deg); }
+  55% { transform: translateY(-3px) scale(1, 1) rotate(1deg); }
   72% { transform: translateY(0) scale(1, 1) rotate(0deg); }
 }
 
 @keyframes shadowPulse {
-  0%, 100% { transform: scaleX(1); opacity: 0.28; }
-  22% { transform: scaleX(0.82); opacity: 0.18; }
-  38% { transform: scaleX(1.14); opacity: 0.34; }
-  55% { transform: scaleX(0.94); opacity: 0.26; }
+  0%, 100% { transform: scaleX(1); opacity: 0.26; }
+  22% { transform: scaleX(0.84); opacity: 0.16; }
+  38% { transform: scaleX(1.12); opacity: 0.32; }
+  55% { transform: scaleX(0.95); opacity: 0.24; }
 }
 
 @keyframes blink {
   0%, 90%, 100% { transform: scaleY(1); }
-  93%, 96% { transform: scaleY(0.1); }
+  93%, 96% { transform: scaleY(0.08); }
 }
 
 /* 悬停开心蹦跶 */
 @keyframes happy {
   0%, 100% { transform: translateY(0) scale(1, 1) rotate(0deg); }
-  20% { transform: translateY(-14px) scale(1, 1) rotate(-6deg); }
+  20% { transform: translateY(-13px) scale(1, 1) rotate(-6deg); }
   40% { transform: translateY(0) scale(1.1, 0.88) rotate(0deg); }
-  60% { transform: translateY(-10px) scale(1, 1) rotate(6deg); }
+  60% { transform: translateY(-9px) scale(1, 1) rotate(6deg); }
   80% { transform: translateY(0) scale(1.05, 0.94) rotate(0deg); }
+}
+
+/* 周期小动作：挥手 */
+@keyframes wave {
+  0%, 100% { transform: rotate(0deg); }
+  20% { transform: rotate(-8deg); }
+  45% { transform: rotate(8deg); }
+  70% { transform: rotate(-5deg); }
+  90% { transform: rotate(3deg); }
+}
+
+/* 周期小动作：打盹（闭眼 + 缓慢呼吸） */
+@keyframes sleepBreath {
+  0%, 100% { transform: translateY(0) scale(1, 1); }
+  50% { transform: translateY(-2px) scale(1.02, 0.97); }
 }
 
 #default-pet {
   animation: idle 3.2s ease-in-out infinite;
   transform-box: fill-box;
-}
-
-.pet.happy #default-pet {
-  animation: happy 1.2s ease-in-out;
-}
-
-.pet.happy .pet-shadow {
-  animation: shadowPulse 1.2s ease-in-out;
 }
 
 .pet-shadow {
@@ -110,15 +119,23 @@ body {
   transform-origin: center;
 }
 
-/* 小短手轻微摇摆 */
-#default-pet .arm {
-  animation: armWave 3.2s ease-in-out infinite;
-  transform-box: fill-box;
-  transform-origin: center;
+.pet.happy #default-pet {
+  animation: happy 1.2s ease-in-out;
 }
 
-@keyframes armWave {
-  0%, 100% { transform: rotate(0deg); }
-  25% { transform: rotate(-4deg); }
-  50% { transform: rotate(4deg); }
+.pet.happy .pet-shadow {
+  animation: shadowPulse 1.2s ease-in-out;
+}
+
+.pet.action-wave #default-pet {
+  animation: wave 0.9s ease-in-out;
+}
+
+.pet.action-sleep #default-pet {
+  animation: sleepBreath 2.2s ease-in-out infinite;
+}
+
+.pet.action-sleep .eye {
+  animation: none;
+  transform: scaleY(0.08);
 }

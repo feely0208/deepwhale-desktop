@@ -1,4 +1,4 @@
-/* 桌面宠物页逻辑：拖拽 + 右键菜单 + 悬停开心（通过 preload 暴露的最小 IPC 桥） */
+/* 桌面宠物页逻辑：拖拽 + 右键菜单 + 悬停开心 + 周期小动作（通过 preload 桥） */
 (function () {
   var petEl = document.getElementById('pet');
   var svgEl = document.getElementById('default-pet');
@@ -22,6 +22,22 @@
       petEl.classList.remove('happy');
     }, 1300);
   });
+
+  // 周期小动作（仿 Codex 宠物：随机挥手 / 打盹）
+  var actions = ['wave', 'sleep'];
+  var actionTimer = null;
+  function scheduleAction() {
+    var delay = 11000 + Math.random() * 10000;
+    actionTimer = setTimeout(function () {
+      var a = actions[Math.floor(Math.random() * actions.length)];
+      petEl.classList.add('action-' + a);
+      setTimeout(function () {
+        petEl.classList.remove('action-' + a);
+        scheduleAction();
+      }, a === 'sleep' ? 2600 : 1400);
+    }, delay);
+  }
+  scheduleAction();
 
   // 手动拖拽（不用 -webkit-app-region: drag，它会吞掉右键事件）
   var dragging = false;

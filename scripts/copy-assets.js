@@ -6,7 +6,7 @@ const path = require('path');
 const root = path.join(__dirname, '..');
 const dist = path.join(root, 'dist');
 
-const targets = ['src/skins', 'src/pet', 'src/usage', 'src/apikey', 'assets'];
+const targets = ['src/skins', 'src/pet', 'src/usage', 'src/apikey', 'src/settings', 'assets'];
 for (const t of targets) {
   const src = path.join(root, t);
   const dest = path.join(dist, t.replace(/^src\//, ''));

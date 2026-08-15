@@ -1,0 +1,132 @@
+/* 设置页扩展样式：全部跟随 DSH 的 --dsw-alias-* 主题变量，与界面划一 */
+.dsh-ext-panel {
+  padding: 8px 10px 28px;
+  max-width: 560px;
+}
+
+.dsh-ext-panel h3 {
+  margin: 0 0 14px;
+  font-size: 15px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.dsh-ext-section {
+  display: none;
+}
+
+.dsh-ext-section[style*="display: none"] {
+  display: none;
+}
+
+.dsh-ext-row {
+  margin: 10px 0 8px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+}
+
+.dsh-ext-preview {
+  margin: 6px 0 12px;
+  width: 96px;
+  height: 96px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px dashed var(--dsw-alias-border-l1);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.dsh-ext-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.dsh-ext-preview .ph {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+.dsh-ext-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0 14px;
+}
+
+.dsh-ext-item {
+  display: flex;
+  align-items: center;
+  padding: 7px 12px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.dsh-ext-item:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.dsh-ext-item.active {
+  border-color: var(--dsw-alias-brand-primary);
+}
+
+.dsh-ext-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.dsh-ext-btn {
+  margin-top: 10px;
+  padding: 7px 16px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.dsh-ext-btn:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.dsh-ext-grid {
+  display: grid;
+  gap: 8px;
+  max-width: 420px;
+}
+
+.dsh-ext-grid .row {
+  display: flex;
+  justify-content: space-between;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+}
+
+.dsh-ext-grid .row .k {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.dsh-ext-err {
+  margin-top: 8px;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 12px;
+  word-break: break-all;
+}
+
+/* 导航 active 态（我们的三项） */
+.dsh-ext-nav-active {
+  background: var(--dsw-alias-interactive-bg-hover) !important;
+}

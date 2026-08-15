@@ -1,48 +1,22 @@
-/* Dracula 主题：紫粉经典配色 */
+/* Dracula 主题：紫粉经典配色（通过 DSH 变量整体换色） */
 :root {
-  --dsh-bg: #282a36;
-  --dsh-bg-soft: #343746;
-  --dsh-bg-hover: #3d4050;
-  --dsh-fg: #f8f8f2;
-  --dsh-muted: #9ea3b4;
-  --dsh-accent: #bd93f9;
-  --dsh-accent-2: #ff79c6;
-  --dsh-border: #44475a;
-  --dsh-radius: 8px;
-  --dsh-font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  color-scheme: dark;
 }
 
-body {
-  background-color: var(--dsh-bg) !important;
-  color: var(--dsh-fg) !important;
-  font-family: var(--dsh-font) !important;
-}
-
-a {
-  color: var(--dsh-accent) !important;
-}
-
-code, pre {
-  background-color: var(--dsh-bg-soft) !important;
-  border-color: var(--dsh-border) !important;
-}
-
-button, input, textarea, select {
-  background-color: var(--dsh-bg-soft) !important;
-  color: var(--dsh-fg) !important;
-  border-color: var(--dsh-border) !important;
-  border-radius: var(--dsh-radius) !important;
-}
-
-button:hover {
-  background-color: var(--dsh-bg-hover) !important;
-}
-
-::selection {
-  background-color: var(--dsh-accent) !important;
-  color: #282a36 !important;
-}
-
-* {
-  scrollbar-color: var(--dsh-border) transparent !important;
+html body {
+  --dsw-alias-bg-base: #21222c;
+  --dsw-alias-bg-layer-1: #282a36;
+  --dsw-alias-bg-layer-2: #343746;
+  --dsw-alias-bg-overlay: rgba(33, 34, 44, 0.92);
+  --dsw-alias-border-l1: #44475a;
+  --dsw-alias-border-l2: #3a3d4e;
+  --dsw-alias-label-primary: #f8f8f2;
+  --dsw-alias-label-secondary: #b9bcc9;
+  --dsw-alias-label-tertiary: #9094a5;
+  --dsw-alias-brand-primary: #bd93f9;
+  --dsw-alias-interactive-bg-hover: #343746;
+  --dsw-alias-state-error-primary: #ff5555;
+  --dsw-alias-state-success-primary: #50fa7b;
+  --dsw-alias-state-warn-primary: #f1fa8c;
+  --dsw-specific-sidebar-fill: #242530;
 }

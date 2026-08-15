@@ -109,7 +109,7 @@ function buildMenuActions(): TrayMenuActions {
     },
   }));
 
-  const gifs = pet ? pet.listGifs() : [];
+  const gifs = pet ? pet.listPets() : [];
   const currentGif = store.get('petGif');
   const gifSubmenu: MenuItemConstructorOptions[] = [
     {

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  自制桌面宠物模板（SVG）
+  ======================
+  1. 复制本文件改名为任意名字（如 my-pet.svg），放到 assets/pets/ 目录；
+  2. 在程序里：托盘菜单 → 宠物 → 宠物皮肤，选中你的宠物即可（也支持 .gif）；
+  3. 规范：
+     - viewBox 保持 "0 0 100 100"；
+     - 角色居中，主体约占 viewBox 的 60%~80%，四周留白；
+     - 背景必须透明（不要画背景矩形）；
+     - 动画写在 <style> 里（CSS @keyframes），不想动就删掉；
+     - 需要旋转/缩放的元素建议加 transform-box: fill-box，否则会以画布原点为基准；
+     - <img> 方式加载，SVG 内的 CSS/SMIL 动画都会正常运行。
+  4. 保存后：托盘菜单 → 宠物 → 宠物皮肤，重新选一次即可看到。
+-->
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    @keyframes petIdle {
+      0%, 100% { transform: translateY(0); }
+      30% { transform: translateY(-6px); }
+      60% { transform: translateY(0); }
+    }
+    .pet-body { animation: petIdle 3s ease-in-out infinite; transform-box: fill-box; }
+  </style>
+  <g class="pet-body">
+    <!-- 在这里画你的宠物：示例是一个蓝色小圆脸 -->
+    <circle cx="50" cy="55" r="24" fill="#4d7cfe" />
+    <circle cx="42" cy="50" r="3" fill="#fff" />
+    <circle cx="58" cy="50" r="3" fill="#fff" />
+    <path d="M44 62 Q50 68 56 62" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round" />
+  </g>
+</svg>

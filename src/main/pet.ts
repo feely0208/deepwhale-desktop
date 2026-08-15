@@ -5,6 +5,8 @@ import { Store } from './store';
 
 /**
  * 桌面宠物：透明无边框置顶小窗口。
+ * - 默认宠物：内置 Codex 风格 SVG 团子（CSS 动画）；
+ * - 自定义宠物：assets/pets/ 下的 .gif 或 .svg（右键菜单切换）；
  * - 拖拽：页面 mousedown/mousemove → IPC → 主进程用光标位置 + 记录偏移 setPosition
  *   （不用 -webkit-app-region: drag，它会吞掉右键事件）；
  * - 右键菜单：IPC 通知主进程弹原生 Menu；
@@ -45,9 +47,9 @@ export class PetWindow {
       },
     });
 
-    const gif = this.store.get('petGif');
+    const file = this.store.get('petGif');
     void win.loadFile(path.join(__dirname, '../pet/pet.html'), {
-      query: gif ? { gif } : {},
+      query: file ? { file } : {},
     });
 
     // 初始位置：主屏工作区右下角
@@ -84,18 +86,18 @@ export class PetWindow {
   }
 
   reload(): void {
-    const gif = this.store.get('petGif');
+    const file = this.store.get('petGif');
     this.window?.loadFile(path.join(__dirname, '../pet/pet.html'), {
-      query: gif ? { gif } : {},
+      query: file ? { file } : {},
     });
   }
 
-  /** 列出用户自定义 GIF（assets/pets/*.gif） */
-  listGifs(): string[] {
+  /** 列出用户自定义宠物（assets/pets/ 下的 .gif 与 .svg） */
+  listPets(): string[] {
     try {
       return fs
         .readdirSync(this.petsDir)
-        .filter((f) => f.toLowerCase().endsWith('.gif'))
+        .filter((f) => /\.(gif|svg)$/i.test(f))
         .sort();
     } catch {
       return [];
@@ -127,19 +129,19 @@ export class PetWindow {
       this.showContextMenu();
     });
 
-    ipcMain.on('pet:select-gif', (_e, name: string | null) => {
+    ipcMain.on('pet:select-pet', (_e, name: string | null) => {
       this.store.set('petGif', name);
       this.reload();
     });
   }
 
   private showContextMenu(): void {
-    const gifs = this.listGifs();
+    const pets = this.listPets();
     const current = this.store.get('petGif');
 
-    const gifItems: MenuItemConstructorOptions[] = [
+    const petItems: MenuItemConstructorOptions[] = [
       {
-        label: '默认宠物（CSS 动画）',
+        label: '默认宠物（橙色小团子）',
         type: 'radio',
         checked: !current,
         click: () => {
@@ -147,13 +149,13 @@ export class PetWindow {
           this.reload();
         },
       },
-      ...gifs.map(
-        (g): MenuItemConstructorOptions => ({
-          label: g,
+      ...pets.map(
+        (p): MenuItemConstructorOptions => ({
+          label: p,
           type: 'radio',
-          checked: current === g,
+          checked: current === p,
           click: () => {
-            this.store.set('petGif', g);
+            this.store.set('petGif', p);
             this.reload();
           },
         })
@@ -161,7 +163,7 @@ export class PetWindow {
     ];
 
     const template: MenuItemConstructorOptions[] = [
-      { label: '宠物皮肤', submenu: gifItems },
+      { label: '宠物皮肤', submenu: petItems },
       { type: 'separator' },
       {
         label: '穿透点击',

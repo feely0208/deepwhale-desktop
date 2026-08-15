@@ -144,39 +144,61 @@ export class SkinManager {
     if (!file) return;
 
     const alpha = Math.min(1, Math.max(0.3, this.store.get('skinOpacity')));
-    const dark = nativeTheme.shouldUseDarkColors;
-    const layer1 = dark ? `rgba(16, 18, 22, ${alpha})` : `rgba(255, 255, 255, ${alpha})`;
-    const layer2 = dark ? `rgba(24, 27, 33, ${alpha})` : `rgba(244, 246, 248, ${alpha})`;
     const dataUri = this.buildDataUri(file, 2560);
     if (!dataUri) return;
 
+    // 背景图放在 body::before（z-index:-1），滤镜只作用于背景图、不影响内容；
+    // 层色与滤镜全部跟随 DSH 实时主题（body[data-ds-dark-theme] 属性），
+    // 在 DSH 通用设置里切换浅色/深色即刻生效，不再依赖 nativeTheme。
     const css = `
-      html, body {
+      html { background-color: transparent !important; }
+      body {
+        background-color: transparent !important;
+        --dsh-skin-alpha: ${alpha};
+      }
+      body::before {
+        content: '' !important;
+        position: fixed !important;
+        inset: 0 !important;
+        z-index: -1 !important;
         background-image: url("${dataUri}") !important;
         background-size: cover !important;
         background-position: center !important;
         background-repeat: no-repeat !important;
         background-attachment: fixed !important;
-        ${dark ? 'filter: brightness(0.92);' : 'filter: brightness(1.38) saturate(0.95);'}
+        pointer-events: none !important;
       }
-      html { background-color: transparent !important; }
-      body {
-        background-color: transparent !important;
+      /* 浅色（DSH 非深色属性）：提亮背景图，白色半透明层 */
+      body:not([data-ds-dark-theme])::before {
+        filter: brightness(1.38) saturate(0.95) !important;
+      }
+      body:not([data-ds-dark-theme]) {
         --dsw-alias-bg-base: transparent !important;
-        --dsw-alias-bg-layer-1: ${layer1} !important;
-        --dsw-alias-bg-layer-2: ${layer2} !important;
-        --dsw-alias-bg-overlay: ${layer1} !important;
-        --dsw-specific-sidebar-fill: ${layer2} !important;
-        --dsw-specific-sidebar-nav-item-active: ${dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'} !important;
-        --dsw-specific-sidebar-nav-item-hover: ${dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)'} !important;
+        --dsw-alias-bg-layer-1: rgba(255, 255, 255, var(--dsh-skin-alpha)) !important;
+        --dsw-alias-bg-layer-2: rgba(244, 246, 248, var(--dsh-skin-alpha)) !important;
+        --dsw-alias-bg-overlay: rgba(255, 255, 255, var(--dsh-skin-alpha)) !important;
+        --dsw-specific-sidebar-fill: rgba(244, 246, 248, var(--dsh-skin-alpha)) !important;
+        --dsw-specific-sidebar-nav-item-active: rgba(0, 0, 0, 0.06) !important;
+        --dsw-specific-sidebar-nav-item-hover: rgba(0, 0, 0, 0.04) !important;
       }
-      /* 背景图拓展到左侧工作区栏：该侧淡化，并向主区做渐变过渡 */
-      [class*="sidebarCol"] {
-        background: linear-gradient(
-          to right,
-          ${dark ? `rgba(16, 18, 22, ${Math.min(0.94, alpha + 0.2)})` : `rgba(247, 248, 250, ${Math.min(0.94, alpha + 0.2)})`},
-          ${dark ? `rgba(16, 18, 22, 0.25)` : `rgba(247, 248, 250, 0.18)`}
-        ) !important;
+      body:not([data-ds-dark-theme]) [class*="sidebarCol"] {
+        background: linear-gradient(to right, rgba(247, 248, 250, 0.94), rgba(247, 248, 250, 0.18)) !important;
+      }
+      /* 深色：压暗背景图，深色半透明层 */
+      body[data-ds-dark-theme]::before {
+        filter: brightness(0.92) !important;
+      }
+      body[data-ds-dark-theme] {
+        --dsw-alias-bg-base: transparent !important;
+        --dsw-alias-bg-layer-1: rgba(16, 18, 22, var(--dsh-skin-alpha)) !important;
+        --dsw-alias-bg-layer-2: rgba(24, 27, 33, var(--dsh-skin-alpha)) !important;
+        --dsw-alias-bg-overlay: rgba(16, 18, 22, var(--dsh-skin-alpha)) !important;
+        --dsw-specific-sidebar-fill: rgba(24, 27, 33, var(--dsh-skin-alpha)) !important;
+        --dsw-specific-sidebar-nav-item-active: rgba(255, 255, 255, 0.08) !important;
+        --dsw-specific-sidebar-nav-item-hover: rgba(255, 255, 255, 0.05) !important;
+      }
+      body[data-ds-dark-theme] [class*="sidebarCol"] {
+        background: linear-gradient(to right, rgba(16, 18, 22, 0.94), rgba(16, 18, 22, 0.25)) !important;
       }
     `;
     try {

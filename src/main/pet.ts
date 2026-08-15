@@ -1,4 +1,4 @@
-import { BrowserWindow, Menu, MenuItemConstructorOptions, ipcMain, screen } from 'electron';
+import { app, BrowserWindow, Menu, MenuItemConstructorOptions, ipcMain, screen, shell } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Store } from './store';
@@ -6,7 +6,8 @@ import { Store } from './store';
 /**
  * 桌面宠物：透明无边框置顶小窗口。
  * - 默认宠物：内置 Codex 风格 SVG 团子（CSS 动画）；
- * - 自定义宠物：assets/pets/ 下的 .gif 或 .svg（右键菜单切换）；
+ * - 自定义宠物：放在用户宠物目录（userData/pets）里的 .gif 或 .svg，
+ *   首次启动自动把内置示例（cat/frog/模板）复制过去，托盘菜单可"打开宠物目录"；
  * - 拖拽：页面 mousedown/mousemove → IPC → 主进程用光标位置 + 记录偏移 setPosition
  *   （不用 -webkit-app-region: drag，它会吞掉右键事件）；
  * - 右键菜单：IPC 通知主进程弹原生 Menu；
@@ -15,12 +16,38 @@ import { Store } from './store';
 export class PetWindow {
   private win: BrowserWindow | null = null;
   private dragOffset: { x: number; y: number } | null = null;
-  private readonly petsDir = path.join(__dirname, '../assets/pets');
+  /** 打包内置宠物（app.asar 内，只读） */
+  private readonly builtinPetsDir = path.join(__dirname, '../assets/pets');
 
   constructor(private store: Store) {}
 
   get window(): BrowserWindow | null {
     return this.win && !this.win.isDestroyed() ? this.win : null;
+  }
+
+  /** 用户宠物目录（可写）：首次启动时用内置示例填充 */
+  userPetsDir(): string {
+    return path.join(app.getPath('userData'), 'pets');
+  }
+
+  ensureUserPetsDir(): void {
+    try {
+      const dir = this.userPetsDir();
+      if (fs.existsSync(dir)) return;
+      fs.mkdirSync(dir, { recursive: true });
+      for (const f of fs.readdirSync(this.builtinPetsDir)) {
+        fs.copyFileSync(path.join(this.builtinPetsDir, f), path.join(dir, f));
+      }
+      console.log('[pet] 已初始化用户宠物目录:', dir);
+    } catch (e) {
+      console.error('[pet] 初始化宠物目录失败:', e);
+    }
+  }
+
+  /** 在访达中打开用户宠物目录（不存在则先创建） */
+  openPetsFolder(): void {
+    this.ensureUserPetsDir();
+    void shell.openPath(this.userPetsDir());
   }
 
   create(): BrowserWindow {
@@ -49,7 +76,7 @@ export class PetWindow {
 
     const file = this.store.get('petGif');
     void win.loadFile(path.join(__dirname, '../pet/pet.html'), {
-      query: file ? { file } : {},
+      query: file ? { src: this.petFileUrl(file) } : {},
     });
 
     // 初始位置：主屏工作区右下角
@@ -88,15 +115,15 @@ export class PetWindow {
   reload(): void {
     const file = this.store.get('petGif');
     this.window?.loadFile(path.join(__dirname, '../pet/pet.html'), {
-      query: file ? { file } : {},
+      query: file ? { src: this.petFileUrl(file) } : {},
     });
   }
 
-  /** 列出用户自定义宠物（assets/pets/ 下的 .gif 与 .svg） */
+  /** 列出用户宠物目录下的 .gif / .svg */
   listPets(): string[] {
     try {
       return fs
-        .readdirSync(this.petsDir)
+        .readdirSync(this.userPetsDir())
         .filter((f) => /\.(gif|svg)$/i.test(f))
         .sort();
     } catch {
@@ -133,6 +160,10 @@ export class PetWindow {
       this.store.set('petGif', name);
       this.reload();
     });
+  }
+
+  private petFileUrl(name: string): string {
+    return 'file://' + path.join(this.userPetsDir(), name).replace(/ /g, '%20');
   }
 
   private showContextMenu(): void {
@@ -174,6 +205,7 @@ export class PetWindow {
           this.window?.setIgnoreMouseEvents(item.checked, { forward: true });
         },
       },
+      { label: '打开宠物目录…', click: () => this.openPetsFolder() },
       { label: '隐藏宠物', click: () => this.hide() },
     ];
 

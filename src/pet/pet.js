@@ -4,11 +4,11 @@
   var svgEl = document.getElementById('default-pet');
   var customEl = document.getElementById('custom-pet');
 
-  // 自定义宠物：来自主进程 loadFile 的 query 参数（.gif 或 .svg 均可）
+  // 自定义宠物：来自主进程 loadFile 的 query 参数 src（用户宠物目录的 file:// 地址，.gif/.svg 均可）
   var params = new URLSearchParams(window.location.search);
-  var file = params.get('file');
-  if (file) {
-    customEl.src = '../assets/pets/' + encodeURIComponent(file);
+  var src = params.get('src');
+  if (src) {
+    customEl.src = encodeURI(src);
     customEl.hidden = false;
     svgEl.hidden = true;
   }

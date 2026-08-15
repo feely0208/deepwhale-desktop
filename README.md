@@ -31,9 +31,9 @@ npm run dev        # 编译 + 启动桌面壳（自动拉起或复用本机 DSH 
 
 ### 桌面宠物
 - 默认宠物：Codex 风格橙色小团子（SVG + CSS 动画：呼吸弹跳 / 眨眼 / 落地压扁，鼠标悬停会开心蹦跶）。
-- **自制宠物**：把 `.gif` **或 `.svg`** 放进 `assets/pets/`，右键宠物 → 宠物皮肤 即可切换。
-  - SVG 宠物最容易上手：复制 `assets/pets/_TEMPLATE.svg` 改名编辑即可，支持在文件里写 CSS 动画。
-  - 内置示例：`cat.svg`、`frog.svg`。
+- **自制宠物**：托盘菜单 → 宠物 → "打开宠物目录…"（或右键宠物 → 打开宠物目录），把 `.gif` **或 `.svg`** 丢进弹出的目录，右键宠物 → 宠物皮肤 即可切换。
+  - 首次启动会把内置示例（`cat.svg`、`frog.svg`、`_TEMPLATE.svg`）自动复制到该目录（`userData/pets`）。
+  - SVG 宠物最容易上手：复制 `_TEMPLATE.svg` 改名编辑即可，支持在文件里写 CSS 动画。
 - 右键宠物：切换皮肤 / 穿透点击（可点到宠物后面的内容）/ 隐藏。
 
 ### 用量与额度面板
@@ -95,7 +95,7 @@ dsh-desktop/
 │   ├── pet/                # 宠物渲染页
 │   └── usage/              # 注入式用量面板
 ├── assets/
-│   ├── pets/               # 用户自定义 GIF
+│   ├── pets/               # 内置宠物示例（首次启动复制到 userData/pets）
 │   └── icons/              # 应用/托盘图标（npm run icons 生成）
 └── scripts/                # 构建辅助脚本
 ```

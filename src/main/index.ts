@@ -154,6 +154,7 @@ function buildMenuActions(): TrayMenuActions {
         pet?.window?.setIgnoreMouseEvents(item.checked, { forward: true });
       },
     },
+    { label: '打开宠物目录…', click: () => pet?.openPetsFolder() },
   ];
 
   return {
@@ -206,6 +207,7 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(async () => {
     pet = new PetWindow(store);
+    pet.ensureUserPetsDir();
     registerIpc();
 
     service = new ServiceManager(store.get('command'), {

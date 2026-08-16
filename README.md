@@ -30,7 +30,6 @@
 - 🔑 **API Key 安全**：`safeStorage`（系统钥匙串）加密存储，绝不落明文；或在设置页用量栏内嵌输入
 - 📦 **三平台打包**：macOS `.dmg` / Windows `.nsis` / Linux `.AppImage`·`.deb`，GitHub Actions CI 已配置
 
-> 参考社区项目 [anywhere-labs/deepseek-harness-desktop](https://github.com/anywhere-labs/deepseek-harness-desktop)（仅打包 mac/win），本项目壳从零编写并扩展以上功能。
 
 ## 快速开始
 
@@ -200,7 +199,6 @@ DeepSeek Harness 生态与周边项目：
 | 项目 | 简介 | 链接 |
 | --- | --- | --- |
 | DeepSeek Harness | DeepSeek 官方智能体框架（本项目的基础）。 | [GitHub](https://github.com/deepseek-ai/deepseek-harness) |
-| DSH Desktop | 社区桌面版（本项目参考了它的发布模式）。 | [GitHub](https://github.com/anywhere-labs/deepseek-harness-desktop) |
 | DeepSeek Harness 橙皮书 | DSH 社区实测手册。 | [GitHub](https://github.com/alchaincyf/deepseek-harness-orange-book) |
 | Awesome DSH Plugin | DSH 社区插件精选列表。 | [GitHub](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin) |
 | dsh-web-ui | DSH Web UI 插件与皮肤合集。 | [GitHub](https://github.com/zhu1090093659/dsh-web-ui) |

@@ -1,10 +1,10 @@
 # electron-builder 三平台打包配置（macOS / Windows / Linux）
-# 发布模式参考 anywhere-labs/deepseek-harness-desktop：
 #   - 产物命名带版本与架构：DeepWhale-Desktop-<version>-<arch>.dmg / ...-x64-Setup.exe
 #   - 发布目标为 GitHub Releases（draft 草稿，人工确认后公开）
 #   - macOS 正式发布走 Developer ID 签名 + 公证（fail-loud 预检，见 scripts/release-preflight.js 与 RELEASING.md）
 appId: com.deepwhale.desktop
 productName: DeepWhale Desktop
+copyright: Copyright © 2026 feely0208
 directories:
   output: release
 files:
@@ -51,5 +51,5 @@ linux:
     - deb
   category: Development
   icon: assets/icons/icon.png
-  maintainer: dsh-desktop contributors
+  maintainer: feely0208
   artifactName: DeepWhale-Desktop-${version}-${arch}.${ext}

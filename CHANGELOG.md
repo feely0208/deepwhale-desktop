@@ -4,6 +4,11 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [SemVer](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### 变更
+- 应用作者与版权改为 feely0208（macOS 显示简介不再显示 dsh-desktop contributors）；移除文档中对参考项目的引用，纯自主项目
+
 ## [1.0.0] - 2026-08-16
 
 ### 新增

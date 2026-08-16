@@ -1,6 +1,5 @@
 # 发布指南（RELEASING）
 
-发布模式参考 [anywhere-labs/deepseek-harness-desktop](https://github.com/anywhere-labs/deepseek-harness-desktop)：
 GitHub Releases 承载安装包（macOS DMG / Windows EXE / Linux AppImage·deb），推送 `v*` 标签自动构建并发布
 **Draft Release**，人工确认后公开；macOS 正式版本走 **Developer ID 签名 + 公证**（fail-loud 预检，凭据不全不出包）。
 

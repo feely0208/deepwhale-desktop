@@ -92,6 +92,9 @@ jobs:
           path: dist-assets
           merge-multiple: true
 
+      - name: 列出待上传产物（调试用）
+        run: find dist-assets -type f | sort
+
       - name: 创建 Draft Release 并上传全部附件
         run: |
           VER="$GITHUB_REF_NAME" python3 - <<'PY'
@@ -122,6 +125,7 @@ jobs:
           gh release create --repo "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME" --draft \
             --title "DeepWhale Desktop $GITHUB_REF_NAME" \
             --notes-file /tmp/release-notes.md
-          gh release upload --repo "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME" dist-assets/* --clobber
+          # 用 find 显式列出文件（upload-artifact 保留 release/ 前缀，dist-assets/* 只匹配到目录会被 gh 静默跳过）
+          gh release upload --repo "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME" $(find dist-assets -type f) --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

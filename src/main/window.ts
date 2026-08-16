@@ -28,7 +28,7 @@ export function createMainWindow(options: MainWindowOptions): BrowserWindow {
     },
   });
 
-  win.loadURL(`http://127.0.0.1:${options.port}`);
+  // 注意：DSH 页面由 index.ts 在服务就绪后加载（先显示"启动中"页面，避免冷启动无窗口）
 
   // 外部链接交给系统浏览器，不在应用内打开
   win.webContents.setWindowOpenHandler(({ url }) => {

@@ -27,6 +27,7 @@ export class ServiceManager extends EventEmitter {
   private child: ChildProcess | null = null;
   private stopping = false;
   private port: number;
+  private recentOutput: string[] = [];
 
   constructor(private command: string, private options: ServiceOptions) {
     super();
@@ -131,8 +132,16 @@ export class ServiceManager extends EventEmitter {
     const text = chunk.toString('utf-8');
     for (const line of text.split(/\r?\n/)) {
       const trimmed = line.trim();
-      if (trimmed) this.options.onLogLine?.(trimmed);
+      if (!trimmed) continue;
+      this.recentOutput.push(trimmed);
+      if (this.recentOutput.length > 50) this.recentOutput.shift();
+      this.options.onLogLine?.(trimmed);
     }
+  }
+
+  /** 最近 20 行子进程输出（用于"DSH 启动失败"弹窗定位问题） */
+  lastOutput(): string {
+    return this.recentOutput.slice(-20).join('\n');
   }
 }
 

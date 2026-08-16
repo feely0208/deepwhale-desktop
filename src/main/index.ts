@@ -58,6 +58,8 @@ function notifyLowBalance(threshold: number): void {
 
 /** did-finish-load 回调：应用主题/背景皮肤 + 注入用量面板 + 注入设置页扩展 */
 async function onPageReady(win: BrowserWindow): Promise<void> {
+  // 启动中页面（data: URL）不注入皮肤/用量/设置扩展
+  if (!win.webContents.getURL().startsWith('http://127.0.0.1:')) return;
   await skin.apply(win);
   if (store.get('usagePanelVisible')) {
     await usage.applyPanel(win);
@@ -342,6 +344,24 @@ if (!app.requestSingleInstanceLock()) {
 } else {
   app.on('second-instance', () => showMainWindow());
 
+
+/** 启动中 / 启动失败提示页（先出窗口，DSH 后台启动） */
+function startingPageHtml(failed: boolean): string {
+  const msg = failed
+    ? 'DSH 服务启动失败。请检查设置中的 command 命令，或查看错误弹窗中的日志。'
+    : '正在启动 DSH 服务，首次启动可能需要 30~60 秒…';
+  const color = failed ? '#f87171' : '#38bdf8';
+  const icon = failed ? '⚠️' : '🐋';
+  return `<!doctype html><html><head><meta charset="utf-8"><style>
+    body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0d1424;color:#e8eefc;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+    .box{text-align:center;padding:40px}.icon{font-size:56px}.title{font-size:26px;font-weight:700;margin:16px 0 10px}.msg{font-size:15px;color:${color}}
+  </style></head><body><div class="box"><div class="icon">${icon}</div><div class="title">DeepWhale Desktop</div><p class="msg">${msg}</p></div></body></html>`;
+}
+
+async function showStartingPage(win: BrowserWindow, failed = false): Promise<void> {
+  await win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(startingPageHtml(failed)));
+}
+
   app.whenReady().then(async () => {
     // 原生界面主题跟随设置（跟随系统/浅色/深色），默认跟随系统
     nativeTheme.themeSource = store.get('theme');
@@ -356,20 +376,8 @@ if (!app.requestSingleInstanceLock()) {
     });
     usage.start();
 
-    try {
-      await service.ensureReady();
-      if (SMOKE) console.log('[smoke] DSH ready (reused or spawned)');
-    } catch (e) {
-      console.error('[main] DSH 启动失败:', e);
-      if (SMOKE) {
-        console.error('[smoke] service failed');
-        app.exit(1);
-        return;
-      }
-      dialog.showErrorBox('DSH 启动失败', String(e));
-      // 不退出：用户可修改命令后从托盘重启
-    }
-
+    // 先创建窗口并显示"正在启动 DSH"页面，DSH 在后台拉起——
+    // 避免冷启动时长时间无窗口（表现为"启动了没反应"）
     mainWin = createMainWindow({
       port: store.get('port'),
       closeToTray: store.get('closeToTray'),
@@ -379,6 +387,30 @@ if (!app.requestSingleInstanceLock()) {
     mainWin.on('closed', () => {
       mainWin = null;
     });
+    await showStartingPage(mainWin);
+
+    let dshReady = false;
+    try {
+      await service.ensureReady();
+      dshReady = true;
+      if (SMOKE) console.log('[smoke] DSH ready (reused or spawned)');
+    } catch (e) {
+      console.error('[main] DSH 启动失败:', e);
+      if (SMOKE) {
+        console.error('[smoke] service failed');
+        app.exit(1);
+        return;
+      }
+      const detail = service.lastOutput() ? `\n\n--- DSH 输出 ---\n${service.lastOutput()}` : '';
+      dialog.showErrorBox('DSH 启动失败', `${String(e)}${detail}`);
+      // 不退出：用户可修改命令后从托盘重启
+    }
+
+    if (dshReady) {
+      await mainWin.loadURL(`http://127.0.0.1:${store.get('port')}`);
+    } else {
+      await showStartingPage(mainWin, true);
+    }
 
     if (store.get('petVisible')) pet.create();
 

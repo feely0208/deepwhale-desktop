@@ -21,7 +21,8 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            args: --mac
+            # mac 同时构建 arm64 与 x64（Intel 用户可下载 x64 包）
+            args: --mac --x64 --arm64
           - os: windows-latest
             args: --win
           - os: ubuntu-latest

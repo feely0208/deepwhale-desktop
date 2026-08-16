@@ -27,7 +27,8 @@ jobs:
         run: npm run build
 
       - name: Package
-        run: npm run dist
+        # CI 只做构建校验，不发布（--publish never；正式发布走 release.yml）
+        run: npm run dist -- --publish never
         env:
           # 未配置签名时跳过签名，仅产出未签名包（后续接 Apple/Windows 证书）
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'

@@ -17,7 +17,7 @@ npmRebuild: false
 # 发布目标：GitHub Releases。推送 v* 标签后由 .github/workflows/release.yml 自动出包并上传草稿。
 publish:
   provider: github
-  draft: true
+  releaseType: draft
 
 mac:
   target:

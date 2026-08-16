@@ -188,7 +188,6 @@ API Key 相关处理见 [SECURITY.md](SECURITY.md)。
 ## 特别感谢
 
 - [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 与 DeepSeek AI 团队：DSH 本身
-- 参考项目 [anywhere-labs/deepseek-harness-desktop](https://github.com/anywhere-labs/deepseek-harness-desktop)：发布模式、打包与签名公证流程参考
 
 ## 相关项目
 

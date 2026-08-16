@@ -97,7 +97,9 @@ jobs:
 
       - name: 创建 Draft Release 并上传全部附件
         run: |
-          VER="$GITHUB_REF_NAME" python3 - <<'PY'
+          # 用模板表达式取标签名（环境变量 GITHUB_REF_NAME 在某些场景为空，会导致建出 untagged 草稿）
+          TAG="${{ github.ref_name }}"
+          VER="$TAG" python3 - <<'PY'
           import os, textwrap
           v = os.environ['VER']
           notes = textwrap.dedent(f'''
@@ -121,11 +123,11 @@ jobs:
           notes = notes.strip('\n') + '\n'
           open('/tmp/release-notes.md', 'w', encoding='utf-8').write(notes)
           PY
-          gh release delete --repo "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME" --yes 2>/dev/null || true
-          gh release create --repo "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME" --draft \
-            --title "DeepWhale Desktop $GITHUB_REF_NAME" \
+          gh release delete --repo "$GITHUB_REPOSITORY" "$TAG" --yes 2>/dev/null || true
+          gh release create --repo "$GITHUB_REPOSITORY" "$TAG" --draft \
+            --title "DeepWhale Desktop $TAG" \
             --notes-file /tmp/release-notes.md
-          # 用 find 显式列出文件（upload-artifact 保留 release/ 前缀，dist-assets/* 只匹配到目录会被 gh 静默跳过）
-          gh release upload --repo "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME" $(find dist-assets -type f) --clobber
+          # 上传全部产物（排除 electron-builder 的调试文件）
+          gh release upload --repo "$GITHUB_REPOSITORY" "$TAG" $(find dist-assets -type f ! -name 'builder-debug.yml') --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

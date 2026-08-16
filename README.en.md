@@ -58,6 +58,7 @@ A default `userData/settings.json` is generated on first run; if a DSH instance 
 - Collapsible corner panel + DSH settings → Usage: total balance / gift / top-up / today's requests / cumulative tokens
 - Data source: official `GET https://api.deepseek.com/user/balance`; green progress bar (balance sufficiency + composition)
 - Low-balance alerts (default ¥5 threshold); auto-refresh every 5 minutes by default, with manual refresh available
+- ⚠️ **Usage monitoring requires an API key**: enter your `sk-...` key in **Settings → Usage** and click **Save Key** (or paste an `sk-` key anywhere in the DSH settings page — it syncs automatically on blur). Without a key the balance/usage panel shows "—"; **DSH itself still works normally**
 
 ### API Key Configuration
 - Two entry points, one store: tray → **Set API Key…** dialog, or the inline input in **Settings → Usage**
@@ -150,6 +151,8 @@ dsh-desktop/
 **Is it paid?** Free forever, open source (MIT). No purchases, subscriptions, ads, or trials.
 
 **Do I need to register or log in?** No. The only optional thing is your own DeepSeek API key (to view balance/usage in-app; DSH works fine without it).
+
+**The usage panel shows no balance?** Enter your `sk-...` API key in **Settings → Usage** and click **Save Key** to fetch the balance (an `sk-` key pasted anywhere in the DSH settings page also syncs automatically). Without it the usage panel is unavailable, but DSH works normally.
 
 **Is my API key safe?** It is encrypted with the OS keychain (`safeStorage`) and used only in the main process — never stored in plain text, never uploaded (see [SECURITY.md](SECURITY.md)).
 

@@ -5,6 +5,8 @@
 
 [English](README.en.md) · **中文**
 
+> 🏠 [项目主页](https://feely0208.github.io/deepwhale-desktop) · [下载 Releases](https://github.com/feely0208/deepwhale-desktop/releases)
+
 ![Free Forever](https://img.shields.io/badge/永久免费-forever-brightgreen)
 ![Open Source](https://img.shields.io/badge/开源-Open%20Source-4CAF50)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)

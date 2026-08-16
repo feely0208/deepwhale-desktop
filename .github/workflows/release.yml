@@ -68,11 +68,18 @@ jobs:
           # WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           # WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
 
-      - name: Upload artifacts (安装包暂存)
+      - name: Upload artifacts (仅安装包，排除未打包 app 目录)
         uses: actions/upload-artifact@v4
         with:
           name: deepwhale-desktop-${{ matrix.os }}
-          path: release/**
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/*.exe
+            release/*.AppImage
+            release/*.deb
+            release/*.blockmap
+            release/*.yml
           if-no-files-found: error
 
   publish:

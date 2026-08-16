@@ -1,7 +1,7 @@
 {
   "name": "deepwhale-desktop",
   "productName": "DeepWhale Desktop",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "深鲸桌面（DeepWhale Desktop）：把 DeepSeek Harness（DSH）Web UI 装进 Electron 原生窗口的跨平台桌面壳，附带背景皮肤、帧动画桌面宠物与用量/额度面板",
   "main": "dist/main/index.js",
   "author": "dsh-desktop contributors",

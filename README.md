@@ -3,6 +3,8 @@
 > 把 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）的 Web UI 装进 Electron 原生窗口的跨平台桌面壳。
 > Cross-platform desktop shell that wraps the DeepSeek Harness (DSH) web UI into a native Electron window.
 
+[English](README.en.md) · **中文**
+
 ![Free Forever](https://img.shields.io/badge/永久免费-forever-brightgreen)
 ![Open Source](https://img.shields.io/badge/开源-Open%20Source-4CAF50)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)

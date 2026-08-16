@@ -87,6 +87,8 @@ git push -u origin main
 
 - 确认仓库 Topics（Settings → 左下 Topics → 添加）：建议 `deepseek`、`deepseek-harness`、`electron`、`desktop`、`dsh`、`dsh-plugin-desktop`
 - 在 README 底部"联系方式"放入你的微信 / QQ 二维码图片（`assets/contact-wechat.png`、`assets/contact-qq.jpg`）并提交
+- 更新主页下载链接：`docs/index.html` 里硬编码了 `v1.0.0` 的下载地址，新版本发布后把其中的版本号（`1.0.0` / `v1.0.0`）替换为新版本号并提交
+- 首次启用 GitHub Pages：仓库 Settings → Pages → Source 选 **GitHub Actions** → Save；此后推送 main 会自动部署主页到 `https://<你的用户名>.github.io/deepwhale-desktop`
 
 ## 五、常见问题
 

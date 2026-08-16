@@ -12,7 +12,44 @@ permissions:
   contents: write
 
 jobs:
+  # 预创建 Draft Release：先清理该标签下的旧草稿，再创建带发布说明模板的新草稿。
+  # 三个平台的 electron-builder 随后只往这一个草稿上传附件，
+  # 避免并发发布时各自"创建草稿"产生分叉（多个草稿、附件散落）。
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 清理旧草稿并创建新 Draft Release
+        run: |
+          VER="$GITHUB_REF_NAME" python3 - <<'PY'
+          import os, textwrap
+          v = os.environ['VER']
+          notes = textwrap.dedent(f'''
+          # DeepWhale Desktop {v}
+
+          ## 下载
+          - macOS（Apple Silicon / Intel）：`DeepWhale-Desktop-{v}-arm64.dmg` / `DeepWhale-Desktop-{v}-x64.dmg`
+          - Windows x64：`DeepWhale-Desktop-{v}-x64-Setup.exe`
+          - Linux：`DeepWhale-Desktop-{v}-x86_64.AppImage` / `DeepWhale-Desktop-{v}-x86_64.deb`
+
+          ## 更新内容
+          - 把 DeepSeek Harness Web UI 装进原生窗口的跨平台桌面壳：背景皮肤、桌面宠物、用量/额度面板、API Key 安全存储
+          - 永久免费 · 开源（MIT）
+
+          > 本项目是基于 DeepSeek Harness 构建的社区桌面版本，并非 DeepSeek 官方产品，也不代表 DeepSeek 官方立场。
+          > 本项目完全开源免费。如果有人向您以任何形式出售此软件，请拒绝交易。
+          ''')
+          notes = notes.strip('\n') + '\n'
+          open('/tmp/release-notes.md', 'w', encoding='utf-8').write(notes)
+          PY
+          gh release delete "$GITHUB_REF_NAME" --yes 2>/dev/null || true
+          gh release create "$GITHUB_REF_NAME" --draft \
+            --title "DeepWhale Desktop $GITHUB_REF_NAME" \
+            --notes-file /tmp/release-notes.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   release:
+    needs: prepare
     strategy:
       fail-fast: false
       matrix:

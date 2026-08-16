@@ -35,14 +35,17 @@ jobs:
           - 把 DeepSeek Harness Web UI 装进原生窗口的跨平台桌面壳：背景皮肤、桌面宠物、用量/额度面板、API Key 安全存储
           - 永久免费 · 开源（MIT）
 
+          ## 特别感谢
+          - [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 与 DeepSeek AI 团队：DSH 本身
+
           > 本项目是基于 DeepSeek Harness 构建的社区桌面版本，并非 DeepSeek 官方产品，也不代表 DeepSeek 官方立场。
           > 本项目完全开源免费。如果有人向您以任何形式出售此软件，请拒绝交易。
           ''')
           notes = notes.strip('\n') + '\n'
           open('/tmp/release-notes.md', 'w', encoding='utf-8').write(notes)
           PY
-          gh release delete "$GITHUB_REF_NAME" --yes 2>/dev/null || true
-          gh release create "$GITHUB_REF_NAME" --draft \
+          gh release delete --repo "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME" --yes 2>/dev/null || true
+          gh release create --repo "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME" --draft \
             --title "DeepWhale Desktop $GITHUB_REF_NAME" \
             --notes-file /tmp/release-notes.md
         env:

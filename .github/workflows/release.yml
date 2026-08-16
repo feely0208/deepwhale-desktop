@@ -1,0 +1,74 @@
+# 发布工作流：推送 v* 标签 → 三平台打包 → 上传到 GitHub Releases（Draft，人工确认后公开）
+# 模式参考 anywhere-labs/deepseek-harness-desktop：GitHub Releases 承载安装包（DMG/EXE/AppImage/deb）。
+# 详见 RELEASING.md
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            args: --mac
+          - os: windows-latest
+            args: --win
+          - os: ubuntu-latest
+            args: --linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (tsc + assets)
+        run: npm run build
+
+      - name: Package & publish to GitHub Release (draft)
+        run: npm run dist -- --publish always ${{ matrix.args }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 未配置签名证书时产出未签名安装包（功能可用，但系统会提示"无法验证开发者"）。
+          # 配置好签名/公证 Secrets 后，删除下面这一行（mac 任务）即可自动签名+公证。
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          # —— 可选：macOS 签名（两种方式任选其一）——
+          # CSC_LINK: ${{ secrets.CSC_LINK }}
+          # CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          # CSC_NAME: ${{ secrets.CSC_NAME }}
+          # —— 或 ——
+          # MAC_CERT_P12_BASE64: ${{ secrets.MAC_CERT_P12_BASE64 }}
+          # MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+          # —— 可选：macOS 公证（三种方式任选其一）——
+          # APPLE_ID: ${{ secrets.APPLE_ID }}
+          # APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # —— 或 ——
+          # APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          # APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          # APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          # —— 或 ——
+          # APPLE_KEYCHAIN_PROFILE: ${{ secrets.APPLE_KEYCHAIN_PROFILE }}
+          # —— 可选：Windows 签名 ——
+          # WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          # WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+
+      - name: Upload artifacts (backup)
+        uses: actions/upload-artifact@v4
+        with:
+          name: deepwhale-desktop-${{ matrix.os }}
+          path: release/**
+          if-no-files-found: warn

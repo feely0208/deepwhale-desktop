@@ -22,7 +22,9 @@
     "dist": "npm run build && electron-builder",
     "dist:mac": "npm run build && electron-builder --mac",
     "dist:win": "npm run build && electron-builder --win",
-    "dist:linux": "npm run build && electron-builder --linux"
+    "dist:linux": "npm run build && electron-builder --linux",
+    "preflight:mac": "node scripts/release-preflight.js",
+    "release:mac": "node scripts/release-mac.js"
   },
   "dependencies": {
     "tree-kill": "^1.2.2"
@@ -35,10 +37,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/YOUR-NAME/dsh-desktop.git"
+    "url": "https://github.com/feely0208/deepwhale-desktop.git"
   },
-  "homepage": "https://github.com/YOUR-NAME/dsh-desktop#readme",
+  "homepage": "https://github.com/feely0208/deepwhale-desktop#readme",
   "bugs": {
-    "url": "https://github.com/YOUR-NAME/dsh-desktop/issues"
+    "url": "https://github.com/feely0208/deepwhale-desktop/issues"
   }
 }

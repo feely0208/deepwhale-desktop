@@ -3,10 +3,19 @@
 > 把 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）的 Web UI 装进 Electron 原生窗口的跨平台桌面壳。
 > Cross-platform desktop shell that wraps the DeepSeek Harness (DSH) web UI into a native Electron window.
 
+![Free Forever](https://img.shields.io/badge/永久免费-forever-brightgreen)
+![Open Source](https://img.shields.io/badge/开源-Open%20Source-4CAF50)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
 ![Electron](https://img.shields.io/badge/Electron-43-green)
 ![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)
+
+## ✨ 永久免费 · 开源 · 无套路
+
+- 💯 **永久免费**：软件本身完全免费——无内购、无订阅、无广告、无隐藏收费，而且会一直保持
+- 🌍 **开源透明**：全部源码在 GitHub 公开（MIT），可审计、可提 PR、可自由二次开发
+- 🔒 **数据自主**：API Key 由系统钥匙串加密存储在本机，余额直连 DeepSeek 官方接口，无第三方中转
+- 🚫 **拒绝倒卖**：如果有人向您以任何形式出售此软件，请拒绝交易并告诉我们
 
 ## 特性
 
@@ -119,9 +128,11 @@ dsh-desktop/
 
 ## 打包与 CI
 
-- `electron-builder.yml` 已配置 mac（dmg/zip）、win（nsis）、linux（AppImage/deb）
-- `.github/workflows/build.yml`：三平台矩阵构建，产出安装包上传为 Artifact
-- 说明：跨平台二进制需在各自系统或 CI 上构建；正式发布建议配置 Apple Developer ID 签名与公证
+- `electron-builder.yml` 已配置 mac（dmg/zip）、win（nsis）、linux（AppImage/deb）；产物命名带版本与架构，发布目标为 GitHub Releases 草稿
+- `.github/workflows/build.yml`：三平台矩阵构建（PR/推送），产出安装包上传为 Artifact
+- `.github/workflows/release.yml`：推送 `v*` 标签自动三平台打包并发布 **Draft Release**（人工确认后公开），详见 [RELEASING.md](RELEASING.md)
+- macOS 正式发布走 Developer ID 签名 + 公证（`npm run preflight:mac` fail-loud 预检，流程见 [RELEASING.md](RELEASING.md)）
+- 说明：跨平台二进制需在各自系统或 CI 上构建；未配置签名证书时 CI 产出未签名包（仅用于体验/验证）
 
 ## Roadmap
 
@@ -133,14 +144,72 @@ dsh-desktop/
 - [ ] 用量明细：DeepSeek 开放用量查询 API 后接入在线用量
 - [ ] 设置项 UI 化（当前为 settings.json + 菜单 + DSH 设置页注入）
 
+## 常见问题（FAQ）
+
+**收费吗？** 永久免费、开源（MIT）。无内购、无订阅、无广告、无试用期。
+
+**需要注册或登录吗？** 不需要。唯一可选的是你自己的 DeepSeek API Key（用于在应用内查看余额/用量；不填也能正常使用 DSH）。
+
+**我的 API Key 安全吗？** 由系统钥匙串（`safeStorage`）加密存储在本机，只在主进程使用，绝不落明文、绝不上传（详见 [SECURITY.md](SECURITY.md)）。
+
+**和 DeepSeek Harness 是什么关系？** 本项目是社区桌面壳，基于 DeepSeek Harness 构建，**并非 DeepSeek 官方产品**，也不代表官方立场。
+
+**支持哪些系统？** macOS（dmg/zip）、Windows（nsis）、Linux（AppImage/deb）。
+
 ## 贡献
 
 欢迎提交 Issue 与 PR。请先阅读 [CONTRIBUTING.md](CONTRIBUTING.md)，保持模块职责单一、错误处理兜底、尽量不新增第三方依赖。
+
+## 联系方式
+
+扫码添加，交流使用问题、建议与反馈：
+
+<table>
+  <thead>
+    <tr>
+      <th align="center">微信群</th>
+      <th align="center">QQ群</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td align="center"><img src="assets/contact-wechat.png" alt="微信群二维码" width="180"></td>
+      <td align="center"><img src="assets/contact-qq.jpg" alt="QQ群二维码" width="180"></td>
+    </tr>
+  </tbody>
+</table>
+
+> 图片放 `assets/` 下：`contact-wechat.png`（微信群）、`contact-qq.jpg`（QQ群），尺寸建议 ≥ 180×180。
 
 ## 安全
 
 API Key 相关处理见 [SECURITY.md](SECURITY.md)。
 
+## 特别感谢
+
+- [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 与 DeepSeek AI 团队：DSH 本身
+- 参考项目 [anywhere-labs/deepseek-harness-desktop](https://github.com/anywhere-labs/deepseek-harness-desktop)：发布模式、打包与签名公证流程参考
+
+## 相关项目
+
+DeepSeek Harness 生态与周边项目：
+
+| 项目 | 简介 | 链接 |
+| --- | --- | --- |
+| DeepSeek Harness | DeepSeek 官方智能体框架（本项目的基础）。 | [GitHub](https://github.com/deepseek-ai/deepseek-harness) |
+| DSH Desktop | 社区桌面版（本项目参考了它的发布模式）。 | [GitHub](https://github.com/anywhere-labs/deepseek-harness-desktop) |
+| DeepSeek Harness 橙皮书 | DSH 社区实测手册。 | [GitHub](https://github.com/alchaincyf/deepseek-harness-orange-book) |
+| Awesome DSH Plugin | DSH 社区插件精选列表。 | [GitHub](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin) |
+| dsh-web-ui | DSH Web UI 插件与皮肤合集。 | [GitHub](https://github.com/zhu1090093659/dsh-web-ui) |
+| dsh-TUI | DSH 全屏交互式终端界面。 | [GitHub](https://github.com/ccch1mneyyy/dsh-TUI) |
+| DSH-better-sidebar | DSH 侧边栏工作台（文件/终端/Git/子代理）。 | [GitHub](https://github.com/omdsh-dev/DSH-better-sidebar) |
+| Awesome DeepSeek Harness | DSH 插件、工具与基础设施精选列表。 | [GitHub](https://github.com/0xsline/awesome-deepseek-harness) |
+
+<sub>如果希望收录您的项目，欢迎通过上方联系方式联系我们。</sub>
+
 ## License
 
 [MIT](LICENSE)
+
+> 本项目是基于 DeepSeek Harness 构建的社区桌面版本，并非 DeepSeek 官方产品，也不代表 DeepSeek 官方立场。
+> 本项目完全开源免费。如果有人向您以任何形式出售此软件，请拒绝交易。

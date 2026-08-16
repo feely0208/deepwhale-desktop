@@ -1,5 +1,8 @@
 # electron-builder 三平台打包配置（macOS / Windows / Linux）
-# 说明：跨平台二进制需在各自系统或 CI 上构建（mac 上不能直接产出 Windows exe）。
+# 发布模式参考 anywhere-labs/deepseek-harness-desktop：
+#   - 产物命名带版本与架构：DeepWhale-Desktop-<version>-<arch>.dmg / ...-x64-Setup.exe
+#   - 发布目标为 GitHub Releases（draft 草稿，人工确认后公开）
+#   - macOS 正式发布走 Developer ID 签名 + 公证（fail-loud 预检，见 scripts/release-preflight.js 与 RELEASING.md）
 appId: com.deepwhale.desktop
 productName: DeepWhale Desktop
 directories:
@@ -11,6 +14,11 @@ files:
 asar: true
 npmRebuild: false
 
+# 发布目标：GitHub Releases。推送 v* 标签后由 .github/workflows/release.yml 自动出包并上传草稿。
+publish:
+  provider: github
+  draft: true
+
 mac:
   target:
     - dmg
@@ -18,11 +26,19 @@ mac:
   category: public.app-category.developer-tools
   icon: assets/icons/icon.png
   darkModeSupport: true
+  # 签名 + 公证相关（未签名构建不受影响；公证由发布脚本显式开启 --config.mac.notarize=true）
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  notarize: false
+  artifactName: DeepWhale-Desktop-${version}-${arch}.${ext}
 
 win:
   target:
     - nsis
   icon: assets/icons/icon.png
+  artifactName: DeepWhale-Desktop-${version}-${arch}-Setup.${ext}
 
 nsis:
   oneClick: false
@@ -36,3 +52,4 @@ linux:
   category: Development
   icon: assets/icons/icon.png
   maintainer: dsh-desktop contributors
+  artifactName: DeepWhale-Desktop-${version}-${arch}.${ext}

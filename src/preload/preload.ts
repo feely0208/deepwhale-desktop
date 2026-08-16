@@ -25,6 +25,10 @@ contextBridge.exposeInMainWorld('dsh', {
   setApiKey: (key: string) => ipcRenderer.send('usage:set-key', key),
   closeWindow: () => ipcRenderer.send('apikey:close'),
 
+  // ---- 通用设置读写（设置页扩展用） ----
+  getSetting: (key: string) => ipcRenderer.invoke('settings:get', key),
+  setSetting: (key: string, value: unknown) => ipcRenderer.send('settings:set', { key, value }),
+
   // ---- 主题 / 背景皮肤（设置页扩展） ----
   themeState: () => ipcRenderer.invoke('theme:state'),
   skinPickImage: () => ipcRenderer.send('skin:pick-image'),

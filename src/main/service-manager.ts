@@ -102,6 +102,12 @@ export class ServiceManager extends EventEmitter {
     const { command, args } = parseCommand(this.command);
     const resolved = resolveExecutable(command);
     const env: NodeJS.ProcessEnv = { ...process.env };
+    // Finder 启动的 App PATH 极简（无 /usr/local/bin 等），npx 内部会再调 node 会失败。
+    // 把可执行文件所在目录补进子进程 PATH（node 与 npx 通常同目录）。
+    const exeDir = path.dirname(resolved);
+    if (exeDir && exeDir !== '.') {
+      env.PATH = env.PATH ? `${exeDir}:${env.PATH}` : exeDir;
+    }
     console.log(`[service] 启动 DSH: ${this.command}（可执行文件: ${resolved}）`);
     this.child = spawn(resolved, args, {
       env,

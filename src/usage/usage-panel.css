@@ -84,6 +84,34 @@
   display: none;
 }
 
+/* 收起后：小药丸，不挡内容；按住仍可拖动 */
+#dsh-usage-panel.collapsed {
+  width: auto;
+  min-width: 86px;
+  max-width: 160px;
+}
+#dsh-usage-panel.collapsed .uph {
+  padding: 5px 10px;
+  cursor: grab;
+}
+#dsh-usage-panel.collapsed .uph:active {
+  cursor: grabbing;
+}
+#dsh-usage-panel.collapsed .title {
+  font-size: 12px;
+}
+#dsh-usage-panel.collapsed .dot {
+  width: 7px;
+  height: 7px;
+}
+#dsh-usage-panel .uph {
+  cursor: grab;
+  user-select: none;
+}
+#dsh-usage-panel .uph:active {
+  cursor: grabbing;
+}
+
 #dsh-usage-panel .row {
   display: flex;
   justify-content: space-between;

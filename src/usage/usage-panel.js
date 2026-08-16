@@ -61,6 +61,54 @@
     }
   });
 
+  /* 手动拖动定位（按住标题栏拖动；点击仍用于折叠/展开） */
+  (function () {
+    var header = panel.querySelector('.uph');
+    var dragging = false, moved = false, sx = 0, sy = 0, ox = 0, oy = 0;
+    header.addEventListener('pointerdown', function (e) {
+      dragging = true; moved = false;
+      sx = e.clientX; sy = e.clientY;
+      var r = panel.getBoundingClientRect();
+      ox = r.left; oy = r.top;
+      header.setPointerCapture && header.setPointerCapture(e.pointerId);
+    });
+    header.addEventListener('pointermove', function (e) {
+      if (!dragging) return;
+      var dx = e.clientX - sx, dy = e.clientY - sy;
+      if (!moved && Math.abs(dx) < 5 && Math.abs(dy) < 5) return;
+      moved = true;
+      panel.style.right = 'auto';
+      panel.style.bottom = 'auto';
+      panel.style.left = Math.max(0, Math.min(window.innerWidth - 60, ox + dx)) + 'px';
+      panel.style.top = Math.max(0, Math.min(window.innerHeight - 40, oy + dy)) + 'px';
+    });
+    function endDrag() {
+      if (!dragging) return;
+      dragging = false;
+      if (moved) {
+        try {
+          localStorage.setItem('dsh-usage-panel-pos', JSON.stringify({ left: panel.style.left, top: panel.style.top }));
+        } catch (_) { /* ignore */ }
+      }
+    }
+    header.addEventListener('pointerup', endDrag);
+    header.addEventListener('pointercancel', endDrag);
+  })();
+
+  /* 恢复上次拖放位置 */
+  try {
+    var savedPos = localStorage.getItem('dsh-usage-panel-pos');
+    if (savedPos) {
+      var pos = JSON.parse(savedPos);
+      if (pos && pos.left && pos.top) {
+        panel.style.right = 'auto';
+        panel.style.bottom = 'auto';
+        panel.style.left = pos.left;
+        panel.style.top = pos.top;
+      }
+    }
+  } catch (_) { /* ignore */ }
+
   panel.querySelector('#dsh-up-refresh').addEventListener('click', function (e) {
     e.stopPropagation();
     window.dsh.usageRefresh();

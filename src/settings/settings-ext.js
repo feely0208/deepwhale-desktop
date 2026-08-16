@@ -75,6 +75,7 @@
       '        <button class="dsh-ext-btn" id="dsh-ext-u-key-save">保存 Key</button>' +
       '        <button class="dsh-ext-btn" id="dsh-ext-u-key-clear">清除</button>' +
       '      </div>' +
+      '      <label class="dsh-ext-check"><input type="checkbox" id="dsh-ext-u-keepdsh" /> 退出时保留 DSH 服务（下次启动秒开）</label>' +
       '      <div class="row"><span class="k">总余额</span><span id="dsh-ext-u-total">—</span></div>' +
       '      <div class="row"><span class="k">赠送 / 充值</span><span id="dsh-ext-u-split">—</span></div>' +
       '      <div class="row"><span class="k">今日请求</span><span id="dsh-ext-u-req">0</span></div>' +
@@ -228,6 +229,15 @@
       window.dsh.setApiKey('');
       window.dsh.usageRefresh();
     });
+    var keepDshEl = document.getElementById('dsh-ext-u-keepdsh');
+    if (keepDshEl && window.dsh.getSetting) {
+      window.dsh.getSetting('keepDshRunning').then(function (v) {
+        keepDshEl.checked = v !== false;
+      }).catch(function () { /* ignore */ });
+      keepDshEl.addEventListener('change', function () {
+        window.dsh.setSetting('keepDshRunning', keepDshEl.checked);
+      });
+    }
     var uBar = document.getElementById('dsh-ext-u-bar');
     var uSeg = document.getElementById('dsh-ext-u-seg');
 
@@ -366,4 +376,23 @@
   var observer = new MutationObserver(function () { maybeInject(); });
   observer.observe(document.documentElement, { childList: true, subtree: true });
   maybeInject();
+
+  /* ---------- 外部 Key 联动 ----------
+   * DSH 模型区等任意位置填入 sk- 开头的 Key（失焦/回车）时，自动同步到用量面板，
+   * 让用量/余额查询也能用上（不依赖具体控件结构，按 sk- 前缀识别）。 */
+  if (!window.__dshExtKeySyncInstalled) {
+    window.__dshExtKeySyncInstalled = true;
+    var lastSyncedKey = null;
+    function trySyncExternalKey(target) {
+      if (!target || !window.dsh || typeof window.dsh.setApiKey !== 'function') return;
+      if (target.id === 'dsh-ext-u-key-input') return; // 自己的输入框由保存按钮处理
+      var v = String(target.value || '').trim();
+      if (/^sk-[A-Za-z0-9]{8,}/.test(v) && v !== lastSyncedKey) {
+        lastSyncedKey = v;
+        window.dsh.setApiKey(v);
+        if (typeof window.dsh.usageRefresh === 'function') window.dsh.usageRefresh();
+      }
+    }
+    document.addEventListener('change', function (e) { trySyncExternalKey(e.target); }, true);
+  }
 })();

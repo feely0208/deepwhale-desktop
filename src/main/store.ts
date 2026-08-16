@@ -34,6 +34,8 @@ export interface Settings {
   closeToTray: boolean;
   /** 用量面板是否显示 */
   usagePanelVisible: boolean;
+  /** 退出应用时是否保留 DSH 服务（保留则下次启动秒开，不保留则退出时回收） */
+  keepDshRunning: boolean;
   /** 余额拉取间隔（分钟） */
   usageRefreshMinutes: number;
   /** 低余额提醒阈值（元，按币种比较） */
@@ -56,6 +58,7 @@ const DEFAULTS: Settings = {
   clickThrough: false,
   closeToTray: true,
   usagePanelVisible: true,
+  keepDshRunning: true,
   usageRefreshMinutes: 5,
   usageLowBalanceAlert: 5,
   apiKeyEncrypted: null,

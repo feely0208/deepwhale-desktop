@@ -253,6 +253,18 @@ function registerIpc(): void {
     }
   });
 
+  // ---- 通用设置读写（设置页扩展用） ----
+  ipcMain.handle('settings:get', (_e, key: string) => store.get(key as never) ?? null);
+  ipcMain.on('settings:set', (_e, payload: { key: string; value: unknown }) => {
+    if (!payload || typeof payload.key !== 'string') return;
+    try {
+      store.set(payload.key as never, payload.value as never);
+      store.save();
+    } catch (err) {
+      console.error('[main] 设置保存失败:', payload.key, err);
+    }
+  });
+
   // ---- 主题 / 背景皮肤（设置页/菜单共用） ----
   ipcMain.handle('theme:state', () => ({
     skinImage: store.get('skinImage'),
@@ -460,7 +472,13 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
   app.on('before-quit', () => {
     quitting = true;
     usage.stop();
-    if (service) void service.stop();
+    if (service) {
+      if (store.get('keepDshRunning')) {
+        console.log('[main] 退出时保留 DSH 服务（keepDshRunning=true，下次启动秒开）');
+      } else {
+        void service.stop();
+      }
+    }
     store.save();
   });
 

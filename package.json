@@ -24,7 +24,8 @@
     "dist:win": "npm run build && electron-builder --win",
     "dist:linux": "npm run build && electron-builder --linux",
     "preflight:mac": "node scripts/release-preflight.js",
-    "release:mac": "node scripts/release-mac.js"
+    "release:mac": "node scripts/release-mac.js",
+    "check:links": "node scripts/check-homepage-links.js"
   },
   "dependencies": {
     "tree-kill": "^1.2.2"

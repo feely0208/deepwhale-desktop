@@ -3,135 +3,166 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DeepWhale Desktop（深鲸桌面）— 永久免费 · 开源</title>
-<meta name="description" content="把 DeepSeek Harness 装进原生窗口的跨平台桌面壳：背景皮肤、桌面宠物、用量面板。永久免费、开源（MIT）。">
+<title>DeepWhale 深鲸 — 让 DeepSeek 触手可及</title>
+<meta name="description" content="深鲸（DeepWhale）：把 DeepSeek Harness 装进原生窗口的跨平台桌面壳与手机端。永久免费、开源（MIT）。">
 <link rel="icon" type="image/png" href="assets/icon.png">
 <style>
-  :root{--bg:#0d1424;--fg:#e8eefc;--muted:#9fb0d0;--accent:#38bdf8;--accent2:#6366f1;--card:#121b30;--border:#1f2b45;--ok:#34d399;}
+  :root{--bg:#0d1424;--bg2:#141b33;--fg:#e8eefc;--muted:#9fb0d0;--accent:#38bdf8;--accent2:#6366f1;--card:#121b30;--border:#1f2b45;--ok:#34d399;--warn:#fbbf24}
   *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
   body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:#fff;color:#0f172a;line-height:1.6}
   a{color:var(--accent2);text-decoration:none}
-  .wrap{max-width:1000px;margin:0 auto;padding:0 20px}
-  /* header */
+  .wrap{max-width:1080px;margin:0 auto;padding:0 20px}
+
+  /* ===== header ===== */
   header{background:linear-gradient(135deg,var(--bg) 0%,#141b33 100%);color:var(--fg);padding:14px 0;position:sticky;top:0;z-index:9;border-bottom:1px solid var(--border)}
-  header .wrap{display:flex;align-items:center;justify-content:space-between}
-  header .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:17px}
+  header .wrap{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+  header .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:17px;white-space:nowrap}
   header .brand img{width:30px;height:30px;border-radius:7px}
+  nav.topnav{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+  nav.topnav a{color:var(--muted);font-size:14px;transition:color .15s}
+  nav.topnav a:hover{color:var(--accent)}
+  nav.topnav a.ghost{border:1px solid var(--border);border-radius:20px;padding:4px 14px}
   .lang-switch button{background:transparent;border:1px solid var(--border);color:var(--fg);border-radius:20px;padding:5px 14px;cursor:pointer;font-size:13px}
   .lang-switch button.active{background:var(--accent);border-color:var(--accent);color:#0b1220;font-weight:600}
-  /* hero */
-  .hero{background:linear-gradient(135deg,var(--bg) 0%,#131c38 55%,#0e2440 100%);color:var(--fg);text-align:center;padding:64px 20px 54px}
-  .hero .logo{width:92px;height:92px;border-radius:22px;box-shadow:0 12px 40px rgba(56,189,248,.25);margin-bottom:22px}
-  .hero h1{font-size:40px;letter-spacing:.5px}
-  .hero .sub{color:var(--muted);font-size:16px;margin-top:10px}
-  .badges{margin-top:18px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+
+  /* ===== hero ===== */
+  .hero{background:linear-gradient(135deg,var(--bg) 0%,#131c38 55%,#0e2440 100%);color:var(--fg);text-align:center;padding:70px 20px 60px;position:relative;overflow:hidden}
+  .hero::after{content:"";position:absolute;inset:auto -20% -40% -20%;height:60%;background:radial-gradient(ellipse at center,rgba(56,189,248,.18),transparent 70%);pointer-events:none}
+  .hero .logo{width:96px;height:96px;border-radius:24px;box-shadow:0 14px 44px rgba(56,189,248,.3);margin-bottom:22px;position:relative;z-index:1}
+  .hero h1{font-size:42px;letter-spacing:.5px;position:relative;z-index:1}
+  .hero .sub{color:var(--muted);font-size:16.5px;margin-top:12px;max-width:640px;margin-left:auto;margin-right:auto;position:relative;z-index:1}
+  .badges{margin-top:20px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;position:relative;z-index:1}
   .badges span{background:rgba(255,255,255,.07);border:1px solid var(--border);color:var(--fg);border-radius:20px;padding:4px 12px;font-size:12.5px}
   .badges .free{background:rgba(52,211,153,.15);border-color:rgba(52,211,153,.5);color:var(--ok)}
-  /* download */
-  .dl{background:#f8fafc;padding:52px 20px}
+
+  /* ===== products ===== */
+  .products{background:#fff;padding:56px 20px}
+  .products h2{text-align:center;font-size:27px;margin-bottom:8px}
+  .products .hint{text-align:center;color:#64748b;font-size:14px;margin-bottom:30px}
+  .pgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px}
+  .pcard{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:26px;position:relative;overflow:hidden;transition:transform .18s ease,box-shadow .18s ease;display:flex;flex-direction:column}
+  .pcard:hover{transform:translateY(-4px);box-shadow:0 12px 28px rgba(15,23,42,.12)}
+  .pcard .pbar{position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,var(--accent),var(--accent2))}
+  .pcard .emoji{font-size:34px}
+  .pcard h3{font-size:18px;margin:12px 0 6px}
+  .pcard .tag{display:inline-block;font-size:11.5px;color:#fff;border-radius:12px;padding:2px 10px;margin-bottom:10px;font-weight:600}
+  .pcard .tag.now{background:linear-gradient(90deg,#0d9488,#059669)}
+  .pcard .tag.soon{background:#94a3b8}
+  .pcard p{font-size:13.5px;color:#475569;margin-bottom:14px;flex:1}
+  .pcard .plats{font-size:12px;color:#64748b;margin-bottom:14px}
+  .pcard .acts{display:flex;gap:10px;flex-wrap:wrap}
+
+  /* ===== download ===== */
+  .dl{background:#f8fafc;padding:56px 20px}
   .dl h2{text-align:center;font-size:26px;margin-bottom:6px}
   .dl .hint{text-align:center;color:#64748b;font-size:14px;margin-bottom:30px}
-  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
-  .card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:22px;text-align:center;box-shadow:0 4px 14px rgba(15,23,42,.05);transition:transform .15s ease,box-shadow .15s ease}
+  .dl-group{margin-bottom:34px}
+  .dl-group h3{font-size:17px;margin-bottom:14px;display:flex;align-items:center;gap:8px;color:#1e293b}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}
+  .card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:20px;text-align:center;box-shadow:0 4px 14px rgba(15,23,42,.05);transition:transform .15s ease,box-shadow .15s ease}
   .card:hover{transform:translateY(-3px);box-shadow:0 10px 24px rgba(15,23,42,.10)}
-  .card .emoji{font-size:30px}
-  .card h3{font-size:16px;margin:10px 0 4px}
-  .card p{font-size:12.5px;color:#64748b;margin-bottom:14px}
-  .btn{display:inline-block;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;font-weight:600;font-size:14px;padding:9px 20px;border-radius:24px;transition:filter .15s}
+  .card .emoji{font-size:28px}
+  .card h4{font-size:15px;margin:10px 0 4px}
+  .card p{font-size:12.5px;color:#64748b;margin-bottom:12px}
+  .btn{display:inline-block;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;font-weight:600;font-size:13.5px;padding:9px 18px;border-radius:24px;transition:filter .15s;cursor:pointer}
   .btn:hover{filter:brightness(1.08)}
   .btn.ghost{background:transparent;border:1px solid #cbd5e1;color:#334155}
-  .alldl{text-align:center;margin-top:26px}
-  /* features */
-  .feat{padding:52px 20px}
+  .btn.sm{padding:6px 14px;font-size:12.5px}
+  .alldl{text-align:center;margin-top:20px}
+
+  /* ===== features ===== */
+  .feat{padding:56px 20px}
   .feat h2{text-align:center;font-size:26px;margin-bottom:30px}
-  .fgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+  .fgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
   .fcard{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:20px}
   .fcard .emoji{font-size:24px}
   .fcard h3{font-size:15.5px;margin:8px 0 6px}
   .fcard p{font-size:13.5px;color:#475569}
-  /* free banner */
+
+  /* ===== free banner ===== */
   .freebar{background:linear-gradient(135deg,#0d9488,#059669);color:#fff;text-align:center;padding:34px 20px}
   .freebar h2{font-size:24px}
-  .freebar p{opacity:.92;font-size:14px;margin-top:8px}
-  /* faq */
-  .faq{padding:52px 20px}
+  .freebar p{opacity:.92;font-size:14px;margin-top:8px;max-width:720px;margin-left:auto;margin-right:auto}
+
+  /* ===== faq ===== */
+  .faq{padding:56px 20px}
   .faq h2{text-align:center;font-size:26px;margin-bottom:24px}
   .q{border:1px solid #e2e8f0;border-radius:12px;padding:16px 20px;margin-bottom:12px;background:#fff}
   .q b{display:block;font-size:14.5px;margin-bottom:4px}
   .q p{font-size:13.5px;color:#475569}
-  /* contact */
+
+  /* ===== contact ===== */
   .contact{background:#f8fafc;padding:52px 20px}
   .contact h2{text-align:center;font-size:26px;margin-bottom:24px}
   .qrcodes{display:flex;gap:28px;justify-content:center;flex-wrap:wrap}
   .qr{text-align:center}
-  .qr img{width:170px;height:170px;border-radius:12px;border:1px solid #e2e8f0;background:#fff}
+  .qr img{width:160px;height:160px;border-radius:12px;border:1px solid #e2e8f0;background:#fff}
   .qr p{font-size:13px;color:#475569;margin-top:8px}
-  /* footer */
-  footer{background:var(--bg);color:var(--muted);text-align:center;padding:30px 20px;font-size:13px}
+
+  /* ===== footer ===== */
+  footer{background:var(--bg);color:var(--muted);text-align:center;padding:32px 20px;font-size:13px}
   footer a{color:var(--accent)}
   footer .disc{max-width:760px;margin:10px auto 0;opacity:.85}
+
+  /* ===== responsive ===== */
+  @media (max-width:640px){
+    .hero h1{font-size:32px}
+    .hero .sub{font-size:15px}
+    nav.topnav{gap:12px;font-size:13px}
+  }
 </style>
 </head>
 <body>
 
 <header>
   <div class="wrap">
-    <div class="brand"><img src="assets/icon.png" alt="DeepWhale Desktop"> DeepWhale Desktop</div>
-    <div class="lang-switch">
-      <button id="btn-zh" class="active" onclick="setLang('zh')">中文</button>
-      <button id="btn-en" onclick="setLang('en')">English</button>
-    </div>
+    <div class="brand"><img src="assets/icon.png" alt="DeepWhale"> DeepWhale 深鲸</div>
+    <nav class="topnav">
+      <a href="#products" data-zh="产品" data-en="Products">产品</a>
+      <a href="#download" data-zh="下载" data-en="Download">下载</a>
+      <a href="#features" data-zh="特性" data-en="Features">特性</a>
+      <a href="#faq" data-zh="常见问题" data-en="FAQ">常见问题</a>
+      <a href="https://github.com/feely0208/deepwhale-desktop" class="ghost">GitHub ↗</a>
+      <span class="lang-switch">
+        <button id="btn-zh" class="active" onclick="setLang('zh')">中文</button>
+        <button id="btn-en" onclick="setLang('en')">EN</button>
+      </span>
+    </nav>
   </div>
 </header>
 
 <div class="hero">
   <div class="wrap">
     <img class="logo" src="assets/icon.png" alt="logo">
-    <h1 data-zh="DeepWhale Desktop（深鲸桌面）" data-en="DeepWhale Desktop">DeepWhale Desktop（深鲸桌面）</h1>
-    <p class="sub" data-zh="把 DeepSeek Harness 的 Web UI 装进原生窗口的跨平台桌面壳" data-en="A cross-platform desktop shell wrapping the DeepSeek Harness (DSH) web UI">把 DeepSeek Harness 的 Web UI 装进原生窗口的跨平台桌面壳</p>
+    <h1 data-zh="DeepWhale 深鲸" data-en="DeepWhale">DeepWhale 深鲸</h1>
+    <p class="sub" data-zh="让 DeepSeek 触手可及——跨平台桌面壳与移动端，把 DeepSeek Harness 带到你的每一块屏幕" data-en="DeepSeek at your fingertips — cross-platform desktop shell & mobile client, bringing DeepSeek Harness to every screen you own">让 DeepSeek 触手可及——跨平台桌面壳与移动端，把 DeepSeek Harness 带到你的每一块屏幕</p>
     <div class="badges">
       <span class="free" data-zh="永久免费" data-en="Free Forever">永久免费</span>
       <span data-zh="开源 MIT" data-en="Open Source MIT">开源 MIT</span>
-      <span data-zh="macOS · Windows · Linux" data-en="macOS · Windows · Linux">macOS · Windows · Linux</span>
+      <span data-zh="macOS · Windows · Linux · Android" data-en="macOS · Windows · Linux · Android">macOS · Windows · Linux · Android</span>
     </div>
   </div>
 </div>
 
-<section class="dl">
+<section class="products" id="products">
   <div class="wrap">
-    <h2 data-zh="下载" data-en="Download">下载</h2>
-    <p class="hint" data-zh="v1.0.2 · 免安装注册 · 免费" data-en="v1.0.2 · no sign-up · free">v1.0.2 · 免安装注册 · 免费</p>
-    <div class="cards">
-      <div class="card">
-        <div class="emoji">🍎</div>
-        <h3 data-zh="macOS（Apple 芯片）" data-en="macOS (Apple Silicon)">macOS（Apple 芯片）</h3>
-        <p data-zh="M1/M2/M3/M4 芯片，dmg 安装包" data-en="M1/M2/M3/M4 chips, dmg installer">M1/M2/M3/M4 芯片，dmg 安装包</p>
-        <a class="btn" href="https://github.com/feely0208/deepwhale-desktop/releases/download/v1.0.2/DeepWhale-Desktop-1.0.2-arm64.dmg" data-zh="下载 DMG" data-en="Download DMG">下载 DMG</a>
-      </div>
-      <div class="card">
-        <div class="emoji">🖥️</div>
-        <h3 data-zh="macOS（Intel）" data-en="macOS (Intel)">macOS（Intel）</h3>
-        <p data-zh="Intel 芯片，dmg 安装包" data-en="Intel chips, dmg installer">Intel 芯片，dmg 安装包</p>
-        <a class="btn" href="https://github.com/feely0208/deepwhale-desktop/releases/download/v1.0.2/DeepWhale-Desktop-1.0.2-x64.dmg" data-zh="下载 DMG" data-en="Download DMG">下载 DMG</a>
-      </div>
-      <div class="card">
-        <div class="emoji">🪟</div>
-        <h3 data-zh="Windows" data-en="Windows">Windows</h3>
-        <p data-zh="x64，NSIS 安装程序" data-en="x64, NSIS installer">x64，NSIS 安装程序</p>
-        <a class="btn" href="https://github.com/feely0208/deepwhale-desktop/releases/download/v1.0.2/DeepWhale-Desktop-1.0.2-x64-Setup.exe" data-zh="下载 EXE" data-en="Download EXE">下载 EXE</a>
-      </div>
-      <div class="card">
-        <div class="emoji">🐧</div>
-        <h3 data-zh="Linux" data-en="Linux">Linux</h3>
-        <p data-zh="AppImage / deb（x86_64）" data-en="AppImage / deb (x86_64)">AppImage / deb（x86_64）</p>
-        <a class="btn" href="https://github.com/feely0208/deepwhale-desktop/releases/download/v1.0.2/DeepWhale-Desktop-1.0.2-x86_64.AppImage" data-zh="下载 AppImage" data-en="Download AppImage">下载 AppImage</a>
-      </div>
-    </div>
+    <h2 data-zh="产品家族" data-en="Product Family">产品家族</h2>
+    <p class="hint" data-zh="一个生态，多端覆盖 —— 每个产品都独立运行、各自使用你自己的 DeepSeek API Key" data-en="One ecosystem, every screen — each product runs independently with your own DeepSeek API key">一个生态，多端覆盖 —— 每个产品都独立运行、各自使用你自己的 DeepSeek API Key</p>
+    <div class="pgrid" id="products-grid"><!-- JS 注入 --></div>
+  </div>
+</section>
+
+<section class="dl" id="download">
+  <div class="wrap">
+    <h2 data-zh="下载中心" data-en="Download Center">下载中心</h2>
+    <p class="hint" data-zh="全部安装包托管于 GitHub Releases · 免注册 · 免费" data-en="All packages hosted on GitHub Releases · no sign-up · free">全部安装包托管于 GitHub Releases · 免注册 · 免费</p>
+    <div id="download-groups"><!-- JS 注入 --></div>
     <p class="alldl"><a class="btn ghost" href="https://github.com/feely0208/deepwhale-desktop/releases" data-zh="查看全部版本与更新日志" data-en="All releases & changelog">查看全部版本与更新日志</a></p>
   </div>
 </section>
 
-<section class="feat">
+<section class="feat" id="features">
   <div class="wrap">
     <h2 data-zh="核心特性" data-en="Features">核心特性</h2>
     <div class="fgrid">
@@ -140,7 +171,7 @@
       <div class="fcard"><div class="emoji">🐾</div><h3 data-zh="桌面宠物" data-en="Desktop pet">桌面宠物</h3><p data-zh="帧动画精灵图宠物：走路/跑步/工作/挥手/跳跃，支持自制宠物" data-en="Sprite-animated pet: walking/running/working/waving/jumping; bring your own pets">帧动画精灵图宠物：走路/跑步/工作/挥手/跳跃，支持自制宠物</p></div>
       <div class="fcard"><div class="emoji">💰</div><h3 data-zh="用量与额度" data-en="Usage & quota">用量与额度</h3><p data-zh="余额/赠送/充值/今日请求/tokens，绿色进度条与低余额提醒" data-en="Balance/gift/top-up/requests/tokens with progress bar and low-balance alerts">余额/赠送/充值/今日请求/tokens，绿色进度条与低余额提醒</p></div>
       <div class="fcard"><div class="emoji">🔑</div><h3 data-zh="API Key 安全" data-en="API key safety">API Key 安全</h3><p data-zh="系统钥匙串加密存储，绝不落明文、绝不上传" data-en="OS-keychain encryption, never plain text, never uploaded">系统钥匙串加密存储，绝不落明文、绝不上传</p></div>
-      <div class="fcard"><div class="emoji">📦</div><h3 data-zh="跨平台" data-en="Cross-platform">跨平台</h3><p data-zh="macOS / Windows / Linux 三平台安装包，CI 自动构建" data-en="macOS / Windows / Linux packages, auto-built by CI">macOS / Windows / Linux 三平台安装包，CI 自动构建</p></div>
+      <div class="fcard"><div class="emoji">📱</div><h3 data-zh="手机端" data-en="Mobile">手机端</h3><p data-zh="手机也能用深鲸：PWA 全屏、皮肤、用量查询，适配各机型" data-en="DeepWhale on your phone: PWA fullscreen, skins, usage check, tuned for every device">手机也能用深鲸：PWA 全屏、皮肤、用量查询，适配各机型</p></div>
     </div>
   </div>
 </section>
@@ -152,13 +183,13 @@
   </div>
 </div>
 
-<section class="faq">
+<section class="faq" id="faq">
   <div class="wrap">
     <h2 data-zh="常见问题" data-en="FAQ">常见问题</h2>
     <div class="q"><b data-zh="收费吗？" data-en="Is it paid?">收费吗？</b><p data-zh="永久免费、开源（MIT）。无内购、无订阅、无广告、无试用期。" data-en="Free forever, open source (MIT). No purchases, subscriptions, ads, or trials.">永久免费、开源（MIT）。无内购、无订阅、无广告、无试用期。</p></div>
-    <div class="q"><b data-zh="需要注册或登录吗？" data-en="Do I need an account?">需要注册或登录吗？</b><p data-zh="不需要。唯一可选的是你自己的 DeepSeek API Key（用于查看余额/用量；不填也能正常使用 DSH）。" data-en="No. The only optional thing is your own DeepSeek API key to view balance/usage; DSH works fine without it.">不需要。唯一可选的是你自己的 DeepSeek API Key（用于查看余额/用量；不填也能正常使用 DSH）。</p></div>
+    <div class="q"><b data-zh="需要注册或登录吗？" data-en="Do I need an account?">需要注册或登录吗？</b><p data-zh="不需要。每个产品都使用你自己的 DeepSeek API Key，数据只在你自己的设备上。" data-en="No. Each product uses your own DeepSeek API key; your data stays on your own device.">不需要。每个产品都使用你自己的 DeepSeek API Key，数据只在你自己的设备上。</p></div>
     <div class="q"><b data-zh="我的 API Key 安全吗？" data-en="Is my API key safe?">我的 API Key 安全吗？</b><p data-zh="由系统钥匙串（safeStorage）加密存储在本机，只在主进程使用，绝不落明文、绝不上传。" data-en="Encrypted with the OS keychain (safeStorage) on your machine, used only in the main process — never plain text, never uploaded.">由系统钥匙串（safeStorage）加密存储在本机，只在主进程使用，绝不落明文、绝不上传。</p></div>
-    <div class="q"><b data-zh="和 DeepSeek Harness 是什么关系？" data-en="Relation to DeepSeek Harness?">和 DeepSeek Harness 是什么关系？</b><p data-zh="本项目是社区桌面壳，基于 DeepSeek Harness 构建，并非 DeepSeek 官方产品，也不代表官方立场。" data-en="A community desktop shell built on DeepSeek Harness — not an official DeepSeek product.">本项目是社区桌面壳，基于 DeepSeek Harness 构建，并非 DeepSeek 官方产品，也不代表官方立场。</p></div>
+    <div class="q"><b data-zh="和 DeepSeek Harness 是什么关系？" data-en="Relation to DeepSeek Harness?">和 DeepSeek Harness 是什么关系？</b><p data-zh="本项目是社区产品，基于 DeepSeek Harness 构建，并非 DeepSeek 官方产品，也不代表官方立场。" data-en="A community product built on DeepSeek Harness — not an official DeepSeek product.">本项目是社区产品，基于 DeepSeek Harness 构建，并非 DeepSeek 官方产品，也不代表官方立场。</p></div>
   </div>
 </section>
 
@@ -175,20 +206,103 @@
 <footer>
   <div class="wrap">
     <p><a href="https://github.com/feely0208/deepwhale-desktop">GitHub</a> · <a href="https://github.com/feely0208/deepwhale-desktop/releases" data-zh="发布记录" data-en="Releases">发布记录</a> · <a href="https://github.com/feely0208/deepwhale-desktop/blob/main/LICENSE">MIT</a></p>
-    <p class="disc" data-zh="本项目是基于 DeepSeek Harness 构建的社区桌面版本，并非 DeepSeek 官方产品，也不代表 DeepSeek 官方立场。本项目完全开源免费。" data-en="This is a community desktop build based on DeepSeek Harness — not an official DeepSeek product. Completely open source and free.">本项目是基于 DeepSeek Harness 构建的社区桌面版本，并非 DeepSeek 官方产品，也不代表 DeepSeek 官方立场。本项目完全开源免费。</p>
+    <p class="disc" data-zh="本项目是基于 DeepSeek Harness 构建的社区产品，并非 DeepSeek 官方产品，也不代表 DeepSeek 官方立场。本项目完全开源免费。" data-en="This is a community product based on DeepSeek Harness — not an official DeepSeek product. Completely open source and free.">本项目是基于 DeepSeek Harness 构建的社区产品，并非 DeepSeek 官方产品，也不代表 DeepSeek 官方立场。本项目完全开源免费。</p>
   </div>
 </footer>
 
 <script>
+/* ============================================================
+ * 产品数据（易维护：新增产品只需在此加一条）
+ * ============================================================ */
+var PRODUCTS = [
+  {
+    id: 'desktop', emoji: '🖥️',
+    nameZh: '深鲸桌面', nameEn: 'DeepWhale Desktop',
+    tag: {zh: '已发布', en: 'Available'},
+    descZh: '把 DeepSeek Harness 装进原生窗口的跨平台桌面壳：背景皮肤、桌面宠物、用量面板，一键管理你的 DSH。',
+    descEn: 'A cross-platform desktop shell wrapping DeepSeek Harness: background skins, desktop pet, usage panel, one-click DSH management.',
+    plats: 'macOS · Windows · Linux',
+    cta: {textZh: '下载', textEn: 'Download', href: '#download'}
+  },
+  {
+    id: 'mobile', emoji: '📱',
+    nameZh: '深鲸手机', nameEn: 'DeepWhale Mobile',
+    tag: {zh: '已发布', en: 'Available'},
+    descZh: '手机上使用深鲸：PWA 全屏体验、背景皮肤、用量余额查询，适配安卓/鸿蒙/iOS。',
+    descEn: 'DeepWhale on your phone: PWA fullscreen, background skins, balance check, tuned for Android/Harmony/iOS.',
+    plats: 'Android · HarmonyOS · iOS',
+    cta: {textZh: '了解', textEn: 'Learn', href: '#download'}
+  },
+  {
+    id: 'future', emoji: '🚀',
+    nameZh: '更多产品', nameEn: 'More to come',
+    tag: {zh: '敬请期待', en: 'Soon'},
+    descZh: '深鲸生态持续扩展，更多产品正在路上。欢迎关注，一起见证。',
+    descEn: 'The DeepWhale ecosystem keeps growing. More products are on the way.',
+    plats: '—',
+    cta: {textZh: '关注 GitHub', textEn: 'Follow on GitHub', href: 'https://github.com/feely0208/deepwhale-desktop'}
+  }
+];
+
+/* 下载包数据（易维护：发新版只改这里） */
+var GH = 'https://github.com/feely0208/deepwhale-desktop/releases/download';
+var VERSION = 'v1.0.2';
+var DOWNLOADS = [
+  { group: 'desktop', titleZh: '深鲸桌面', titleEn: 'DeepWhale Desktop', items: [
+    {emoji:'🍎', nameZh:'macOS（Apple 芯片）', nameEn:'macOS (Apple Silicon)', descZh:'M1-M4 · dmg', descEn:'M1-M4 · dmg', href: GH + '/' + VERSION + '/DeepWhale-Desktop-1.0.2-arm64.dmg', btnZh:'下载 DMG', btnEn:'Download DMG'},
+    {emoji:'🖥️', nameZh:'macOS（Intel）', nameEn:'macOS (Intel)', descZh:'x64 · dmg', descEn:'x64 · dmg', href: GH + '/' + VERSION + '/DeepWhale-Desktop-1.0.2-x64.dmg', btnZh:'下载 DMG', btnEn:'Download DMG'},
+    {emoji:'🪟', nameZh:'Windows', nameEn:'Windows', descZh:'x64 · exe', descEn:'x64 · exe', href: GH + '/' + VERSION + '/DeepWhale-Desktop-1.0.2-x64-Setup.exe', btnZh:'下载 EXE', btnEn:'Download EXE'},
+    {emoji:'🐧', nameZh:'Linux', nameEn:'Linux', descZh:'x86_64 · AppImage', descEn:'x86_64 · AppImage', href: GH + '/' + VERSION + '/DeepWhale-Desktop-1.0.2-x86_64.AppImage', btnZh:'下载 AppImage', btnEn:'Download AppImage'}
+  ]},
+  { group: 'mobile', titleZh: '深鲸手机', titleEn: 'DeepWhale Mobile', items: [
+    {emoji:'🤖', nameZh:'安卓 / 鸿蒙', nameEn:'Android / HarmonyOS', descZh:'APK 安装包', descEn:'APK package', href: GH + '/' + VERSION + '/DeepWhale-Mobile-1.0.2.apk', btnZh:'下载 APK', btnEn:'Download APK'}
+  ]}
+];
+
+var LANG = 'zh';
 function setLang(lang){
+  LANG = lang;
   document.documentElement.lang = lang==='zh' ? 'zh-CN' : 'en';
   document.getElementById('btn-zh').classList.toggle('active', lang==='zh');
   document.getElementById('btn-en').classList.toggle('active', lang==='en');
   document.querySelectorAll('[data-zh]').forEach(function(el){
-    if(lang==='zh'){ if(el.dataset.zh){ el.textContent = el.dataset.zh; } }
-    else { if(el.dataset.en){ el.textContent = el.dataset.en; } }
+    el.textContent = lang==='zh' ? el.dataset.zh : el.dataset.en;
   });
+  renderProducts(); renderDownloads();
 }
+function t(zh, en){ return LANG==='zh' ? zh : en; }
+
+/* 渲染产品卡片 */
+function renderProducts(){
+  var g = document.getElementById('products-grid');
+  g.innerHTML = PRODUCTS.map(function(p){
+    return '<div class="pcard"><div class="pbar"></div>' +
+      '<div class="emoji">' + p.emoji + '</div>' +
+      '<span class="tag ' + (p.id==='future'?'soon':'now') + '">' + t(p.tag.zh, p.tag.en) + '</span>' +
+      '<h3>' + t(p.nameZh, p.nameEn) + '</h3>' +
+      '<p>' + t(p.descZh, p.descEn) + '</p>' +
+      '<div class="plats">' + p.plats + '</div>' +
+      '<div class="acts"><a class="btn sm" href="' + p.cta.href + '">' + t(p.cta.textZh, p.cta.textEn) + '</a></div>' +
+      '</div>';
+  }).join('');
+}
+
+/* 渲染下载分组 */
+function renderDownloads(){
+  var g = document.getElementById('download-groups');
+  g.innerHTML = DOWNLOADS.map(function(d){
+    var cards = d.items.map(function(it){
+      return '<div class="card"><div class="emoji">' + it.emoji + '</div>' +
+        '<h4>' + t(it.nameZh, it.nameEn) + '</h4>' +
+        '<p>' + t(it.descZh, it.descEn) + '</p>' +
+        '<a class="btn" href="' + it.href + '">' + t(it.btnZh, it.btnEn) + '</a></div>';
+    }).join('');
+    return '<div class="dl-group"><h3>' + t(d.titleZh, d.titleEn) + '</h3><div class="cards">' + cards + '</div></div>';
+  }).join('');
+}
+
+renderProducts();
+renderDownloads();
 </script>
 </body>
 </html>

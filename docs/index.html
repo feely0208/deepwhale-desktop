@@ -183,7 +183,7 @@
         <div class="stepnum">1</div>
         <div class="stepbody">
           <h3 data-zh="下载安装" data-en="Download & install">下载安装</h3>
-          <p data-zh="在上方选择你的平台，下载安装包。手机端下载 APK 后点击安装（安卓/鸿蒙需允许未知来源）。" data-en="Pick your platform above and install. On Android/HarmonyOS, allow installing from unknown sources.">在上方选择你的平台，下载安装包。手机端下载 APK 后点击安装（安卓/鸿蒙需允许未知来源）。</p>
+          <p data-zh="桌面端：在上方选择你的电脑平台下载安装。手机端：下载「深鲸手机 APK」（安卓/鸿蒙 4.x），点击安装，首次需允许「未知来源」。" data-en="Desktop: pick your platform above and install. Mobile: download the DeepWhale Mobile APK (Android/HarmonyOS 4.x), tap to install, and allow unknown sources on first run.">桌面端：在上方选择你的电脑平台下载安装。手机端：下载「深鲸手机 APK」（安卓/鸿蒙 4.x），点击安装，首次需允许「未知来源」。</p>
         </div>
       </div>
       <div class="step">
@@ -270,11 +270,11 @@ var PRODUCTS = [
   {
     id: 'mobile', emoji: '📱',
     nameZh: '深鲸手机', nameEn: 'DeepWhale Mobile',
-    tag: {zh: '已发布', en: 'Available'},
-    descZh: '安卓/鸿蒙独立 App，连接你自己的 DSH 服务：设置服务器地址即可使用，数据只在你自己的设备上。',
-    descEn: 'Standalone Android/HarmonyOS app connecting to your own DSH: set the server address and go — data stays on your device.',
-    plats: 'Android · HarmonyOS',
-    cta: {textZh: '下载 APK', textEn: 'Download APK', href: '#download'}
+    tag: {zh: '已发布 · APK 安装包', en: 'Available · APK'},
+    descZh: '安卓/鸿蒙手机专用 App（APK 安装包）。下载安装后，在 App 里填写你自己的 DSH 服务器地址即可使用——数据只在你自己的设备上。',
+    descEn: 'Android/HarmonyOS app (APK installer). Install it, enter your own DSH server address in the app, and you\'re ready — data stays on your device.',
+    plats: 'Android · HarmonyOS 4.x',
+    cta: {textZh: '下载手机版 APK', textEn: 'Download Mobile APK', href: '#download'}
   },
   {
     id: 'future', emoji: '🚀',
@@ -297,8 +297,8 @@ var DOWNLOADS = [
     {emoji:'🪟', nameZh:'Windows', nameEn:'Windows', descZh:'x64 · exe', descEn:'x64 · exe', href: GH + '/' + VERSION + '/DeepWhale-Desktop-1.0.2-x64-Setup.exe', btnZh:'下载 EXE', btnEn:'Download EXE'},
     {emoji:'🐧', nameZh:'Linux', nameEn:'Linux', descZh:'x86_64 · AppImage', descEn:'x86_64 · AppImage', href: GH + '/' + VERSION + '/DeepWhale-Desktop-1.0.2-x86_64.AppImage', btnZh:'下载 AppImage', btnEn:'Download AppImage'}
   ]},
-  { group: 'mobile', titleZh: '深鲸手机', titleEn: 'DeepWhale Mobile', items: [
-    {emoji:'🤖', nameZh:'安卓 / 鸿蒙', nameEn:'Android / HarmonyOS', descZh:'APK · 连接你自己的 DSH', descEn:'APK · connect to your own DSH', href: GH + '/' + VERSION + '/DeepWhale-Mobile-1.0.2.apk', btnZh:'下载 APK', btnEn:'Download APK'}
+  { group: 'mobile', titleZh: '深鲸手机（安卓 APK）', titleEn: 'DeepWhale Mobile (Android APK)', items: [
+    {emoji:'🤖', nameZh:'安卓 / 鸿蒙 4.x', nameEn:'Android / HarmonyOS 4.x', descZh:'手机版 APK · 安装后在 App 内填写你的 DSH 地址', descEn:'Mobile APK · install, then enter your DSH address in the app', href: GH + '/' + VERSION + '/DeepWhale-Mobile-1.0.2.apk', btnZh:'下载手机版 APK', btnEn:'Download Mobile APK'}
   ]}
 ];
 

@@ -71,6 +71,18 @@
   .btn.sm{padding:6px 14px;font-size:12.5px}
   .alldl{text-align:center;margin-top:20px}
 
+  /* ===== howto ===== */
+  .howto{padding:56px 20px}
+  .howto h2{text-align:center;font-size:26px;margin-bottom:8px}
+  .howto .hint{text-align:center;color:#64748b;font-size:14px;margin-bottom:30px}
+  .steps{display:flex;flex-direction:column;gap:14px;max-width:720px;margin:0 auto}
+  .step{display:flex;gap:16px;background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:18px 20px;align-items:flex-start}
+  .stepnum{flex:none;width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;font-weight:700;font-size:16px;display:flex;align-items:center;justify-content:center;margin-top:2px}
+  .stepbody h3{font-size:15.5px;margin-bottom:5px}
+  .stepbody p{font-size:13.5px;color:#475569}
+  .stepbody code{background:#f1f5f9;padding:1px 7px;border-radius:5px;font-size:12.5px;color:#0f766e}
+  .note{max-width:720px;margin:22px auto 0;background:linear-gradient(135deg,#ecfdf5,#f0fdf4);border:1px solid #a7f3d0;border-radius:12px;padding:14px 18px;font-size:13.5px;color:#065f46;text-align:center}
+
   /* ===== features ===== */
   .feat{padding:56px 20px}
   .feat h2{text-align:center;font-size:26px;margin-bottom:30px}
@@ -159,6 +171,37 @@
     <p class="hint" data-zh="全部安装包托管于 GitHub Releases · 免注册 · 免费" data-en="All packages hosted on GitHub Releases · no sign-up · free">全部安装包托管于 GitHub Releases · 免注册 · 免费</p>
     <div id="download-groups"><!-- JS 注入 --></div>
     <p class="alldl"><a class="btn ghost" href="https://github.com/feely0208/deepwhale-desktop/releases" data-zh="查看全部版本与更新日志" data-en="All releases & changelog">查看全部版本与更新日志</a></p>
+  </div>
+</section>
+
+<section class="howto" id="howto">
+  <div class="wrap">
+    <h2 data-zh="快速上手" data-en="Quick Start">快速上手</h2>
+    <p class="hint" data-zh="三个步骤，一分钟上手" data-en="Three steps, one minute">三个步骤，一分钟上手</p>
+    <div class="steps">
+      <div class="step">
+        <div class="stepnum">1</div>
+        <div class="stepbody">
+          <h3 data-zh="下载安装" data-en="Download & install">下载安装</h3>
+          <p data-zh="在上方选择你的平台，下载安装包。手机端下载 APK 后点击安装（安卓/鸿蒙需允许未知来源）。" data-en="Pick your platform above and install. On Android/HarmonyOS, allow installing from unknown sources.">在上方选择你的平台，下载安装包。手机端下载 APK 后点击安装（安卓/鸿蒙需允许未知来源）。</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="stepnum">2</div>
+        <div class="stepbody">
+          <h3 data-zh="启动 DSH" data-en="Start DSH">启动 DSH</h3>
+          <p data-zh="在你的电脑上启动 DeepSeek Harness（<code>npx @deepseek-ai/dsh web</code>），记录它显示的访问地址。" data-en="Start DeepSeek Harness on your computer (<code>npx @deepseek-ai/dsh web</code>) and note the address it shows.">在你的电脑上启动 DeepSeek Harness（<code>npx @deepseek-ai/dsh web</code>），记录它显示的访问地址。</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="stepnum">3</div>
+        <div class="stepbody">
+          <h3 data-zh="连接使用" data-en="Connect & use">连接使用</h3>
+          <p data-zh="打开深鲸，填入你的 DSH 地址（同一 WiFi 填局域网地址，异地填你配置的公网地址），即可开始使用。" data-en="Open DeepWhale, enter your DSH address (LAN IP on the same Wi-Fi, or your public address remotely), and you're ready.">打开深鲸，填入你的 DSH 地址（同一 WiFi 填局域网地址，异地填你配置的公网地址），即可开始使用。</p>
+        </div>
+      </div>
+    </div>
+    <div class="note" data-zh="💡 所有产品都使用你自己的 DeepSeek API Key，数据只存在你自己的设备上，不上传任何服务器。" data-en="💡 All products use your own DeepSeek API key; data stays on your device and is never uploaded.">💡 所有产品都使用你自己的 DeepSeek API Key，数据只存在你自己的设备上，不上传任何服务器。</div>
   </div>
 </section>
 

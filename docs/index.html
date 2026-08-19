@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>DeepWhale 深鲸 — 让 DeepSeek 触手可及</title>
-<meta name="description" content="深鲸（DeepWhale）：把 DeepSeek Harness 装进原生窗口的跨平台桌面壳与手机端。永久免费、开源（MIT）。">
+<meta name="description" content="深鲸（DeepWhale）：把 DeepSeek Harness 装进原生窗口的跨平台桌面壳与移动客户端。永久免费、开源（MIT）。">
 <link rel="icon" type="image/png" href="assets/icon.png">
 <style>
   :root{--bg:#0d1424;--bg2:#141b33;--fg:#e8eefc;--muted:#9fb0d0;--accent:#38bdf8;--accent2:#6366f1;--card:#121b30;--border:#1f2b45;--ok:#34d399;--warn:#fbbf24}
@@ -183,7 +183,7 @@
         <div class="stepnum">1</div>
         <div class="stepbody">
           <h3 data-zh="下载安装" data-en="Download & install">下载安装</h3>
-          <p data-zh="桌面端：在上方选择你的电脑平台下载安装。手机端：下载「深鲸手机 APK」（安卓/鸿蒙 4.x），点击安装，首次需允许「未知来源」。" data-en="Desktop: pick your platform above and install. Mobile: download the DeepWhale Mobile APK (Android/HarmonyOS 4.x), tap to install, and allow unknown sources on first run.">桌面端：在上方选择你的电脑平台下载安装。手机端：下载「深鲸手机 APK」（安卓/鸿蒙 4.x），点击安装，首次需允许「未知来源」。</p>
+          <p data-zh="桌面端：在上方选择你的电脑平台下载安装。深鲸 Mobile：下载「深鲸 Mobile APK」（安卓/鸿蒙 4.x），点击安装，首次需允许「未知来源」。" data-en="Desktop: pick your platform above and install. DeepWhale Mobile: download the DeepWhale Mobile APK (Android/HarmonyOS 4.x), tap to install, and allow unknown sources on first run.">桌面端：在上方选择你的电脑平台下载安装。深鲸 Mobile：下载「深鲸 Mobile APK」（安卓/鸿蒙 4.x），点击安装，首次需允许「未知来源」。</p>
         </div>
       </div>
       <div class="step">
@@ -214,7 +214,7 @@
       <div class="fcard"><div class="emoji">🐾</div><h3 data-zh="桌面宠物" data-en="Desktop pet">桌面宠物</h3><p data-zh="帧动画精灵图宠物：走路/跑步/工作/挥手/跳跃，支持自制宠物" data-en="Sprite-animated pet: walking/running/working/waving/jumping; bring your own pets">帧动画精灵图宠物：走路/跑步/工作/挥手/跳跃，支持自制宠物</p></div>
       <div class="fcard"><div class="emoji">💰</div><h3 data-zh="用量与额度" data-en="Usage & quota">用量与额度</h3><p data-zh="余额/赠送/充值/今日请求/tokens，绿色进度条与低余额提醒" data-en="Balance/gift/top-up/requests/tokens with progress bar and low-balance alerts">余额/赠送/充值/今日请求/tokens，绿色进度条与低余额提醒</p></div>
       <div class="fcard"><div class="emoji">🔑</div><h3 data-zh="API Key 安全" data-en="API key safety">API Key 安全</h3><p data-zh="系统钥匙串加密存储，绝不落明文、绝不上传" data-en="OS-keychain encryption, never plain text, never uploaded">系统钥匙串加密存储，绝不落明文、绝不上传</p></div>
-      <div class="fcard"><div class="emoji">📱</div><h3 data-zh="手机端" data-en="Mobile">手机端</h3><p data-zh="手机也能用深鲸：PWA 全屏、皮肤、用量查询，适配各机型" data-en="DeepWhale on your phone: PWA fullscreen, skins, usage check, tuned for every device">手机也能用深鲸：PWA 全屏、皮肤、用量查询，适配各机型</p></div>
+      <div class="fcard"><div class="emoji">📱</div><h3 data-zh="深鲸 Mobile" data-en="DeepWhale Mobile">深鲸 Mobile</h3><p data-zh="手机上也能用深鲸：连接你自己的 DSH，适配安卓/鸿蒙各机型" data-en="DeepWhale on your phone: connect to your own DSH, tuned for Android/HarmonyOS">手机上也能用深鲸：连接你自己的 DSH，适配安卓/鸿蒙各机型</p></div>
     </div>
   </div>
 </section>
@@ -269,7 +269,7 @@ var PRODUCTS = [
   },
   {
     id: 'mobile', emoji: '📱',
-    nameZh: '深鲸手机', nameEn: 'DeepWhale Mobile',
+    nameZh: '深鲸 Mobile', nameEn: 'DeepWhale Mobile',
     tag: {zh: '已发布 · APK 安装包', en: 'Available · APK'},
     descZh: '安卓/鸿蒙手机专用 App（APK 安装包）。下载安装后，在 App 里填写你自己的 DSH 服务器地址即可使用——数据只在你自己的设备上。',
     descEn: 'Android/HarmonyOS app (APK installer). Install it, enter your own DSH server address in the app, and you\'re ready — data stays on your device.',
@@ -297,7 +297,7 @@ var DOWNLOADS = [
     {emoji:'🪟', nameZh:'Windows', nameEn:'Windows', descZh:'x64 · exe', descEn:'x64 · exe', href: GH + '/' + VERSION + '/DeepWhale-Desktop-1.0.2-x64-Setup.exe', btnZh:'下载 EXE', btnEn:'Download EXE'},
     {emoji:'🐧', nameZh:'Linux', nameEn:'Linux', descZh:'x86_64 · AppImage', descEn:'x86_64 · AppImage', href: GH + '/' + VERSION + '/DeepWhale-Desktop-1.0.2-x86_64.AppImage', btnZh:'下载 AppImage', btnEn:'Download AppImage'}
   ]},
-  { group: 'mobile', titleZh: '深鲸手机（安卓 APK）', titleEn: 'DeepWhale Mobile (Android APK)', items: [
+  { group: 'mobile', titleZh: '深鲸 Mobile（安卓 APK）', titleEn: 'DeepWhale Mobile (Android APK)', items: [
     {emoji:'🤖', nameZh:'安卓 / 鸿蒙 4.x', nameEn:'Android / HarmonyOS 4.x', descZh:'手机版 APK · 安装后在 App 内填写你的 DSH 地址', descEn:'Mobile APK · install, then enter your DSH address in the app', href: GH + '/' + VERSION + '/DeepWhale-Mobile-1.0.2.apk', btnZh:'下载手机版 APK', btnEn:'Download Mobile APK'}
   ]}
 ];

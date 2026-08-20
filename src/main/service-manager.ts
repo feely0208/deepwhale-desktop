@@ -113,6 +113,8 @@ export class ServiceManager extends EventEmitter {
       env,
       // Windows 上 npx 是 .cmd，需要 shell 执行
       shell: process.platform === 'win32',
+      // Windows 隐藏子进程窗口（避免弹出 cmd 黑窗口，DSH 后台静默运行）
+      windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 

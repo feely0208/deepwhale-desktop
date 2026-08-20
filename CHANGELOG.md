@@ -4,6 +4,11 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [SemVer](https://semver.org/lang/zh-CN/)。
 
+## [1.0.3] - 2026-08-20
+
+### 修复
+- Windows：启动 DSH 服务时隐藏 cmd 窗口（`windowsHide`），不再弹出黑窗口、不再依赖 cmd 后台运行，打开桌面端即可直接使用
+
 ## [Unreleased]
 
 ### 变更

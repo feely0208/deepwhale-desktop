@@ -101,6 +101,11 @@ export class ServiceManager extends EventEmitter {
   private spawn(): void {
     const { command, args } = parseCommand(this.command);
     const resolved = resolveExecutable(command);
+    // Windows 下 npx 常装在带空格的目录（如 C:\Program Files\nodejs\ 或 E:\Program Files\...），
+    // 经 cmd（shell: true）执行时路径会被按空格截断（报错形如 'E:\Program' 不是内部或外部命令），
+    // 因此路径含空格时必须给可执行文件整体加引号，否则 DSH 启动失败、端口就绪超时。
+    const exec =
+      process.platform === 'win32' && /\s/.test(resolved) ? `"${resolved}"` : resolved;
     const env: NodeJS.ProcessEnv = { ...process.env };
     // Finder 启动的 App PATH 极简（无 /usr/local/bin 等），npx 内部会再调 node 会失败。
     // 把可执行文件所在目录补进子进程 PATH（node 与 npx 通常同目录）。
@@ -109,7 +114,7 @@ export class ServiceManager extends EventEmitter {
       env.PATH = env.PATH ? `${exeDir}:${env.PATH}` : exeDir;
     }
     console.log(`[service] 启动 DSH: ${this.command}（可执行文件: ${resolved}）`);
-    this.child = spawn(resolved, args, {
+    this.child = spawn(exec, args, {
       env,
       // Windows 上 npx 是 .cmd，需要 shell 执行
       shell: process.platform === 'win32',

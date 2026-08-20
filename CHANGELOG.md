@@ -4,6 +4,11 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [SemVer](https://semver.org/lang/zh-CN/)。
 
+## [1.0.4] - 2026-08-20
+
+### 修复
+- Windows：修复 Node/npx 安装在含空格目录（如 `C:\Program Files\nodejs\`、`E:\Program Files\...`）时 DSH 启动失败的问题。可执行文件路径含空格时加引号执行，不再报 `'E:\Program' 不是内部或外部命令`、不再出现"等待 DSH Web UI 就绪超时"
+
 ## [1.0.3] - 2026-08-20
 
 ### 修复

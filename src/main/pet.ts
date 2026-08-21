@@ -30,21 +30,25 @@ export class PetWindow {
     return path.join(app.getPath('userData'), 'pets');
   }
 
+  /**
+   * 确保内置宠物（app.asar 内）已就位到用户宠物目录。
+   * 幂等：只在用户目录缺某个内置宠物时才补；已存在则不动（保护用户自定义/修改）。
+   * 不用 fs.cpSync —— 它在 Electron 的 asar 虚拟文件系统下不可靠（asar 内目录无法被
+   * cpSync 递归拷贝，导致内置宠物 spritesheet/manifest 拷不出来，宠物只显示 'pet' 占位）。
+   * 改为 readdirSync + mkdirSync + copyFileSync 逐文件递归复制（三者 asar 均支持）。
+   */
   ensureUserPetsDir(): void {
     try {
       const dir = this.userPetsDir();
-      if (fs.existsSync(dir)) return;
       fs.mkdirSync(dir, { recursive: true });
       for (const entry of fs.readdirSync(this.builtinPetsDir, { withFileTypes: true })) {
         const src = path.join(this.builtinPetsDir, entry.name);
         const dest = path.join(dir, entry.name);
-        if (entry.isDirectory()) {
-          fs.cpSync(src, dest, { recursive: true });
-        } else {
-          fs.copyFileSync(src, dest);
-        }
+        if (fs.existsSync(dest)) continue; // 已存在则不覆盖
+        if (entry.isDirectory()) copyDirSync(src, dest);
+        else fs.copyFileSync(src, dest);
       }
-      console.log('[pet] 已初始化用户宠物目录:', dir);
+      console.log('[pet] 已确保用户宠物目录:', dir);
     } catch (e) {
       console.error('[pet] 初始化宠物目录失败:', e);
     }
@@ -338,4 +342,16 @@ function removeWhiteBackground(img: Electron.NativeImage): Electron.NativeImage 
     out[i + 3] = a;
   }
   return nativeImage.createFromBitmap(out, size);
+}
+
+/** 递归复制目录（逐文件），用于从 asar 内置宠物目录拷到用户目录。
+ *  避免用 fs.cpSync —— 其在 Electron 的 asar 虚拟文件系统下无法递归拷贝。 */
+function copyDirSync(src: string, dest: string): void {
+  fs.mkdirSync(dest, { recursive: true });
+  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+    const s = path.join(src, entry.name);
+    const d = path.join(dest, entry.name);
+    if (entry.isDirectory()) copyDirSync(s, d);
+    else fs.copyFileSync(s, d);
+  }
 }

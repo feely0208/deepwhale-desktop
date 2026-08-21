@@ -4,6 +4,11 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [SemVer](https://semver.org/lang/zh-CN/)。
 
+## [1.0.5] - 2026-08-21
+
+### 修复
+- 桌面宠物：修复内置宠物打不开、只显示"pet"占位图标的问题。根因是内置宠物在 app.asar 内，此前用 `fs.cpSync` 从 asar 拷贝到用户目录在 Windows 下失败（asar 虚拟文件系统不支持 cpSync 递归拷贝），导致 spritesheet/manifest 拷不出来；改为 `readdirSync` + `mkdirSync` + `copyFileSync` 逐文件递归复制，并在内置宠物缺失时幂等补全
+
 ## [1.0.4] - 2026-08-20
 
 ### 修复

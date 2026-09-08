@@ -257,17 +257,29 @@
       var keyIn = m.querySelector("#lic-key").value.trim();
       if (!/^1\d{10}$/.test(ph)) { msg(m, "请填写手机号", "#e07070"); return; }
       if (!code || _smsCache.phone !== ph || Date.now() > _smsCache.exp) { msg(m, "验证码无效或已过期，请重新发送", "#e07070"); return; }
+      function finish() {
+        if (!isRealDesktop()) { msg(m, "请在深鲸·律师端桌面端完成离线激活（本浏览器无法取得机器指纹）", "#e07070"); return; }
+        // 机器指纹授权：校验授权码
+        var r = realVerify(keyIn);
+        if (!r.ok) { msg(m, "授权码无效：" + (r.msg || "请核对机器码/到期"), "#e07070"); return; }
+        write(KEY.activate, { phone: ph, smsAt: Date.now(), machine: realMachine(), plan: "std", exp: r.exp || null, lic: keyIn.toUpperCase() });
+        write(KEY.phoneCache, ph);
+        msg(m, "已激活（手机号 + 机器绑定）" + (r.exp ? (" 至 " + r.exp) : "") + "。数据仅本地保存。", "#7ddb8a");
+        m.querySelector("#lic-status").textContent = "当前：" + badgeText();
+        updateBadgeText();
+        ensureBadge();
+      }
+      // 服务端校验验证码（密钥/校验都在华为云服务器，App 不含密钥）
+      if (typeof window.__verifySms === "function") {
+        window.__verifySms({ phone: ph, code: code }).then(function (v) {
+          if (!v || !v.valid) { msg(m, "验证码不正确，请核对", "#e07070"); return; }
+          finish();
+        }).catch(function () { msg(m, "短信校验服务异常，请重试", "#e07070"); });
+        return;
+      }
+      // 无桥：本地回退校验
       if (String(code).slice(0, 6) !== String(_smsCache.code).slice(0, 6)) { msg(m, "验证码不正确，请核对", "#e07070"); return; }
-      if (!isRealDesktop()) { msg(m, "请在深鲸·律师端桌面端完成离线激活（本浏览器无法取得机器指纹）", "#e07070"); return; }
-      // 机器指纹授权：校验授权码
-      var r = realVerify(keyIn);
-      if (!r.ok) { msg(m, "授权码无效：" + (r.msg || "请核对机器码/到期"), "#e07070"); return; }
-      write(KEY.activate, { phone: ph, smsAt: Date.now(), machine: realMachine(), plan: "std", exp: r.exp || null, lic: keyIn.toUpperCase() });
-      write(KEY.phoneCache, ph);
-      msg(m, "已激活（手机号 + 机器绑定）" + (r.exp ? (" 至 " + r.exp) : "") + "。数据仅本地保存。", "#7ddb8a");
-      m.querySelector("#lic-status").textContent = "当前：" + badgeText();
-      updateBadgeText();
-      ensureBadge();
+      finish();
     });
 
     // A款(自备算力)保存 key —— 统一走 KeyMgr

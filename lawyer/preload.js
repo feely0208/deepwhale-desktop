@@ -42,8 +42,9 @@ contextBridge.exposeInMainWorld('__llmChat', (opts) => ipcRenderer.invoke('llm:c
 // 查询集团算力 key 是否已配置（A款）
 contextBridge.exposeInMainWorld('__getLLMKeyInfo', () => ipcRenderer.invoke('llm:keyinfo'));
 
-// —— 真实短信桥（阿里云短信）——
+// —— 真实短信桥（阿里云短信，经华为云服务器）——
 contextBridge.exposeInMainWorld('__sendSms', (opts) => ipcRenderer.invoke('sms:send', opts));
+contextBridge.exposeInMainWorld('__verifySms', (opts) => ipcRenderer.invoke('sms:verify', opts));
 contextBridge.exposeInMainWorld('__smsStatus', () => ipcRenderer.invoke('sms:status'));
 
 // —— 公益/法学生 免费申请 审核桥 ——

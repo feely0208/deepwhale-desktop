@@ -102,67 +102,46 @@ function aliyunPercentEncode(str) {
 }
 const crypto = require('crypto');
 
-// 真实短信桥：阿里云短信 SendSms（RPC 签名）
-ipcMain.handle('sms:send', async (_ev, opts) => {
-  const cfg = readSmsConfig();
-  const phone = (opts && opts.phone) || '';
-  const code = (opts && opts.code) || genCode();
-  if (!/^1\d{10}$/.test(phone)) return { ok: false, msg: '手机号格式不对' };
-  if (!cfg.accessKeyId || !cfg.accessKeySecret) {
-    return { ok: true, simulated: true, code: code, msg: '阿里云短信未配置（缺 accessKeyId/accessKeySecret），已用本地模拟码。' };
-  }
+// —— 短信后端：发短信 / 校验都交给华为云服务器（密钥只在服务器上，App 不含密钥）——
+const SMS_SERVER = (process.env.SMS_SERVER || 'http://115.120.202.30:8080');
+async function smsCall(path, payload) {
   try {
-    const param = {
-      SignName: cfg.signName || '深鲸律师端',
-      TemplateCode: cfg.templateCode || '',
-      PhoneNumbers: phone,
-      // 模板参数：code=验证码, time=有效分钟数（模板：验证码为${code}，${time}分钟内有效）
-      TemplateParam: JSON.stringify({ code: code, time: String(cfg.smsMinutes || 5) }),
-      RegionId: cfg.regionId || 'cn-hangzhou',
-    };
-    if (!param.TemplateCode) return { ok: false, msg: '请先在 sms-config.json 填写 TemplateCode（验证码模板CODE）' };
-
-    // 公共请求参数
-    const common = {
-      AccessKeyId: cfg.accessKeyId,
-      Action: 'SendSms',
-      Format: 'JSON',
-      SignatureMethod: 'HMAC-SHA1',
-      SignatureVersion: '1.0',
-      SignatureNonce: crypto.randomBytes(8).toString('hex'),
-      Timestamp: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
-      Version: '2017-05-25',
-    };
-    const all = Object.assign({}, common, param);
-
-    // 1) 按 key 排序，percentEncode，拼 canonicalized query string
-    const keys = Object.keys(all).sort();
-    const canonical = keys.map(function (k) {
-      return aliyunPercentEncode(k) + '=' + aliyunPercentEncode(String(all[k]));
-    }).join('&');
-    // 2) StringToSign = GET&%2F&<canonical>
-    const stringToSign = 'GET&%2F&' + aliyunPercentEncode(canonical);
-    // 3) HMAC-SHA1 signature = base64(hmacSha1(secret+'&', stringToSign))
-    const signature = crypto.createHmac('sha1', cfg.accessKeySecret + '&').update(stringToSign, 'utf8').digest('base64');
-    // 4) 加 Signature 进 query
-    const url = 'https://' + (cfg.endpoint || 'dysmsapi.aliyuncs.com') + '/?' + canonical + '&Signature=' + aliyunPercentEncode(signature);
-
-    const resp = await fetch(url, { method: 'GET' });
+    const resp = await fetch(SMS_SERVER + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload || {})
+    });
     const text = await resp.text();
-    console.log('[sms] aliyun code=' + code + ' body=' + text.slice(0, 300));
     let data; try { data = JSON.parse(text); } catch { data = null; }
-    if (data && data.Code === 'OK') return { ok: true, code: code, bizId: data.BizId };
-    const msg = (data && data.Message) || text.slice(0, 180);
-    return { ok: false, msg: '阿里云短信发送失败：' + msg };
+    return data || { ok: false, msg: '服务器返回异常' };
   } catch (e) {
-    return { ok: false, msg: '阿里云短信发送失败：' + (e && e.message || String(e)) };
+    return { ok: false, msg: '无法连接短信服务器：' + String((e && e.message) || e) };
   }
+}
+
+ipcMain.handle('sms:send', async (_ev, opts) => {
+  const phone = (opts && opts.phone) || '';
+  if (!/^1\d{10}$/.test(phone)) return { ok: false, msg: '手机号格式不对' };
+  const r = await smsCall('/api/send-sms', { phone: phone });
+  return { ok: !!r.ok, msg: r.msg || '', simulated: false };
 });
 
-// 查询短信配置状态
+ipcMain.handle('sms:verify', async (_ev, opts) => {
+  const phone = (opts && opts.phone) || '';
+  const code = (opts && opts.code) || '';
+  const r = await smsCall('/api/verify-sms', { phone: phone, code: code });
+  return { ok: !!r.valid, valid: !!r.valid, msg: r.msg || '' };
+});
+
+// 查询短信配置状态（问服务器）
 ipcMain.handle('sms:status', async () => {
-  const cfg = readSmsConfig();
-  return { configured: !!(cfg.accessKeyId && cfg.accessKeySecret && cfg.templateCode), provider: cfg.provider };
+  try {
+    const resp = await fetch(SMS_SERVER + '/api/sms-status');
+    const d = await resp.json();
+    return { configured: !!d.configured, provider: d.provider };
+  } catch (e) {
+    return { configured: false, provider: '' };
+  }
 });
 
 // —— Excel/CSV 数据导入解析桥（列头映射用）——
@@ -512,18 +491,13 @@ async function doSendSms(phone) {
       if (req.method === 'POST' && u.pathname === '/api/send-sms') {
         const phone = o.phone || '';
         if (!/^1\d{10}$/.test(phone)) return send(400, { ok: false, msg: '手机号格式不对' });
-        const r = await doSendSms(phone);
-        if (r.ok) SMS_CODES[phone] = { code: r.code, exp: Date.now() + 5 * 60000 };
-        return send(200, { ok: r.ok, simulated: !!r.simulated, msg: r.msg || '', code: r.simulated ? r.code : '' });
-        return send(200, { ok: r.ok, simulated: !!r.simulated, msg: r.msg || '' });
+        const r = await smsCall('/api/send-sms', { phone: phone });
+        return send(200, { ok: !!r.ok, msg: r.msg || '' });
       }
       if (req.method === 'POST' && u.pathname === '/api/verify-sms') {
         const phone = o.phone || '';
-        const rec = SMS_CODES[phone];
-        if (!rec || Date.now() > rec.exp) return send(200, { ok: false, msg: '验证码无效或已过期' });
-        if (String(o.code) !== rec.code) return send(200, { ok: false, msg: '验证码不正确' });
-        delete SMS_CODES[phone];
-        return send(200, { ok: true });
+        const r = await smsCall('/api/verify-sms', { phone: phone, code: String(o.code || '') });
+        return send(200, { ok: !!r.valid, valid: !!r.valid, msg: r.msg || '' });
       }
       if (req.method === 'GET' && u.pathname === '/api/feedback-poll') {
         const machine = u.searchParams.get('machine') || '';

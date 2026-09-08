@@ -29,7 +29,6 @@
       "admin.html",
       "lib/**/*",
       "workbench/**/*",
-      "sms-config.json",
       "package.json"
     ],
     "extraResources": [],

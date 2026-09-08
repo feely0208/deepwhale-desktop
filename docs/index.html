@@ -66,6 +66,7 @@
   .card .emoji{font-size:28px}
   .card h4{font-size:15px;margin:10px 0 4px}
   .card p{font-size:12.5px;color:#64748b;margin-bottom:12px}
+  .card-note{margin-top:10px;padding-top:10px;border-top:1px dashed #e2e8f0;font-size:11.5px;line-height:1.7;color:#64748b;text-align:left}
   .btn{display:inline-block;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;font-weight:600;font-size:13.5px;padding:9px 18px;border-radius:24px;transition:filter .15s;cursor:pointer}
   .btn:hover{filter:brightness(1.08)}
   .btn.ghost{background:transparent;border:1px solid #cbd5e1;color:#334155}
@@ -445,7 +446,7 @@ var DOWNLOADS = [
     {emoji:'🤖', nameZh:'安卓 / 鸿蒙 4.x', nameEn:'Android / HarmonyOS 4.x', descZh:'手机版 APK · 安装后在 App 内填写你的 DSH 地址', descEn:'Mobile APK · install, then enter your DSH address in the app', href: GH + '/' + MOBILE_VERSION + '/DeepWhale-Mobile-1.0.2.apk', btnZh:'下载手机版 APK', btnEn:'Download Mobile APK'}
   ]},
   { group: 'lawyer', titleZh: '深鲸律师端（法律版）', titleEn: 'DeepWhale Lawyer (Legal Edition)', items: [
-    {emoji:'⚖️', nameZh:'macOS（Apple 芯片）', nameEn:'macOS (Apple Silicon)', descZh:'律师专用版 · zip 免安装', descEn:'Lawyer edition · zip, no installer needed', href: GH + '/v0.1.0/DeepWhale-Lawyer-0.1.0-arm64.zip', btnZh:'下载律师端', btnEn:'Download Lawyer Edition'}
+    {emoji:'⚖️', nameZh:'macOS（Apple 芯片）', nameEn:'macOS (Apple Silicon)', descZh:'律师专用版 · zip 免安装', descEn:'Lawyer edition · zip, no installer needed', href: GH + '/v0.1.0/DeepWhale-Lawyer-0.1.0-arm64.zip', btnZh:'下载律师端', btnEn:'Download Lawyer Edition', noteZh:'下载后：① 解压 → ② 双击包内「首次使用请双击我」一键解除系统拦截并启动（首次若提示「已损坏／无法验证开发者」，双击它即可）→ ③ 打开「深鲸律师端」登录即可使用。仅支持 Apple 芯片（M1 及以上）Mac。', noteEn:'After download: ① unzip → ② double-click the bundled 首次使用请双击我 to auto-bypass Gatekeeper & launch (if it warns "damaged / can\'t verify developer" on first open, just run that script) → ③ open 深鲸律师端 and log in. Requires Apple Silicon (M1+) Mac.'}
   ]}
 ];
 
@@ -485,7 +486,9 @@ function renderDownloads(){
       return '<div class="card"><div class="emoji">' + it.emoji + '</div>' +
         '<h4>' + t(it.nameZh, it.nameEn) + '</h4>' +
         '<p>' + t(it.descZh, it.descEn) + '</p>' +
-        '<a class="btn" href="' + it.href + '">' + t(it.btnZh, it.btnEn) + '</a></div>';
+        '<a class="btn" href="' + it.href + '">' + t(it.btnZh, it.btnEn) + '</a>' +
+        (it.noteZh ? '<div class="card-note">' + t(it.noteZh, it.noteEn) + '</div>' : '') +
+        '</div>';
     }).join('');
     return '<div class="dl-group"><h3>' + t(d.titleZh, d.titleEn) + '</h3><div class="cards">' + cards + '</div></div>';
   }).join('');

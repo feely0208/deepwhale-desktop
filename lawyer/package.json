@@ -1,0 +1,67 @@
+{
+  "name": "lvjing-lawyer",
+  "productName": "深鲸律师端",
+  "version": "0.1.0",
+  "description": "面向律师的 AI 法律工作台桌面端",
+  "main": "main.js",
+  "author": "feely",
+  "license": "MIT",
+  "scripts": {
+    "pack:mac": "electron-builder --mac",
+    "pack:win": "electron-builder --win",
+    "pack:linux": "electron-builder --linux"
+  },
+  "dependencies": {
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "electron": "^43.4.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.deepwhale.lawyer",
+    "productName": "深鲸律师端",
+    "asar": true,
+    "files": [
+      "main.js",
+      "preload.js",
+      "admin.html",
+      "lib/**/*",
+      "workbench/**/*",
+      "sms-config.json",
+      "package.json"
+    ],
+    "extraResources": [],
+    "mac": {
+      "target": [
+        "zip"
+      ],
+      "category": "public.app-category.business",
+      "icon": "build/icon.icns",
+      "extendInfo": {
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLName": "DeepWhaleLawyer",
+            "CFBundleURLSchemes": [
+              "deepwhale-law"
+            ]
+          }
+        ]
+      }
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "build/icon.ico"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Office",
+      "icon": "build/icon.png"
+    }
+  }
+}

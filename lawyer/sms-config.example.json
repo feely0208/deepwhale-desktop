@@ -1,0 +1,12 @@
+{
+  "provider": "huawei-market-sms",
+  "_comment": "deepwhale-legal 短信接口配置（脱敏示例）。真实密钥放 sms-config.json（已被 .gitignore 忽略，不提交）。",
+  "endpoint": "https://YOUR-SMS-API-ENDPOINT/api/sms/send",
+  "method": "POST",
+  "appId": "fe7fdf07********4a9d0",
+  "appSecret": "1e802fd9********4d31",
+  "signKey": "6D44364F********03D6",
+  "signName": "深鲸律师端",
+  "templateId": "TEMPLATE_ID",
+  "_fields_note": "字段名可能因服务商而异：appId/appKey/appSecret/signKey/secret。请按该商品的《接口文档》核对真实参数名，并把 sms-config.json 里的值填正确。"
+}

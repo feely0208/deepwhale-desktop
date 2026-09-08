@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>深鲸·律师端 · 运营后台</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin:0; font-family:-apple-system,Segoe UI,"PingFang SC",sans-serif; background:#0d1424; color:#eef2f8; }
+    header { padding:20px 28px; border-bottom:1px solid rgba(255,255,255,.08); display:flex; align-items:center; justify-content:space-between; }
+    h1 { margin:0; font-size:20px; }
+    header .sub { color:#8ea3c2; font-size:13px; }
+    .wrap { padding:24px 28px; max-width:1100px; margin:0 auto; }
+    .stats { display:flex; gap:16px; margin-bottom:22px; flex-wrap:wrap; }
+    .stat { padding:16px 22px; border:1px solid rgba(255,255,255,.1); border-radius:12px; background:rgba(255,255,255,.03); min-width:120px; }
+    .stat b { font-size:26px; display:block; }
+    .stat span { font-size:12px; color:#8ea3c2; }
+    .card { border:1px solid rgba(255,255,255,.1); border-radius:12px; background:rgba(255,255,255,.02); padding:16px; margin-bottom:16px; }
+    .card .id { font-size:11px; color:#7aa8ff; margin-bottom:6px; }
+    .card .rev { color:#8ea3c2; font-size:12px; margin-bottom:8px; }
+    .grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:13px; margin-bottom:10px; }
+    .grid div span { color:#8ea3c2; display:block; font-size:11px; }
+    .proof { max-width:320px; max-height:260px; border:1px dashed rgba(255,255,255,.2); border-radius:8px; margin:8px 0; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+    .proof img { max-width:100%; max-height:100%; object-fit:contain; }
+    .proof a { color:#7aa8ff; font-size:13px; padding:8px; word-break:break-all; }
+    .btn { padding:9px 18px; border:none; border-radius:8px; cursor:pointer; font:600 13px inherit; }
+    .btn-ok { background:#1f7a4d; color:#eafff2; }
+    .btn-no { background:#7a2c2c; color:#fff; }
+    .btn-ghost { background:rgba(255,255,255,.08); color:#cdd6ea; }
+    .badge { padding:3px 10px; border-radius:999px; font-size:11px; font-weight:700; }
+    .b-pending { background:rgba(245,158,11,.18); color:#fbbf24; }
+    .b-approved { background:rgba(34,197,94,.18); color:#4ade80; }
+    .b-rejected { background:rgba(239,68,68,.18); color:#f87171; }
+    .reason { font-size:12px; color:#f87171; }
+    .empty { color:#8ea3c2; text-align:center; padding:50px 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>深鲸·律师端 · 运营后台</h1>
+      <div class="sub">公益律师 免费申请审核（证明文件为本地存储，仅用于资质核验）</div>
+    </div>
+    <button class="btn btn-ghost" onclick="window.location.reload()">刷新</button>
+  </header>
+  <div class="wrap">
+    <div class="stats" id="stats"></div>
+    <div class="card" style="margin-bottom:14px"><div class="card-head"><h2>公益律师 · 免费申请审核</h2></div><div id="list"></div></div>
+    <div class="card" style="margin-bottom:14px"><div class="card-head"><h2>律师实名核验（提交后在官网 credit.acla.org.cn 查证，通过方可登录）</h2></div><div id="lwlist"></div></div>
+    <div class="card"><div class="card-head"><h2>反馈意见 / Bug（采纳后可加试用时长）</h2></div><div id="fblist"></div></div>
+  </div>
+
+  <script>
+    const __f = (window.__freeList && window.__freeList()) || Promise.resolve([]);
+    const __d = (window.__freeDecide && window.__freeDecide);
+    const __fL = (window.__feedbackList && window.__feedbackList()) || Promise.resolve([]);
+    const __fA = (window.__feedbackApprove && window.__feedbackApprove);
+    const __lwL = (window.__lawyerList && window.__lawyerList()) || Promise.resolve([]);
+    const __lwD = (window.__lawyerDecide && window.__lawyerDecide);
+    function esc(s){ return String(s==null?'':s).replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    function fmt(ts){ if(!ts) return ''; const d=new Date(ts); return d.toLocaleString('zh-CN'); }
+    async function load() {
+      const shown = document.getElementById('list');
+      let list=[]; try { list = await __f; } catch(e){}
+      // 统计
+      const c = { pending:0, approved:0, rejected:0 };
+      list.forEach(x=>{ c[x.status] = (c[x.status]||0)+1; });
+      document.getElementById('stats').innerHTML =
+        '<div class="stat"><b>'+list.length+'</b><span>总申请</span></div>' +
+        '<div class="stat"><b>'+c.pending+'</b><span>待审核</span></div>' +
+        '<div class="stat"><b>'+c.approved+'</b><span>已通过</span></div>' +
+        '<div class="stat"><b>'+c.rejected+'</b><span>已拒绝</span></div>';
+      if (!list.length) { shown.innerHTML = '<div class="empty">暂无免费申请（用户提交后会出现在这里）</div>'; return; }
+      const bs = { pending:'b-pending', approved:'b-approved', rejected:'b-rejected' };
+      const lt = { lawyer:'公益律师' };
+      shown.innerHTML = list.slice().reverse().map(x => {
+        const a = x.app||{};
+        const file = a.file||{};
+        const proof = file.data ? (file.data.indexOf('data:image')===0 ? '<div class="proof"><img src="'+file.data+'"></div>' : (file.data.indexOf('data:application/pdf')===0 ? '<div class="proof"><a href="'+file.data+'" download="'+esc(file.name)+'">查看 PDF 证明文件</a></div>' : '<div class="proof"><span>'+esc(file.name)+'</span></div>')) : '';
+        const reason = x.status==='rejected' && x.reason ? '<div class="reason">拒绝原因：'+esc(x.reason)+'</div>' : '';
+        return '<div class="card">' +
+          '<div class="id">#'+esc(x.id)+'  申请于 '+fmt(x.at)+'</div>' +
+          '<div class="rev"><span class="badge '+(bs[x.status]||'')+'">'+(x.status==='pending'?'待审核':x.status==='approved'?'已通过':'已拒绝')+'</span>  '+esc(a.machine||'')+'</div>' +
+          '<div class="grid">' +
+          '<div><span>姓名</span>'+esc(a.name)+'</div>' +
+          '<div><span>类型</span>'+(lt[a.type]||esc(a.type))+'</div>' +
+          '<div><span>证号</span>'+esc(a.no)+'</div>' +
+          '<div><span>单位/学校</span>'+esc(a.org)+'</div>' +
+          '<div><span>证明人/签署单位</span>'+esc(a.firm)+'</div>' +
+          '<div><span>手机号</span>'+esc(a.phone)+'</div>' +
+          '</div>' +
+          '<div style="font-size:11px;color:#8ea3c2">证明文件：'+esc(file.name||'—')+'</div>' + proof + reason +
+          '<div style="margin-top:10px;display:flex;gap:8px">' +
+          (x.status!=='approved' ? '<button class="btn btn-ok" data-id="'+esc(x.id)+'" data-d="approve">通过（发放免费授权）</button>' : '') +
+          (x.status!=='rejected' ? '<button class="btn btn-no" data-id="'+esc(x.id)+'" data-d="reject">拒绝</button>' : '') +
+          '</div>' +
+          '</div>';
+      }).join('');
+      shown.querySelectorAll('[data-d]').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          const id = btn.getAttribute('data-id');
+          const decide = btn.getAttribute('data-d');
+          const reason = decide==='reject' ? (prompt('请输入拒绝原因：')||'') : '';
+          if (decide==='reject' && !reason) return;
+          if (!__d) { alert('无后台权限（请在桌面端打开本页）'); return; }
+          __d({id:id, decide:decide, reason:reason}).then(function(r){
+            alert(r && r.ok ? (decide==='approve'?'已通过并发放免费授权':'已拒绝') : ('操作失败：'+((r&&r.msg)||'')));
+            window.location.reload();
+          });
+        });
+      });
+      loadFb();
+      loadLawyer();
+    }
+
+    async function loadLawyer() {
+      const shown = document.getElementById('lwlist');
+      let arr=[]; try { arr = await __lwL; } catch(e){}
+      // 统计
+      const cp = arr.filter(x=>x.status==='pending').length;
+      shown.innerHTML =
+        '<div style="font-size:12px;color:#8ea3c2;margin-bottom:8px">待核验 <b>'+cp+'</b> 条。核验步骤：点「打开官网核验」→ 在<a href="javascript:void(0)" onclick="window.__openExternal&&window.__openExternal(\'https://credit.acla.org.cn/credit/lawyer\')" style="color:#7aa8ff">credit.acla.org.cn</a> 查该律师姓名/证号/律所是否一致 → 一致点「通过」，否则「拒绝」。</div>' +
+        (arr.length ? '' : '<div class="empty">暂无律师实名申请（用户提交后会出现在这里）</div>');
+      if (!arr.length) return;
+      const bs = { pending:'b-pending', approved:'b-approved', rejected:'b-rejected' };
+      const lt = arr.slice().reverse().map(x => {
+        const a = x.app||{};
+        return '<div class="card" style="margin-bottom:10px">' +
+          '<div class="id">#'+esc(x.id)+'  提交于 '+fmt(x.at)+'</div>' +
+          '<div class="rev"><span class="badge '+(bs[x.status]||'b-pending')+'">'+(x.status==='pending'?'待核验':x.status==='approved'?'已通过':'已拒绝')+'</span>  '+esc(a.machine||'')+'</div>' +
+          '<div class="grid">' +
+          '<div><span>姓名</span>'+esc(a.name)+'</div>' +
+          '<div><span>执业证号</span>'+esc(a.license)+'</div>' +
+          '<div><span>所属律所</span>'+esc(a.firm)+'</div>' +
+          '<div><span>类型</span>'+esc(a.mode==='intern'?'实习律师':'执业律师')+'</div>' +
+          '</div>' +
+          (x.status==='rejected' && x.reason ? '<div class="reason">拒绝原因：'+esc(x.reason)+'</div>' : '') +
+          '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">' +
+          '<a class="btn btn-ghost" href="javascript:void(0)" onclick="window.__openExternal&&window.__openExternal(\'https://credit.acla.org.cn/credit/lawyer\')">打开官网核验</a>' +
+          (x.status!=='approved' ? '<button class="btn btn-ok" data-lid="'+esc(x.id)+'" data-d="approve">通过（允许登录）</button>' : '') +
+          (x.status!=='rejected' ? '<button class="btn btn-no" data-lid="'+esc(x.id)+'" data-d="reject">拒绝</button>' : '') +
+          '</div></div>';
+      }).join('');
+      shown.innerHTML += lt;
+      shown.querySelectorAll('[data-lid]').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          const id = btn.getAttribute('data-lid');
+          const decide = btn.getAttribute('data-d');
+          const reason = decide==='reject' ? (prompt('请输入拒绝原因：')||'') : '';
+          if (decide==='reject' && !reason) return;
+          if (!__lwD) { alert('无后台权限（请在桌面端打开本页）'); return; }
+          __lwD({id:id, decide:decide, reason:reason}).then(function(r){
+            alert(r && r.ok ? (decide==='approve'?'已通过，该律师可登录':'已拒绝') : ('操作失败：'+((r&&r.msg)||'')));
+            window.location.reload();
+          });
+        });
+      });
+    }
+
+    async function loadFb() {
+      const shown = document.getElementById('fblist');
+      let fbList=[]; try { fbList = await __fL; } catch(e){}
+      if (!fbList.length) { shown.innerHTML = '<div class="empty">暂无反馈意见（用户提交后会出现在这里）</div>'; return; }
+      const bs = { pending:'b-pending', approved:'b-approved' };
+      const tb = { bug:'Bug 问题', advice:'改进建议', intent:'使用疑问' };
+      shown.innerHTML = fbList.slice().reverse().map(x => {
+        return '<div class="card" style="margin-bottom:10px">' +
+          '<div class="id">#'+esc(x.id)+'  提交于 '+fmt(x.at)+'</div>' +
+          '<div class="rev"><span class="badge '+(bs[x.status]||'b-pending')+'">'+(x.status==='approved'?'已采纳（+'+x.approvedDays+'天）':'待处理')+'</span>  '+esc(x.machine||'')+'　类型：'+esc(tb[x.type]||x.type)+'</div>' +
+          '<div style="font-size:13px;line-height:1.7;margin:6px 0">'+esc(x.desc)+'</div>' +
+          (x.phone ? '<div style="font-size:12px;color:#8ea3c2">联系方式：'+esc(x.phone)+'</div>' : '') +
+          '<div style="margin-top:8px;display:flex;gap:8px;align-items:center">' +
+          (x.status!=='approved' ? '<input id="fbDays_'+esc(x.id)+'" type="number" value="7" min="1" style="width:70px;padding:6px 8px;border-radius:6px;border:1px solid rgba(255,255,255,.2);background:#12151c;color:#eef2f8" title="奖励天数">' : '') +
+          (x.status!=='approved' ? '<span style="font-size:11px;color:#8ea3c2">天</span>' : '') +
+          (x.status!=='approved' ? '<button class="btn btn-ok" data-fid="'+esc(x.id)+'">确认采纳并加试用</button>' : '') +
+          (x.status==='approved' ? '<span style="font-size:12px;color:#4ade80">已奖励 '+x.approvedDays+' 天</span>' : '') +
+          '</div></div>';
+      }).join('');
+      shown.querySelectorAll('[data-fid]').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          const id = btn.getAttribute('data-fid');
+          const days = (document.getElementById('fbDays_'+id) || {}).value || 7;
+          if (!__fA) { alert('无后台权限（请在桌面端打开本页）'); return; }
+          __fA({id:id, days:days}).then(function(r){
+            alert(r && r.ok ? ('已采纳，为该用户增加 '+days+' 天试用') : ('操作失败：'+((r&&r.msg)||'')));
+            window.location.reload();
+          });
+        });
+      });
+    }
+    document.addEventListener('DOMContentLoaded', load);
+  </script>
+</body>
+</html>

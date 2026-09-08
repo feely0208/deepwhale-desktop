@@ -1,0 +1,88 @@
+/* =========================================================================
+   base.css — 设计令牌 + 主题引擎（跟随系统 / 浅色 / 深色，对齐 DSH 原生观感）
+   ========================================================================= */
+
+:root {
+  /* 色调：对齐 DSH alpha 设计系统（--dsw-static-deepseek-* / --dsw-static-neutral-bluish-*） */
+  --accent: #4176e6;             /* --dsw-static-deepseek-500 rgb(65,118,230) */
+  --accent-2: #679efe;           /* --dsw-static-deepseek-400 rgb(103,158,254) */
+  --accent-soft: rgba(65, 118, 230, 0.16);
+  --danger: #ec1313;             /* --dsw-static-red-600 */
+  --success: #22c55e;            /* --dsw-static-green-500 */
+  --warning: #f59e0b;            /* --dsw-static-amber-500 */
+
+  --radius: 14px;
+  --radius-sm: 9px;
+  --sidebar-w: 240px;
+  --topbar-h: 64px;
+
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "HarmonyOS Sans",
+    "PingFang SC", "Microsoft YaHei", Roboto, sans-serif;
+
+  /* 运动 */
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --dur: 0.28s;
+}
+
+/* —— 深色主题（中性冷灰黑，层次协调） —— */
+:root,
+[data-theme="dark"] {
+  --bg: #14161a;                  /* 主底：冷灰黑 */
+  --bg-2: #1b1e24;                /* bg-2 */
+  --surface: #23262d;             /* 卡片 */
+  --surface-2: #2b2f37;           /* 卡片-2 */
+  --surface-3: #343943;           /* 卡片-3 */
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.15);
+  --text: #f3f5f8;                /* 主文字 */
+  --text-soft: #aab1bb;           /* 次要文字 */
+  --text-dim: #71787f;            /* 弱文字 */
+  --shadow: 0 8px 30px rgba(0, 0, 0, 0.42);
+  --glass: rgba(20, 22, 26, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  color-scheme: dark;
+}
+
+/* —— 浅色主题（映射 DSH light neutral-bluish） —— */
+[data-theme="light"] {
+  --bg: #f5f6f7;                  /* --dsw-static-neutral-bluish-60 rgb(245,246,247) */
+  --bg-2: #eef0f3;                /* --dsw-static-neutral-bluish-75 rgb(241,243,245) */
+  --surface: #ffffff;             /* --dsw-static-neutral-bluish-00 */
+  --surface-2: #f7f8f9;           /* --dsw-static-neutral-bluish-50 */
+  --surface-3: #eef0f2;           /* --dsw-static-neutral-bluish-100 rgb(235,238,242) */
+  --border: rgba(20, 30, 55, 0.10);
+  --border-strong: rgba(20, 30, 55, 0.18);
+  --text: #1b1b1c;                /* --dsw-static-neutral-bluish-900 */
+  --text-soft: #4b5668;
+  --text-dim: #8a93a4;
+  --shadow: 0 8px 30px rgba(30, 50, 90, 0.12);
+  --glass: rgba(255, 255, 255, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.55);
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+::selection { background: var(--accent-soft); }
+
+/* 滚动条 */
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-thumb {
+  background: var(--surface-3);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover { background: var(--text-dim); background-clip: content-box; }
+*::-webkit-scrollbar-track { background: transparent; }
+
+button { font-family: inherit; }

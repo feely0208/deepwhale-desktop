@@ -1,0 +1,87 @@
+# 深鲸律师端 · 构建 Windows / Linux 安装包
+# - 在 Windows / Ubuntu 原生环境构建（无需 wine）
+# - 构建后上传为 Actions Artifact，供手动下载后 `gh release upload` 到发布
+# - 触发：推送 lawyer/** 自动构建，或手动 workflow_dispatch
+name: Build Lawyer (Win/Linux)
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - 'lawyer/**'
+      - '.github/workflows/lawyer-build.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build-win:
+    name: 构建 Windows (NSIS)
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: lawyer
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: lawyer/package-lock.json
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 准备占位短信配置（真实密钥不入库）
+        run: cp sms-config.example.json sms-config.json
+
+      - name: 构建 NSIS 安装包
+        run: npx electron-builder --win --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: 上传 Windows 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: lawyer-win
+          path: |
+            lawyer/dist/*.exe
+            lawyer/dist/*.blockmap
+          if-no-files-found: error
+
+  build-linux:
+    name: 构建 Linux (AppImage + deb)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: lawyer
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: lawyer/package-lock.json
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 准备占位短信配置（真实密钥不入库）
+        run: cp sms-config.example.json sms-config.json
+
+      - name: 构建 AppImage + deb
+        run: npx electron-builder --linux --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: 上传 Linux 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: lawyer-linux
+          path: |
+            lawyer/dist/*.AppImage
+            lawyer/dist/*.deb
+          if-no-files-found: error

@@ -1,0 +1,9 @@
+node_modules/
+dist/
+release/
+icon.iconset/
+*.zip
+*.blockmap
+# 真实短信密钥文件不进仓库（用 example 占位，CI 构建时复制）
+sms-config.json
+.DS_Store

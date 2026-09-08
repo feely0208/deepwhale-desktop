@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>法律模式 · 律师工作台</title>
+  <link rel="stylesheet" href="css/base.css?v=wb3" />
+  <link rel="stylesheet" href="css/components.css?v=wb1" />
+  <link rel="stylesheet" href="css/workbench.css?v=wb14" />
+  <link rel="stylesheet" href="css/profile.css?v=wb2" />
+  <link rel="stylesheet" href="assets/cropperjs/cropper.min.css" />
+</head>
+<body>
+  <!-- 启动页：法律模式启动 -> 律师工作台（自动切换） -->
+  <div id="boot">
+    <div class="boot-logo">⚖️</div>
+    <div class="boot-title">法律模式</div>
+    <div class="boot-sub">Legal Mode · Agent Preset Module</div>
+    <div class="boot-progress progress" style="height:6px">
+      <div class="progress-bar progress-bar--gradient" id="bootBar" style="width:0%"></div>
+    </div>
+    <div class="boot-state" id="bootState">正在加载法律模式模块…</div>
+  </div>
+
+  <!-- 首次启动：身份校验建档（执业律师 / 实习律师） —— 姓名须与证号对应，否则不能登录 -->
+  <div id="setup" class="done">
+    <div class="setup-card glow">
+      <div class="setup-logo">⚖️</div>
+      <div class="setup-title">欢迎使用律师工作台</div>
+      <div class="setup-sub">请在下方完成身份校验后进入专属工作台</div>
+
+      <div class="su-modes">
+        <button data-mode="lawyer" class="active">执业律师</button>
+        <button data-mode="intern">实习律师</button>
+      </div>
+
+      <!-- 执业律师 -->
+      <div class="su-fields" id="suLawyer">
+        <div class="form-group">
+          <label>姓名 *</label>
+          <input id="suName" placeholder="登录人姓名" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label>执业证号 *</label>
+          <input id="suLicense" placeholder="执业证号">
+        </div>
+        <div class="form-group">
+          <label>所属律所 *</label>
+          <input id="suFirm" placeholder="律所全称，如：靖之霖律师事务所">
+        </div>
+      </div>
+
+      <!-- 实习律师 -->
+      <div class="su-fields" id="suIntern" style="display:none">
+        <div class="form-group">
+          <label>姓名 *</label>
+          <input id="suIName" placeholder="登录人姓名" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label>实习证号 *</label>
+          <input id="suILicense" placeholder="实习证号">
+        </div>
+        <div class="form-group">
+          <label>所属律所 *</label>
+          <input id="suIFirm" placeholder="律所全称，如：靖之霖律师事务所">
+        </div>
+        <div class="su-auth-tag">🔐 需执业律师授权认证</div>
+        <div class="form-group">
+          <label>授权执业律师姓名 *</label>
+          <input id="suAuthName" placeholder="授权律师姓名">
+        </div>
+        <div class="form-group">
+          <label>授权执业律师执业证号 *</label>
+          <input id="suAuthLicense" placeholder="授权律师执业证号">
+        </div>
+      </div>
+
+      <button class="btn btn-primary glow setup-btn" id="suGo">校验并进入工作台</button>
+      <div class="su-status" id="suStatus"></div>
+      <div class="setup-tip">提交后将由我们核验执业信息（官网可查），核验通过方可登录<br>信息仅保存在本机</div>
+    </div>
+  </div>
+
+  <!-- 壁纸层（图片 / 视频 / GIF） -->
+  <div id="wallpaper"></div>
+  <div id="wallpaper-tint"></div>
+  <div id="wallpaper-dim"></div>
+
+  <!-- 工作台 -->
+  <div id="app">
+    <!-- 顶栏 -->
+    <header class="topbar">
+      <div class="brand"><span class="logo">⚖️</span><span>律师工作台</span></div>
+      <div class="search">🔍<input placeholder="搜索案件、当事人、文书…" /></div>
+      <div class="spacer"></div>
+      <div class="tools">
+        <button class="icon-btn" id="wallBtn" title="壁纸">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="m21 15-5-5-9 9"/></svg>
+        </button>
+        <button class="icon-btn badge-dot-holder" id="notifyBtn" title="通知">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+        </button>
+        <button class="icon-btn" id="themeBtn" title="主题"></button>
+        <button class="icon-btn" id="backupBtn" title="备份数据(.swj) · 数据安全">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="M6 9l6 6 6-6"/><path d="M4 21h16"/></svg>
+        </button>
+        <button class="icon-btn" id="feedbackBtn" title="反馈意见 / Bug · 采纳后加试用">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8"/><path d="M8 13h5"/></svg>
+        </button>
+        <button class="avatar" id="topAvatar" title="个人化 · 情绪价值">张</button>
+      </div>
+    </header>
+
+    <!-- 主体：侧边导航 + 内容（含返回导航条） -->
+    <div class="body">
+      <aside class="sidebar">
+        <nav id="nav"></nav>
+        <div class="sidebar-foot">
+          <div class="mode-chip">
+            <span class="mode-dot"></span>
+            <span class="mode-text"><b>法律模式已启用</b><small>数据仅本地保存</small></span>
+          </div>
+          <button class="btn btn-primary" style="width:100%;margin-top:10px" id="dshAiBtn">深鲸AI</button>
+          <div class="dsh-ai-note">
+            <span class="dsh-ai-note-dot">●</span>
+            <span>使用深鲸AI 前请保持深鲸桌面端开启（最小化），勿手动关闭。</span>
+          </div>
+        </div>
+      </aside>
+      <div class="main-col">
+        <div class="crumb">
+          <button class="crumb-back" id="backBtn" title="返回上一步">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M15 18l-6-6 6-6"/></svg>
+            <span>返回</span>
+          </button>
+          <span class="crumb-path" id="crumbPath">仪表盘</span>
+        </div>
+        <main class="content" id="content"></main>
+      </div>
+    </div>
+  </div>
+
+  <!-- 壁纸选择面板 -->
+  <div class="wp-panel card glow" id="wallPanel" style="display:none">
+    <div class="card-head"><h2>更换壁纸</h2></div>
+    <div class="wp-grid" id="wpGrid"></div>
+    <div style="margin-top:14px;display:flex;gap:8px">
+      <label class="btn btn-ghost btn-sm" style="cursor:pointer">⬆ 选择本地文件<input type="file" id="wpUpload" accept="image/*,video/*,.gif" style="display:none"></label>
+      <button class="btn btn-ghost btn-sm" onclick="Wallpapers.set('assets/wallpapers/nebula.jpg','image','星云')">恢复默认</button>
+    </div>
+  </div>
+
+  <script src="js/theme.js?v=wb1"></script>
+  <script src="js/wallpapers.js?v=wb1"></script>
+  <script src="js/key-manager.js?v=wb1"></script>
+  <script src="js/ai.js?v=wb16"></script>
+  <script src="js/intl-kb.js?v=wb1"></script>
+  <script src="js/intl-compliance.js?v=wb1"></script>
+  <script src="js/intl-docs.js?v=wb1"></script>
+  <script src="js/intl-gba.js?v=wb1"></script>
+  <script src="js/intl-arb.js?v=wb1"></script>
+  <script src="js/wb-data.js?v=wb4"></script>
+  <script src="js/data-import.js?v=wb1"></script>
+  <script src="js/workbench.js?v=wb19"></script>
+  <script src="js/feedback.js?v=wb2"></script>
+  <script src="assets/cropperjs/cropper.min.js"></script>
+  <script src="js/profile.js?v=wb7"></script>
+  <script src="js/license.js?v=wb36"></script>
+</body>
+</html>

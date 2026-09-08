@@ -144,6 +144,19 @@ ipcMain.handle('sms:status', async () => {
   }
 });
 
+// 上报机器码（App 激活时上报，记录到服务器）
+ipcMain.handle('license:register', async (_ev, opts) => {
+  const phone = (opts && opts.phone) || '';
+  const machine = (opts && opts.machine) || '';
+  return smsCall('/api/register', { phone: phone, machine: machine });
+});
+
+// 自动领取授权码（服务器返回开发者上传的授权码）
+ipcMain.handle('license:fetch', async (_ev, opts) => {
+  const machine = (opts && opts.machine) || '';
+  return smsCall('/api/license/get', { machine: machine });
+});
+
 // —— Excel/CSV 数据导入解析桥（列头映射用）——
 // 读文件 → 用 xlsx 解析出所有 sheet，返回每个 sheet 的二维数组（含表头行）。
 // 文件来自前端 <input type=file>，Electron 下 path 在 webUtils.getPathForFile 获取。

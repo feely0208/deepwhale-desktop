@@ -35,6 +35,9 @@ try {
 // —— 真实授权桥（机器码 + 校验）——
 contextBridge.exposeInMainWorld('__licenseGetMachine', () => machineCode());
 contextBridge.exposeInMainWorld('__licenseVerify', (lic) => verifyLicense(lic));
+// 上报机器码 + 自动领取授权码（走华为云服务器）
+contextBridge.exposeInMainWorld('__licenseRegister', (opts) => ipcRenderer.invoke('license:register', opts));
+contextBridge.exposeInMainWorld('__licenseFetch', (opts) => ipcRenderer.invoke('license:fetch', opts));
 
 // —— 真实算力桥（A款=集团算力订阅 / B款=自填 DeepSeek Key）——
 // __llmChat({ key?, baseURL?, model?, messages:[{role,content}], temperature?, maxTokens? }) -> {ok, content?, msg?}

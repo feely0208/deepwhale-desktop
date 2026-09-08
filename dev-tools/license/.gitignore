@@ -1,0 +1,4 @@
+# 机密文件绝不进仓库：私钥 / 含 AdminToken+口令 的配置
+issuer/
+*.pem
+license-tool-config.json

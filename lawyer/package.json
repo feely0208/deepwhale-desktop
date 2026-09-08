@@ -4,7 +4,8 @@
   "version": "0.1.0",
   "description": "面向律师的 AI 法律工作台桌面端",
   "main": "main.js",
-  "author": "feely",
+  "homepage": "https://deepwhale.org",
+  "author": "feely0208 <feely0208@gmail.com>",
   "license": "MIT",
   "scripts": {
     "pack:mac": "electron-builder --mac",

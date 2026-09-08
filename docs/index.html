@@ -234,6 +234,7 @@
     <div class="q"><b data-zh="收费吗？" data-en="Is it paid?">收费吗？</b><p data-zh="永久免费、开源（MIT）。无内购、无订阅、无广告、无试用期。" data-en="Free forever, open source (MIT). No purchases, subscriptions, ads, or trials.">永久免费、开源（MIT）。无内购、无订阅、无广告、无试用期。</p></div>
     <div class="q"><b data-zh="需要注册或登录吗？" data-en="Do I need an account?">需要注册或登录吗？</b><p data-zh="不需要。每个产品都使用你自己的 DeepSeek API Key，数据只在你自己的设备上。" data-en="No. Each product uses your own DeepSeek API key; your data stays on your own device.">不需要。每个产品都使用你自己的 DeepSeek API Key，数据只在你自己的设备上。</p></div>
     <div class="q"><b data-zh="我的 API Key 安全吗？" data-en="Is my API key safe?">我的 API Key 安全吗？</b><p data-zh="由系统钥匙串（safeStorage）加密存储在本机，只在主进程使用，绝不落明文、绝不上传。" data-en="Encrypted with the OS keychain (safeStorage) on your machine, used only in the main process — never plain text, never uploaded.">由系统钥匙串（safeStorage）加密存储在本机，只在主进程使用，绝不落明文、绝不上传。</p></div>
+    <div class="q"><b data-zh="打开律师端提示「已损坏，无法打开」？" data-en="Lawyer app says &quot;damaged, can't be opened&quot;?">打开律师端提示「已损坏，无法打开」？</b><p data-zh="这是 macOS 对未公证应用的统一拦截，安装包本身没有问题。把 App 拖入「应用程序」文件夹后，在终端执行 xattr -cr &quot;/Applications/DeepWhale Lawyer.app&quot;，再打开即可；也可右键点击 App 选「打开」。律师端目前仅支持 Apple 芯片（M1 及以上）Mac。" data-en="This is macOS Gatekeeper blocking un-notarized apps — the package itself is fine. Move the app into Applications, then run xattr -cr &quot;/Applications/DeepWhale Lawyer.app&quot; in Terminal and reopen; alternatively right-click the app and choose Open. The Lawyer edition currently requires Apple Silicon (M1 or later) Mac.">这是 macOS 对未公证应用的统一拦截，安装包本身没有问题。把 App 拖入「应用程序」文件夹后，在终端执行 xattr -cr &quot;/Applications/DeepWhale Lawyer.app&quot;，再打开即可；也可右键点击 App 选「打开」。律师端目前仅支持 Apple 芯片（M1 及以上）Mac。</p></div>
     <div class="q"><b data-zh="和 DeepSeek Harness 是什么关系？" data-en="Relation to DeepSeek Harness?">和 DeepSeek Harness 是什么关系？</b><p data-zh="本项目是社区产品，基于 DeepSeek Harness 构建，并非 DeepSeek 官方产品，也不代表官方立场。" data-en="A community product built on DeepSeek Harness — not an official DeepSeek product.">本项目是社区产品，基于 DeepSeek Harness 构建，并非 DeepSeek 官方产品，也不代表官方立场。</p></div>
   </div>
 </section>
@@ -340,8 +341,8 @@
         <span class="tag now" data-zh="已发布" data-en="Available">已发布</span>
         <h3 data-zh="深鲸律师端" data-en="DeepWhale Lawyer">深鲸律师端</h3>
         <p data-zh="为律师打造的 AI 法律工作台：案件/文书/日历管理、AI 简报、实名核验注册。与深鲸桌面互融共联。" data-en="An AI legal workbench for lawyers: case/doc/calendar management, AI briefs, verified registration. Interoperates with DeepWhale Desktop.">为律师打造的 AI 法律工作台：案件/文书/日历管理、AI 简报、实名核验注册。与深鲸桌面互融共联。</p>
-        <div class="plats" data-zh="macOS" data-en="macOS">macOS</div>
-        <div class="acts"><a class="btn sm" href="#download" data-zh="下载律师端" data-en="Download Lawyer">下载律师端</a></div>
+        <div class="plats" data-zh="macOS（Apple 芯片）" data-en="macOS (Apple Silicon)">macOS（Apple 芯片）</div>
+        <div class="acts"><a class="btn sm" href="https://github.com/feely0208/deepwhale-desktop/releases/download/v0.1.0/DeepWhale-Lawyer-0.1.0-arm64.zip" target="_blank" rel="noopener" data-zh="下载律师端" data-en="Download Lawyer">下载律师端</a></div>
       </div>
     </div>
   </div>

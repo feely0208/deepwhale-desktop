@@ -35,6 +35,7 @@ jobs:
         run: npm ci
 
       - name: 写入短信配置（真实配置来自仓库 Secret，不提交源码）
+        shell: bash
         run: |
           if [ -n "${SMS_CONFIG:-}" ]; then
             printf '%s\n' "$SMS_CONFIG" > sms-config.json
@@ -79,6 +80,7 @@ jobs:
         run: npm ci
 
       - name: 写入短信配置（真实配置来自仓库 Secret，不提交源码）
+        shell: bash
         run: |
           if [ -n "${SMS_CONFIG:-}" ]; then
             printf '%s\n' "$SMS_CONFIG" > sms-config.json

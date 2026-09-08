@@ -34,8 +34,17 @@ jobs:
       - name: 安装依赖
         run: npm ci
 
-      - name: 准备占位短信配置（真实密钥不入库）
-        run: cp sms-config.example.json sms-config.json
+      - name: 写入短信配置（真实配置来自仓库 Secret，不提交源码）
+        run: |
+          if [ -n "${SMS_CONFIG:-}" ]; then
+            printf '%s\n' "$SMS_CONFIG" > sms-config.json
+            echo "已写入真实短信配置"
+          else
+            cp sms-config.example.json sms-config.json
+            echo "未设置 SMS_CONFIG Secret，使用占位配置"
+          fi
+        env:
+          SMS_CONFIG: ${{ secrets.SMS_CONFIG }}
 
       - name: 构建 NSIS 安装包
         run: npx electron-builder --win --publish never
@@ -69,8 +78,17 @@ jobs:
       - name: 安装依赖
         run: npm ci
 
-      - name: 准备占位短信配置（真实密钥不入库）
-        run: cp sms-config.example.json sms-config.json
+      - name: 写入短信配置（真实配置来自仓库 Secret，不提交源码）
+        run: |
+          if [ -n "${SMS_CONFIG:-}" ]; then
+            printf '%s\n' "$SMS_CONFIG" > sms-config.json
+            echo "已写入真实短信配置"
+          else
+            cp sms-config.example.json sms-config.json
+            echo "未设置 SMS_CONFIG Secret，使用占位配置"
+          fi
+        env:
+          SMS_CONFIG: ${{ secrets.SMS_CONFIG }}
 
       - name: 构建 AppImage + deb
         run: npx electron-builder --linux --publish never

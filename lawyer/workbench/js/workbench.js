@@ -576,7 +576,7 @@
       "<h3>记一笔</h3>" +
       "<div class='form-row'><div class='form-group'><label>类型</label><select id='feeType'><option value='income'>收入</option><option value='expense'>支出</option><option value='receivable'>待收</option></select></div>" +
       "<div class='form-group'><label>金额</label><input type='number' id='feeAmount' placeholder='0.00'></div></div>" +
-      "<div class='form-group'><label>说明</label><input id='feeDesc' placeholder='如：林某某案 委托费二期'></div>" +
+      "<div class='form-group'><label>说明</label><input id='feeDesc' placeholder='如：某某案 委托费二期'></div>" +
       "<div class='form-group'><label>关联案件</label><select id='feeCase'><option value=''>—</option>" + mock.cases.map(function (c) { return "<option>" + c.title + "</option>"; }).join("") + "</select></div>" +
       "<div class='modal-actions'><button class='btn btn-ghost' data-close>取消</button><button class='btn btn-primary' data-save>保存</button></div></div>";
     document.body.appendChild(m);
@@ -2198,7 +2198,7 @@
       "<h3>新建案件</h3>" +
       '<div class="form-row"><div class="form-group"><label>案件类型 *</label><select id="ncType"><option>民事</option><option>刑事</option><option>行政</option><option>非诉</option></select></div>' +
       '<div class="form-group"><label>优先级</label><select id="ncPri"><option>高</option><option>中</option><option>低</option></select></div></div>' +
-      '<div class="form-group"><label>案件名称 *</label><input id="ncTitle" placeholder="如：林某某劳动争议案"></div>' +
+      '<div class="form-group"><label>案件名称 *</label><input id="ncTitle" placeholder="如：某某劳动争议案"></div>' +
       '<div class="form-group"><label>当事人</label><input id="ncParty" placeholder="原告 / 委托人"></div>' +
       '<div class="form-row"><div class="form-group"><label>受托法院</label><input id="ncCourt" placeholder="法院"></div>' +
       '<div class="form-group"><label>承办人（本人）</label><input value="' + meName() + '" readonly></div></div>' +

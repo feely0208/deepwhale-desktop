@@ -16,7 +16,7 @@
     { id: "rose", accent: "#f43f8e", accent2: "#fb7bb0" },
   ];
 
-  const DEFAULTS = { name: "张冬宝", title: "主任律师", avatar: null, accent: "blue" };
+  const DEFAULTS = { name: "", title: "", avatar: null, accent: "blue" };
 
   let state = load();
 

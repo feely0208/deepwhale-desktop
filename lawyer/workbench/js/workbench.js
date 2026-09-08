@@ -25,31 +25,14 @@
   // —— 模拟业务数据（参考"律师案件管理系统"领域模型） ——
   const mock = {
     stats: [
-      { label: "进行中案件", value: "12", icon: "briefcase", foot: "<span class='up'> 8%</span> 较上月" },
-      { label: "本月新收", value: "5", icon: "chart", foot: "<span class='up'> 2</span> 件" },
-      { label: "待收费用", value: "¥86.4万", icon: "wallet", foot: "<span class='up'> 12%</span> 回款率" },
-      { label: "本周开庭", value: "3", icon: "calendar", foot: "<span class='down'> 1</span> 场" },
+      { label: "进行中案件", value: "0", icon: "briefcase", foot: "较上月" },
+      { label: "本月新收", value: "0", icon: "chart", foot: "件" },
+      { label: "待收费用", value: "¥0", icon: "wallet", foot: "回款率" },
+      { label: "本周开庭", value: "0", icon: "calendar", foot: "场" },
     ],
-    cases: [
-      { no: "（2026）沪0104民初3291号", title: "林某某与某某公司劳动争议案", type: "民事", party: "林某某", court: "上海市徐汇区人民法院", status: "审理中", priority: "高", progress: 72, lawyer: "张冬宝", date: "2026-08-12" },
-      { no: "（2026）京02刑初88号", title: "王某涉嫌帮助信息网络犯罪活动案", type: "刑事", party: "王某", court: "北京市第二中级人民法院", status: "已立案", priority: "中", progress: 45, lawyer: "李慧敏", date: "2026-08-05" },
-      { no: "（2026）浙民终512号", title: "甲公司诉乙公司买卖合同纠纷", type: "民事", party: "甲公司", court: "浙江省高级人民法院", status: "等待开庭", priority: "高", progress: 88, lawyer: "张冬宝", date: "2026-07-28" },
-      { no: "（2026）粤0106行初34号", title: "陈某不服行政处罚决定案", type: "行政", party: "陈某", court: "广州市天河区人民法院", status: "举证中", priority: "低", progress: 30, lawyer: "王建国", date: "2026-08-20" },
-      { no: "（2026）苏05执127号", title: "某银行与某贸易公司执行案", type: "执行", party: "某银行", court: "苏州市中级人民法院", status: "执行中", priority: "中", progress: 55, lawyer: "李慧敏", date: "2026-08-18" },
-      { no: "（2026）川01民初776号", title: "周某与某保险公司保险合同纠纷", type: "民事", party: "周某", court: "成都市中级人民法院", status: "待立案", priority: "低", progress: 12, lawyer: "王建国", date: "2026-08-22" },
-    ],
-    progress: [
-      { name: "林某某与某某公司劳动争议案", pct: 72 },
-      { name: "甲公司诉乙公司买卖合同纠纷", pct: 88 },
-      { name: "某银行与某贸易公司执行案", pct: 55 },
-      { name: "王某涉嫌帮助信息网络犯罪活动案", pct: 45 },
-    ],
-    schedule: [
-      { title: "林某某劳动争议案 一审开庭", time: "今日 09:30", meta: "上海市徐汇区人民法院 · 第12法庭", done: false },
-      { title: "会见当事人 王某", time: "今日 15:00", meta: "律所 · 会客室B", done: false },
-      { title: "甲公司买卖合同案 提交代理词", time: "明日 17:00 前", meta: "浙江省高级人民法院 送达平台", done: true },
-      { title: "陈某行政处罚案 举证期限届满", time: "08-28", meta: "距届满 5 天", done: false },
-    ],
+    cases: [],
+    progress: [],
+    schedule: [],
   };
 
   const NAV = [
@@ -397,19 +380,14 @@
       const storeNames = Object.keys(clientsStore);
       const d = storeNames.length
         ? storeNames.map(function (n) { const c = clientsStore[n] || {}; return [n, c.type || "当事人", c.phone || "", (c.notes || "")]; })
-        : [
-            ["林某某", "当事人", "138****1234", "林某某与某某公司劳动争议案"],
-            ["甲公司", "企业客户", "0571****888", "甲公司诉乙公司买卖合同纠纷"],
-            ["陈某", "当事人", "139****5678", "陈某不服行政处罚决定案"],
-            ["李慧敏", "合作律师", "137****4444", "王某涉嫌帮助信息网络犯罪活动案"],
-          ];
-      const total = storeNames.length || 4;
+        : [];
+      const total = storeNames.length || 0;
       html = head("当事人、委托人、合作律师档案", "<button class='btn btn-ghost glow' onclick='window.DataImport && window.DataImport.open(\"clients\")'> 导入(Excel/CSV)</button><button class='btn btn-primary glow' onclick='window.openClientNew()'>＋ 新增客户</button>") +
         "<div class='fin-hero'>" +
-        "<div class='fh-card main'><div class='fh-label'> 客户总数</div><div class='fh-val'>" + total + "</div><div class='fh-sub'>在办关联 6 件</div></div>" +
-        "<div class='fh-card amber'><div class='fh-label'> 企业客户</div><div class='fh-val'>1</div><div class='fh-sub'>常年顾问</div></div>" +
-        "<div class='fh-card green'><div class='fh-label'> 在办关联案件</div><div class='fh-val'>6</div><div class='fh-sub'>含 3 件在办</div></div>" +
-        "<div class='fh-card red'><div class='fh-label'> 本月新增</div><div class='fh-val'>2</div><div class='fh-sub'>较上月 +1</div></div>" +
+        "<div class='fh-card main'><div class='fh-label'> 客户总数</div><div class='fh-val'>" + total + "</div><div class='fh-sub'>关联案件 0 件</div></div>" +
+        "<div class='fh-card amber'><div class='fh-label'> 企业客户</div><div class='fh-val'>0</div><div class='fh-sub'>常年顾问</div></div>" +
+        "<div class='fh-card green'><div class='fh-label'> 在办关联案件</div><div class='fh-val'>0</div><div class='fh-sub'>含 0 件在办</div></div>" +
+        "<div class='fh-card red'><div class='fh-label'> 本月新增</div><div class='fh-val'>0</div><div class='fh-sub'>较上月</div></div>" +
         "</div>" +
         "<div class='card glow' style='margin-top:18px'><div class='card-head'><h2>客户列表（点击姓名查看详情 / 编辑）</h2></div>" +
         "<table class='table'><thead><tr><th>姓名</th><th>类型</th><th>联系电话</th><th>关联案件</th><th>直达</th></tr></thead><tbody>" +
@@ -425,10 +403,7 @@
       const stored = (userContracts.length ? userContracts : contracts).map(function (c) {
         return { no: c.no || (c.id || "").slice(-6).toUpperCase(), name: c.name, type: c.type, party: c.party || c.caseTitle, amount: c.amount, status: c.status, expiry: c.expiry || c.date, caseTitle: c.caseTitle, url: c.url };
       });
-      const samples = [
-        { no: "HT-2026-001", name: "林某某劳动争议案 委托代理合同", type: "委托代理", party: "林某某", amount: "¥30,000", status: "履行中", expiry: "2026-12-31", caseTitle: "林某某与某某公司劳动争议案", url: null },
-        { no: "HT-2026-002", name: "甲公司 常年法律顾问合同", type: "常年顾问", party: "甲公司", amount: "¥120,000/年", status: "履行中", expiry: "2027-03-31", caseTitle: "甲公司诉乙公司买卖合同纠纷", url: null },
-      ];
+      const samples = [];
       const all = stored.length ? stored : samples;
       const rows = all.map(function (r) {
         const elec = r.url
@@ -443,18 +418,13 @@
         table(["编号", "合同名称", "类型", "相对方", "金额", "状态", "到期/建档日", "电子版"], rows) + "</div>" +
         "<div id='contract-ai' class='ai-box' style='margin-top:12px'><span class='ev-empty'>点击「AI 审查」由法律模式出具审查意见（规范化·参考）</span></div>";
     } else if (key === "finance") {
-      const d = [
-        ["2026-08-20", "收入", "林某某案 委托费一期", "¥30,000", "林某某与某某公司劳动争议案"],
-        ["2026-08-18", "收入", "甲公司 顾问费", "¥120,000", "甲公司诉乙公司买卖合同纠纷"],
-        ["2026-08-15", "支出", "诉讼费/保全费", "¥8,600", "甲公司诉乙公司买卖合同纠纷"],
-        ["2026-08-12", "待收", "陈某案 进展费", "¥20,000", "陈某不服行政处罚决定案"],
-      ];
+      const d = [];
       html = head("收入/支出/待收、开票回款与律师业绩分配", "<button class='btn btn-primary glow' data-add-fee>＋ 记一笔</button>") +
         "<div class='fin-hero'>" +
-        "<div class='fh-card main'><div class='fh-label'> 本月收入</div><div class='fh-val'>¥15.0万</div><div class='fh-sub'>较上月 +12%</div></div>" +
-        "<div class='fh-card red'><div class='fh-label'> 本月支出</div><div class='fh-val'>¥0.86万</div><div class='fh-sub'>占比 5.7%</div></div>" +
-        "<div class='fh-card amber'><div class='fh-label'> 待收</div><div class='fh-val'>¥2.0万</div><div class='fh-sub'>2 笔待回款</div></div>" +
-        "<div class='fh-card green'><div class='fh-label'> 回款率</div><div class='fh-val'>92%</div><div class='fh-sub'>较上月 +6%</div></div>" +
+        "<div class='fh-card main'><div class='fh-label'> 本月收入</div><div class='fh-val'>¥0</div><div class='fh-sub'>较上月</div></div>" +
+        "<div class='fh-card red'><div class='fh-label'> 本月支出</div><div class='fh-val'>¥0</div><div class='fh-sub'>占比</div></div>" +
+        "<div class='fh-card amber'><div class='fh-label'> 待收</div><div class='fh-val'>¥0</div><div class='fh-sub'>0 笔待回款</div></div>" +
+        "<div class='fh-card green'><div class='fh-label'> 回款率</div><div class='fh-val'>0%</div><div class='fh-sub'>较上月</div></div>" +
         "</div>" +
         "<div class='card glow' style='margin-top:18px'><div class='card-head'><h2>费用流水</h2></div>" +
         table(["日期", "类型", "说明", "金额", "关联案件"], d.concat(fees).map(function (r) {
@@ -462,23 +432,14 @@
           return row([date, "<span class='badge " + (type === "收入" ? "badge-success" : type === "支出" ? "badge-danger" : "badge-warning") + "'>" + type + "</span>", desc, amount, caseT], [{ k: "cases", t: "案件" }]);
         }).join("")) + "</div>";
     } else if (key === "documents") {
-      const d = [
-        ["民事起诉状", "起诉状", "林某某与某某公司劳动争议案", "已生成", "2026-08-10"],
-        ["代理词", "代理词", "甲公司诉乙公司买卖合同纠纷", "已生成", "2026-08-12"],
-        ["证据目录", "证据目录", "王某涉嫌帮助信息网络犯罪活动案", "草稿", "2026-08-15"],
-        ["质证意见", "质证意见", "陈某不服行政处罚决定案", "草稿", "2026-08-18"],
-      ];
+      const d = [];
       html = head("起诉状、代理词、证据目录、法律意见书等案卷文书", "<button class='btn btn-primary glow'>＋ 新建文书</button>") +
         "<div class='card glow'><div class='card-head'><h2>文书列表</h2></div>" +
         table(["文书名称", "类型", "所属案件", "状态", "日期"], d.map(function (r) {
           return row([r[0], "<span class='badge badge-info'>" + r[1] + "</span>", r[2], "<span class='badge " + (r[3] === "已生成" ? "badge-success" : "badge-warning") + "'>" + r[3] + "</span>", r[4]], [{ k: "evidence", t: "证据/文书" }, { k: "cases", t: "案件" }]);
         }).join("")) + "</div>";
     } else if (key === "lawyers") {
-      const d = [
-        ["张冬宝", "主任律师", "12", "劳动/合同", "3"],
-        ["李慧敏", "合伙人", "8", "刑事", "1"],
-        ["王建国", "主办律师", "5", "行政/执行", "2"],
-      ];
+      const d = [];
       html = head("团队执业信息、擅长领域、执业年限与协作分工", "<button class='btn btn-primary glow'>＋ 添加律师</button>") +
         "<div class='grid cols-4'>" + [["律师人数", "3"], ["执业年限和", "25 年"], ["承办案件", "6"], ["擅长领域", "5类"]].map(function (s) {
           return "<div class='stat-card glow'><div class='stat-label'>" + s[0] + "</div><div class='stat-value'>" + s[1] + "</div></div>";
@@ -533,9 +494,9 @@
         "</div>";
     } else if (key === "profile") {
       const name = meName();
-      const lic = localStorage.getItem("legal-mode.license") || "131012020****";
+      const lic = localStorage.getItem("legal-mode.license") || "";
       const curLawyer = loadLawyer();
-      const firm = (curLawyer && curLawyer.firm) || "靖之霖律师事务所";
+      const firm = (curLawyer && curLawyer.firm) || "";
       const role = (curLawyer && curLawyer.role) || "执业律师";
       const info = loadProfileInfo(); // {firm, specialty, years}
       html = head("当前律师账号、头像、执业证号与所属律所", "<button class='btn btn-primary glow' id='ppEdit'> 编辑个人信息</button>") +
@@ -858,15 +819,7 @@
   const CAL_TYPES = ["开庭", "会见", "期限", "其他"];
   const CAL_COLOR = { "开庭": "#f43f8e", "会见": "#4f8cff", "期限": "#ffb83d", "其他": "#35d39a" };
   if (!calEvents.length) {
-    calEvents = [
-      { id: uid(), date: datestr(0), time: "09:30", title: "林某某劳动争议案 一审开庭", type: "开庭", completed: false, caseRef: "林某某与某某公司劳动争议案" },
-      { id: uid(), date: datestr(0), time: "15:00", title: "会见当事人 王某", type: "会见", completed: false, caseRef: "王某涉嫌帮助信息网络犯罪活动案" },
-      { id: uid(), date: datestr(1), time: "17:00", title: "提交代理词", type: "期限", completed: false, caseRef: "甲公司诉乙公司买卖合同纠纷" },
-      { id: uid(), date: datestr(3), time: "10:00", title: "判决宣判", type: "开庭", completed: false, caseRef: "甲公司诉乙公司买卖合同纠纷" },
-      { id: uid(), date: datestr(5), time: "18:00", title: "举证期限届满", type: "期限", completed: false, caseRef: "陈某不服行政处罚决定案" },
-      { id: uid(), date: datestr(-2), time: "14:00", title: "执行和解会议", type: "其他", completed: true, caseRef: "某银行与某贸易公司执行案" },
-    ];
-    saveCal();
+    // 纯净包：不预置示例日程，用户首次为空
   }
   function calWeekHead() { return ["一", "二", "三", "四", "五", "六", "日"].map(function (d) { return "<div class='cal-dow'>" + d + "</div>"; }).join(""); }
 
@@ -1525,7 +1478,7 @@
     const caseOpts = mock.cases.map(function (c, i) {
       return "<option value='" + i + "'>" + c.no + " — " + c.title + "</option>";
     }).join("");
-    const authorizerOpts = ["张冬宝", "李慧敏", "王建国"].map(function (n) {
+    const authorizerOpts = [].map(function (n) {
       return "<option>" + n + "</option>";
     }).join("");
     const itemOpts = APPROV_ITEMS.map(function (it) {
@@ -1927,13 +1880,9 @@
   }
   function saveEvidence() { localStorage.setItem(EVID_KEY, JSON.stringify(evidenceStore)); }
   let evidenceStore = loadEvidence();
-  // 演示数据：仅首次无证据时预置一次，便于查看 编辑/删除/更新 等操作
+  // 纯净包：不预置示例证据，用户首次为空
   if (!evidenceStore.length && !localStorage.getItem("legal-mode.evidence-seeded")) {
-    evidenceStore = [
-      { id: uid(), kind: "video", name: "庭审录像_示例.mp4", size: 12345678, time: nowStr(), uploader: meName(), source: "当事人提供", notarized: false, note: "", url: "", data: null, requiresReupload: false, transcript: "" },
-      { id: uid(), kind: "audio", name: "会见录音_示例.wav", size: 345678, time: nowStr(), uploader: meName(), source: "原始介质", notarized: true, note: "", url: "", data: null, requiresReupload: false, transcript: "" },
-    ];
-    saveEvidence();
+    evidenceStore = [];
     try { localStorage.setItem("legal-mode.evidence-seeded", "1"); } catch (e) {}
   }
   const SMALL_LIMIT = 2 * 1024 * 1024; // 小于 2MB 才持久化媒体字节，否则会话级
@@ -1962,7 +1911,7 @@
       const rec = {
         id: uid(), kind: kind, name: f.name, size: f.size,
         time: nowStr(),
-        uploader: (window.Profile && Profile.get && Profile.get().name) || "张冬宝",
+        uploader: (window.Profile && Profile.get && Profile.get().name) || "",
         source: "当事人提供", notarized: false, note: "",
         url: URL.createObjectURL(f),
         data: null,             // 小文件保存 base64
@@ -2338,12 +2287,7 @@
 
   // —— 顶栏交互：主题（三项下拉）/ 壁纸面板 / 消息通知 ——
   function buildNotifyMenu() {
-    const NOTIFS = [
-      { icon: "", title: "今日 09:30 开庭", kind: "开庭", meta: "林某某劳动争议案 · 徐汇法院第12法庭", time: "10 分钟前", go: "schedule" },
-      { icon: "", title: "举证期限届满提醒", kind: "期限", meta: "陈某行政处罚案 · 距截止 5 天", time: "2 小时前", go: "schedule" },
-      { icon: "", title: "新证据已上传", kind: "证据", meta: "甲公司买卖合同案 · 视频 1 份", time: "昨天 18:20", go: "documents" },
-      { icon: "", title: "文书待审阅", kind: "文书", meta: "代理词草稿 · 承办：张冬宝", time: "昨天 09:05", go: "documents" },
-    ];
+    const NOTIFS = [];
     const m = document.createElement("div");
     m.className = "menu-pop notify-pop";
     m.id = "notifyMenu";
@@ -2521,7 +2465,7 @@
   function meName() {
     const l = loadLawyer();
     if (l && l.name) return l.name;
-    return (window.Profile && Profile.get && Profile.get().name) || "张冬宝";
+    return (window.Profile && Profile.get && Profile.get().name) || "";
   }
   const TEAM_KEY = "legal-mode.team";
   function loadTeam() {
@@ -2534,7 +2478,7 @@
   const PROFILE_INFO_KEY = "legal-mode.profileInfo";
   function loadProfileInfo() {
     const cur = loadLawyer();
-    const def = { firm: (cur && cur.firm) || "靖之霖律师事务所", specialty: "劳动/合同/民商", years: "12" };
+    const def = { firm: (cur && cur.firm) || "", specialty: "", years: "" };
     try {
       const s = JSON.parse(localStorage.getItem(PROFILE_INFO_KEY) || "{}");
       if (s.firm || s.specialty || s.years) return Object.assign(def, s);

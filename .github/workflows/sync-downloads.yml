@@ -1,0 +1,68 @@
+# 同步安装包到官网服务器（deepwhale.org.cn）
+#
+# 用途：把某个 Release 的桌面端安装包从 GitHub 同步到官网服务器，
+#       让国内用户从官网直接下载（GitHub 在国内很慢）。
+#
+# 触发方式：
+#   1. 手动：Actions → Sync downloads → Run workflow，填 tag（如 v1.0.5）
+#   2. 自动：每次发布 Release 时自动执行
+#
+# 前置：仓库 Settings → Secrets → Actions 配置 DW_DEPLOY_KEY（部署 SSH 私钥）
+#       可选 DW_DEPLOY_HOST（默认 root@115.120.202.30）
+name: Sync downloads
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to sync (e.g. v1.0.5)'
+        required: true
+        default: 'v1.0.5'
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 下载 Release 安装包
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          TAG="${{ github.event.release.tag_name || inputs.tag }}"
+          echo "同步 tag: $TAG"
+          mkdir -p assets
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir assets \
+            --pattern 'DeepWhale-Desktop-*' --clobber
+          # 去掉 electron-builder 的调试/元数据文件
+          rm -f assets/*.blockmap assets/*.yml
+          ls -lh assets
+
+      - name: 上传到官网服务器
+        env:
+          DW_DEPLOY_KEY: ${{ secrets.DW_DEPLOY_KEY }}
+          DW_DEPLOY_HOST: ${{ secrets.DW_DEPLOY_HOST }}
+        run: |
+          set -e
+          if [ -z "$DW_DEPLOY_KEY" ]; then
+            echo "::warning::未配置 DW_DEPLOY_KEY，跳过上传（请在 Settings → Secrets 添加）"
+            exit 0
+          fi
+          HOST="${DW_DEPLOY_HOST:-root@115.120.202.30}"
+          DEST="/var/www/deepwhale.org.cn/downloads"
+          mkdir -p ~/.ssh && printf '%s\n' "$DW_DEPLOY_KEY" > ~/.ssh/dw && chmod 600 ~/.ssh/dw
+          ssh-keyscan -H "${HOST#*@}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          ssh -i ~/.ssh/dw -o StrictHostKeyChecking=no "$HOST" "mkdir -p $DEST"
+          n=0
+          for f in assets/DeepWhale-Desktop-*; do
+            [ -f "$f" ] || continue
+            echo "→ $(basename "$f")"
+            scp -i ~/.ssh/dw -o StrictHostKeyChecking=no "$f" "$HOST:$DEST/"
+            n=$((n+1))
+          done
+          echo "✅ 已同步 $n 个安装包到官网"
+          ssh -i ~/.ssh/dw -o StrictHostKeyChecking=no "$HOST" "ls -lh $DEST | tail -n +2"

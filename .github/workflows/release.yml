@@ -132,3 +132,30 @@ jobs:
           gh release upload --repo "$GITHUB_REPOSITORY" "$TAG" $(find dist-assets -type f ! -name 'builder-debug.yml') --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # 把桌面端安装包同步到官网服务器（deepwhale.org.cn），让国内用户从官网直接下载
+      # 需要在仓库 Settings → Secrets → Actions 配置 DW_DEPLOY_KEY（部署用 SSH 私钥）
+      - name: 同步安装包到官网服务器
+        env:
+          DW_DEPLOY_KEY: ${{ secrets.DW_DEPLOY_KEY }}
+          DW_HOST: ${{ secrets.DW_DEPLOY_HOST }}
+        run: |
+          set -e
+          if [ -z "$DW_DEPLOY_KEY" ]; then
+            echo "未配置 DW_DEPLOY_KEY，跳过官网同步"
+            exit 0
+          fi
+          HOST="${DW_HOST:-root@115.120.202.30}"
+          DEST="/var/www/deepwhale.org.cn/downloads"
+          mkdir -p ~/.ssh && printf '%s\n' "$DW_DEPLOY_KEY" > ~/.ssh/dw_deploy && chmod 600 ~/.ssh/dw_deploy
+          ssh-keyscan -H "${HOST#*@}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          ssh -i ~/.ssh/dw_deploy -o StrictHostKeyChecking=no "${HOST}" "mkdir -p ${DEST}"
+          n=0
+          for f in dist-assets/DeepWhale-Desktop-*; do
+            case "$f" in *.blockmap|*.yml) continue;; esac
+            [ -f "$f" ] || continue
+            echo "上传 $(basename "$f")"
+            scp -i ~/.ssh/dw_deploy -o StrictHostKeyChecking=no "$f" "${HOST}:${DEST}/"
+            n=$((n+1))
+          done
+          echo "已上传 $n 个安装包到官网"

@@ -64,5 +64,6 @@ jobs:
             scp -i ~/.ssh/dw -o StrictHostKeyChecking=no "$f" "$HOST:$DEST/"
             n=$((n+1))
           done
-          echo "✅ 已同步 $n 个安装包到官网"
+          ssh -i ~/.ssh/dw -o StrictHostKeyChecking=no "$HOST" "chmod 644 $DEST/*"
+          echo "✅ 已同步 $n 个安装包到官网（并设好读权限）"
           ssh -i ~/.ssh/dw -o StrictHostKeyChecking=no "$HOST" "ls -lh $DEST | tail -n +2"

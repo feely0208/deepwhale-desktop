@@ -158,4 +158,5 @@ jobs:
             scp -i ~/.ssh/dw_deploy -o StrictHostKeyChecking=no "$f" "${HOST}:${DEST}/"
             n=$((n+1))
           done
-          echo "已上传 $n 个安装包到官网"
+          ssh -i ~/.ssh/dw_deploy -o StrictHostKeyChecking=no "${HOST}" "chmod 644 ${DEST}/*"
+          echo "已上传 $n 个安装包到官网（并设好读权限）"

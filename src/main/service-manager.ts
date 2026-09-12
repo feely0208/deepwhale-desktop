@@ -44,7 +44,8 @@ export class ServiceManager extends EventEmitter {
    */
   async ensureReady(): Promise<void> {
     if (this.stopping) throw new Error('正在停止，无法启动服务');
-    if (await this.isPortReady()) return; // 复用已有实例
+    const ready = await this.isPortReady();
+    if (ready) return; // 复用已有实例
 
     this.spawn();
     const timeoutMs = this.options.timeoutMs ?? 60_000;

@@ -32,7 +32,7 @@ export function createMainWindow(options: MainWindowOptions): BrowserWindow {
 
   // 外部链接交给系统浏览器，不在应用内打开
   win.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    void shell.openExternal(url);
     return { action: 'deny' };
   });
 

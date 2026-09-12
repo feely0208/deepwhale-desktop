@@ -38,6 +38,8 @@ let apiKeyWin: BrowserWindow | null = null;
 let petStudioWin: BrowserWindow | null = null;
 let quitting = false;
 let service: ServiceManager | null = null;
+/** DSH 日志里解析出的带 token 访问地址（鉴权部署时由 dsh web 打印） */
+let dshTokenUrl = '';
 
 function pushUsageToWindow(snapshot: UsageSnapshot): void {
   if (mainWin && !mainWin.isDestroyed()) {
@@ -384,7 +386,19 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
 
     service = new ServiceManager(store.get('command'), {
       port: store.get('port'),
-      onLogLine: (line) => usage.consumeLogLine(line),
+      onLogLine: (line) => {
+        usage.consumeLogLine(line);
+        // DSH 开启鉴权时会把带 token 的访问地址打到日志（dsh web: http://127.0.0.1:<port>/?token=…），
+        // 解析出来供加载使用；解析不到则回落裸端口地址（无鉴权部署）。
+        const m = line.match(/dsh web:\s*(http:\/\/127\.0\.0\.1:\d+\/\?token=\S+)/);
+        if (m) {
+          dshTokenUrl = m[1];
+          // 服务就绪后窗口可能已按裸地址加载（拿到 401 鉴权页），拿到 token 立即补载
+          if (mainWin && !mainWin.isDestroyed() && !mainWin.webContents.getURL().includes('token=')) {
+            void mainWin.loadURL(dshTokenUrl).catch(() => {});
+          }
+        }
+      },
     });
     usage.start();
 
@@ -419,7 +433,7 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
     }
 
     if (dshReady) {
-      await mainWin.loadURL(`http://127.0.0.1:${store.get('port')}`);
+      await mainWin.loadURL(dshTokenUrl || `http://127.0.0.1:${store.get('port')}`);
     } else {
       await showStartingPage(mainWin, true);
     }

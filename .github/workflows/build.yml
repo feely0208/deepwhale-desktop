@@ -3,6 +3,10 @@ name: Build
 on:
   push:
     branches: [main]
+    # 纯文档/主页改动不需要跑三平台 Electron 打包（Pages 工作流只发布 docs/）
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
   pull_request:
 
 jobs:

@@ -11,6 +11,8 @@ export interface ServiceOptions {
   port: number;
   /** 就绪探测超时（毫秒），默认 60s */
   timeoutMs?: number;
+  /** 追加到子进程环境变量（如 DSH_HOME 指向应用专属 home） */
+  env?: NodeJS.ProcessEnv;
   /** 子进程 stdout/stderr 行回调（供用量统计解析 token） */
   onLogLine?: (line: string) => void;
   /** 子进程退出回调 */
@@ -108,6 +110,8 @@ export class ServiceManager extends EventEmitter {
     const exec =
       process.platform === 'win32' && /\s/.test(resolved) ? `"${resolved}"` : resolved;
     const env: NodeJS.ProcessEnv = { ...process.env };
+    // 壳注入的环境变量（如 DSH_HOME）优先于继承来的环境
+    if (this.options.env) Object.assign(env, this.options.env);
     // Finder 启动的 App PATH 极简（无 /usr/local/bin 等），npx 内部会再调 node 会失败。
     // 把可执行文件所在目录补进子进程 PATH（node 与 npx 通常同目录）。
     const exeDir = path.dirname(resolved);

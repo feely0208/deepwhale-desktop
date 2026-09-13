@@ -13,6 +13,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { Store } from './store';
 import { ServiceManager } from './service-manager';
+import { ensureLegalModeSetup, legalModeHome, legalModePayloadDir } from './legal-mode';
 import { createMainWindow } from './window';
 import { SkinManager } from './skin-manager';
 import { PetWindow } from './pet';
@@ -384,8 +385,20 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
     pet.ensureUserPetsDir();
     registerIpc();
 
+    // 法律模式载荷：把随包的 ui-legal-mode 插件与 legal-mode 预设注入本应用的
+    // 专属 DSH home（与用户自己的 ~/.dsh 隔离），使"任何渠道切到法律模式都拉起
+    // 律师端"在用户机器上生效。首次启动时 profile 目录还不存在，就绪后会再补一次。
+    const legalHome = legalModeHome(app.getPath('userData'));
+    const payloadDir = legalModePayloadDir(app.isPackaged, app.getAppPath(), process.resourcesPath);
+    const setup = ensureLegalModeSetup(legalHome, payloadDir);
+    if (SMOKE) {
+      console.log(`[smoke] legal-mode setup: changed=${String(setup.changed)} pending=${String(setup.profilePending)}`);
+    }
+
     service = new ServiceManager(store.get('command'), {
       port: store.get('port'),
+      // 让壳拉起的 DSH 使用应用专属 home：会话与设置不落到用户自己的 ~/.dsh
+      env: { DSH_HOME: legalHome },
       onLogLine: (line) => {
         usage.consumeLogLine(line);
         // DSH 开启鉴权时会把带 token 的访问地址打到日志（dsh web: http://127.0.0.1:<port>/?token=…），
@@ -420,6 +433,20 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
       await service.ensureReady();
       dshReady = true;
       if (SMOKE) console.log('[smoke] DSH ready (reused or spawned)');
+      // 首次启动：DSH 这时才建好 profiles/web，补齐 profile 侧注入并让窗口重载，
+      // 否则页面已经按"没有该插件"的入口图渲染过了。
+      const after = ensureLegalModeSetup(legalHome, payloadDir);
+      if (after.changed && !after.profilePending && mainWin !== null) {
+        // 等带 token 的那次导航落定再重载：两次并发导航会互相 abort
+        // （表现为一条 ERR_ABORTED 告警），这里让重载晚一步。
+        const win = mainWin;
+        setTimeout(() => {
+          if (win.isDestroyed()) return;
+          const url = dshTokenUrl || `http://127.0.0.1:${store.get('port')}/`;
+          void win.loadURL(url).catch(() => {});
+        }, 800);
+        if (SMOKE) console.log('[smoke] legal-mode profile injection applied; reload scheduled');
+      }
     } catch (e) {
       console.error('[main] DSH 启动失败:', e);
       if (SMOKE) {

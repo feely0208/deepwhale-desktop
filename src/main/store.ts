@@ -45,8 +45,9 @@ export interface Settings {
 }
 
 const DEFAULTS: Settings = {
-  command: 'npx @deepseek-ai/dsh web',
-  port: 3080,
+  // 钉住 harness 版本：法律模式联动的插件按该版本的客户端 API 实测通过，不随上游漂移
+  command: 'npx @deepseek-ai/dsh@0.1.5-rc.1 web --port 3095 --no-open',
+  port: 3095,
   theme: 'system',
   skinImage: null,
   skinOpacity: 0.55,

@@ -1,0 +1,1 @@
+{"version":3,"file":"WorkbenchOverlay.d.ts","sourceRoot":"","sources":["../../../src/client/WorkbenchOverlay.tsx"],"names":[],"mappings":"AAYA,OAAO,KAAK,EAAE,WAAW,EAAE,YAAY,EAAE,MAAM,kCAAkC,CAAA;AAGjF,KAAK,KAAK,GAAG,YAAY,CAAC,eAAe,CAAC,GAAG,WAAW,CAAC,WAAW,CAAC,CAAA;AAiDrE,qEAAqE;AACrE,wBAAgB,gBAAgB,CAAC,EAAE,WAAW,EAAE,EAAE,KAAK,GAAG,IAAI,CAI7D"}

@@ -14,6 +14,13 @@ files:
 asar: true
 npmRebuild: false
 
+# 法律模式载荷（约 130KB）：ui-legal-mode 插件包 + legal-mode 预设。
+# 首次启动由主进程注入到应用专属 DSH home，使"任何渠道切到法律模式都拉起律师端"
+# 在用户机器上生效（见 src/main/legal-mode.ts）。
+extraResources:
+  - from: legal-mode
+    to: legal-mode
+
 # 发布目标：GitHub Releases。推送 v* 标签后由 .github/workflows/release.yml 自动出包并上传草稿。
 publish:
   provider: github

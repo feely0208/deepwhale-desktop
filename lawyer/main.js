@@ -7,7 +7,31 @@ try { XLSX = require('xlsx'); } catch (e) { XLSX = null; }
 
 // —— 启动门槛标记：是否为"由深鲸桌面端(deepwhale-law://)启动"。macOS 协议启动通过 open-url 事件传递 URL。 —
 let __launchedViaDsh = false;
-app.on('open-url', (ev, url) => { ev.preventDefault(); if (/deepwhale-law/i.test(String(url) || '')) __launchedViaDsh = true; });
+let __workbenchWin = null;
+app.on('open-url', (ev, url) => {
+  ev.preventDefault();
+  if (!/deepwhale-law/i.test(String(url) || '')) return;
+  __launchedViaDsh = true;
+  // 已在运行时被深鲸桌面端再次拉起：聚焦已有工作台窗口（最小化先还原），没有则新开一个。
+  if (!app.isReady()) return; // 冷启动场景交给 whenReady → createWindow
+  if (__workbenchWin && !__workbenchWin.isDestroyed()) {
+    if (__workbenchWin.isMinimized()) __workbenchWin.restore();
+    __workbenchWin.show();
+    __workbenchWin.focus();
+  } else {
+    createWindow();
+  }
+});
+
+// 注册 deepwhale-law:// 协议：深鲸桌面端选「法律模式」后经系统拉起本应用。
+// dev 模式（process.defaultApp）必须把入口脚本路径作为参数一并注册，否则系统只会拉起裸 Electron。
+if (process.defaultApp) {
+  if (process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient('deepwhale-law', process.execPath, [path.resolve(process.argv[1])]);
+  }
+} else {
+  app.setAsDefaultProtocolClient('deepwhale-law');
+}
 
 // 工作台内嵌于包内（打包后可自包含运行），用相对路径加载
 const WORKBENCH = 'file://' + path.join(__dirname, 'workbench', 'index.html');
@@ -393,6 +417,8 @@ function createWindow() {
       sandbox: false,
     },
   });
+  __workbenchWin = win;
+  win.on('closed', () => { if (__workbenchWin === win) __workbenchWin = null; });
   win.loadURL(WORKBENCH);
 }
 

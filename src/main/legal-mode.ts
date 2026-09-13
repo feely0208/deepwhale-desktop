@@ -121,18 +121,37 @@ function ensureProfileDependency(file: string, pluginDir: string): boolean {
   return true;
 }
 
-/** 指向插件目录的模块解析入口（与 `dsh plugin add` 产生的形态一致）。 */
-function ensurePluginLink(linkPath: string, pluginDir: string): boolean {
+/**
+ * 建立指向插件目录的模块解析入口（与 `dsh plugin add` 产生的形态一致）。
+ *
+ * 必须是**目录级**入口：POSIX 用 `dir` 符号链接，Windows 用 junction（目录联接，
+ * 普通用户即可创建 —— Windows 上创建符号链接需要管理员或开发者模式）。两者都
+ * 失败时退化为直接复制目录：模块解析只需要那个目录存在。
+ */
+function ensurePluginEntry(entryPath: string, pluginDir: string): boolean {
+  // 已是指向同一目标的链接 → 幂等返回
   try {
-    const existing = fs.readlinkSync(linkPath);
-    if (existing === pluginDir) return false;
-    fs.unlinkSync(linkPath);
+    if (fs.readlinkSync(entryPath) === pluginDir) return false;
   } catch {
-    // 不存在或不是符号链接：下面重建。
-    if (fs.existsSync(linkPath)) fs.rmSync(linkPath, { recursive: true, force: true });
+    // 不是符号链接（可能是上一次的拷贝，或尚不存在）
   }
-  fs.mkdirSync(path.dirname(linkPath), { recursive: true });
-  fs.symlinkSync(pluginDir, linkPath);
+  if (fs.existsSync(entryPath)) {
+    // 拷贝形态：客户端 bundle 一致就复用（避免每次启动重写）
+    try {
+      const existing = fs.readFileSync(path.join(entryPath, 'lib', 'client.js'));
+      const wanted = fs.readFileSync(path.join(pluginDir, 'lib', 'client.js'));
+      if (existing.equals(wanted)) return false;
+    } catch {
+      // 读不到 → 下面重建
+    }
+    fs.rmSync(entryPath, { recursive: true, force: true });
+  }
+  fs.mkdirSync(path.dirname(entryPath), { recursive: true });
+  try {
+    fs.symlinkSync(pluginDir, entryPath, process.platform === 'win32' ? 'junction' : 'dir');
+  } catch {
+    fs.cpSync(pluginDir, entryPath, { recursive: true });
+  }
   return true;
 }
 
@@ -177,7 +196,7 @@ export function ensureLegalModeSetup(home: string, payloadDir: string): LegalMod
   const profileDir = path.join(home, 'profiles', 'web');
   const profilePending = !fs.existsSync(profileDir);
   if (!profilePending) {
-    changed = ensurePluginLink(
+    changed = ensurePluginEntry(
       path.join(profileDir, 'node_modules', ...PLUGIN_NAME.split('/')),
       pluginDir,
     ) || changed;

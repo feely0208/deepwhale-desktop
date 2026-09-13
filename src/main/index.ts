@@ -390,7 +390,14 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
     // 律师端"在用户机器上生效。首次启动时 profile 目录还不存在，就绪后会再补一次。
     const legalHome = legalModeHome(app.getPath('userData'));
     const payloadDir = legalModePayloadDir(app.isPackaged, app.getAppPath(), process.resourcesPath);
-    const setup = ensureLegalModeSetup(legalHome, payloadDir);
+    // 注入失败绝不能影响壳启动（例如文件系统不支持创建链接/权限不足）：
+    // 这里整体兜底，最坏情况只是"用户端没有法律模式联动"。
+    let setup: { changed: boolean; profilePending: boolean } = { changed: false, profilePending: false };
+    try {
+      setup = ensureLegalModeSetup(legalHome, payloadDir);
+    } catch (error) {
+      console.error('[legal-mode] 载荷注入失败（不影响启动）:', error);
+    }
     if (SMOKE) {
       console.log(`[smoke] legal-mode setup: changed=${String(setup.changed)} pending=${String(setup.profilePending)}`);
     }
@@ -435,7 +442,13 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
       if (SMOKE) console.log('[smoke] DSH ready (reused or spawned)');
       // 首次启动：DSH 这时才建好 profiles/web，补齐 profile 侧注入并让窗口重载，
       // 否则页面已经按"没有该插件"的入口图渲染过了。
-      const after = ensureLegalModeSetup(legalHome, payloadDir);
+      // 这一段单独兜底：注入失败不能被当成"DSH 启动失败"弹错框。
+      let after: { changed: boolean; profilePending: boolean } = { changed: false, profilePending: false };
+      try {
+        after = ensureLegalModeSetup(legalHome, payloadDir);
+      } catch (error) {
+        console.error('[legal-mode] profile 注入失败（不影响启动）:', error);
+      }
       if (after.changed && !after.profilePending && mainWin !== null) {
         // 等带 token 的那次导航落定再重载：两次并发导航会互相 abort
         // （表现为一条 ERR_ABORTED 告警），这里让重载晚一步。

@@ -9,6 +9,10 @@
 	<true/>
 	<key>com.apple.security.cs.allow-dyld-environment-variables</key>
 	<true/>
+	<!-- ad-hoc 签名 + Hardened Runtime 时 Electron Framework 会因 library validation
+	     被拒而启动失败；electron-builder 会就此告警，必须显式关掉该校验。 -->
+	<key>com.apple.security.cs.disable-library-validation</key>
+	<true/>
 	<!-- 应用需要访问 DeepSeek API 与本地 DSH 服务 -->
 	<key>com.apple.security.network.client</key>
 	<true/>

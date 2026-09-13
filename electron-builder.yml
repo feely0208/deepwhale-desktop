@@ -34,6 +34,11 @@ mac:
   icon: assets/icons/icon.png
   darkModeSupport: true
   # 签名 + 公证相关（未签名构建不受影响；公证由发布脚本显式开启 --config.mac.notarize=true）
+  # identity: '-' = 显式要求 ad-hoc 签名：把整个 .app（含 Resources）打上有效封印。
+  # 不写这一行、又关掉证书自动发现时，产物只有 linker 签名，codesign --verify 会报
+  # "code has no resources but signature indicates they must be present"，
+  # 用户从浏览器下载（带 quarantine）后很可能打不开。
+  identity: '-'
   hardenedRuntime: true
   gatekeeperAssess: false
   entitlements: build/entitlements.mac.plist

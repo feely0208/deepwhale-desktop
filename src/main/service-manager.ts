@@ -149,7 +149,13 @@ export class ServiceManager extends EventEmitter {
    */
   private spawnBundled(env: NodeJS.ProcessEnv, bin: string): void {
     env.ELECTRON_RUN_AS_NODE = '1';
-    const args = [bin, 'web', '--port', String(this.port), '--no-open'];
+    // `--expose-internals` 必须放在 Electron 自己的参数位（脚本路径之前）：
+    // dsh-base 的 cordis.patch.yml 里 `hmr` 行在 web profile 下会被激活，而
+    // cordis-plugin-hmr 的构造器要求 `ctx.loader.internal`，该属性只有当
+    // process.execArgv 含 `--expose-internals` 时才由 loader 建立；否则整个
+    // profile 加载失败、进程立刻退出（报 `--expose-internals is required for
+    // HMR service`），壳这边表现为"DSH 服务启动失败"。Electron-as-Node 支持该开关。
+    const args = ['--expose-internals', bin, 'web', '--port', String(this.port), '--no-open'];
     console.log(`[service] 启动随包 DSH 运行时（Electron 内置 Node）: ${bin}`);
     this.child = spawn(process.execPath, args, {
       env,

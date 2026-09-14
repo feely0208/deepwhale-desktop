@@ -46,9 +46,9 @@ jobs:
       # 主进程用 Electron 自带 Node（ELECTRON_RUN_AS_NODE）拉起 dsh-runtime/…/dsh/lib/bin.js。
       # 版本与 src/main/store.ts 的默认命令保持同一线（0.1.5-rc.1）。
       - name: Prepare bundled DSH runtime
+        shell: bash
         run: |
-          npm install @deepseek-ai/dsh@0.1.5-rc.1 \
-            --prefix dsh-runtime --no-audit --no-fund --loglevel=error
+          npm install "@deepseek-ai/dsh@0.1.5-rc.1" --prefix dsh-runtime --no-audit --no-fund --loglevel=error
           test -f dsh-runtime/node_modules/@deepseek-ai/dsh/lib/bin.js
           node -e "console.log('bundled DSH runtime ready:', require('./dsh-runtime/node_modules/@deepseek-ai/dsh/package.json').version)"
 

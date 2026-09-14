@@ -35,10 +35,13 @@
   }
 
   function clearLayers() {
-    el.layer.innerHTML = "";
+    if (el.layer) el.layer.innerHTML = "";
   }
 
   function setWallpaper(src, type, name, isLocal) {
+    // 未初始化就自愈一次：避免 el.layer 为 null 抛 TypeError，让整个壁纸功能静默失效
+    if (!el.layer) init();
+    if (!el.layer) return;
     clearLayers();
     const target = document.createElement(type === "video" ? "video" : "img");
     if (type === "video") {

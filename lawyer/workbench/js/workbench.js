@@ -2427,7 +2427,9 @@
       ["正在切换至 律师工作台…", 88],
       ["就绪", 100],
     ];
-    Wallpapers.init();
+    // 注意：壁纸引擎不在这里初始化。boot() 只在"已有档案"或"建档成功"后才跑，
+    // 未建档时 init() 走 showSetup() 永不 boot —— 若 init 放在这里，壁纸层会一直是空的
+    // （el.layer 为 null，点任何缩略图都抛 TypeError）。初始化改到 init() 最前面。
     let i = 0;
     function next() {
       if (i >= steps.length) {
@@ -2497,6 +2499,9 @@
   }
 
   function init() {
+    // 壁纸引擎必须在这里（DOMContentLoaded）就绪：boot() 只在"已建档/建档成功"后才跑，
+    // 未建档时不会执行，届时点壁纸缩略图会因 el.layer 为 null 抛 TypeError 且壁纸层空白。
+    if (window.Wallpapers) Wallpapers.init();
     renderNav();
     bindTopbar();
     updateThemeIcon();

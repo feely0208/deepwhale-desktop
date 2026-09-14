@@ -40,16 +40,47 @@
   width: 100%; height: 100%;
   object-fit: cover;
 }
+/* 深色：先把壁纸整体压暗，否则浅色壁纸（如"晨雾"）会把内容区托成大片灰白，
+   卡片再黑也救不回来——这正是"只有模块是黑的、背景一片灰"的来源。 */
+[data-theme="dark"] #wallpaper img,
+[data-theme="dark"] #wallpaper video {
+  filter: brightness(0.34) saturate(0.72) contrast(1.06);
+}
 #wallpaper-dim { /* 保证可读性的暗化/亮化遮罩 */
   position: fixed; inset: 0; z-index: 0;
   background: radial-gradient(120% 120% at 50% 0%, transparent 30%, rgba(0,0,0,.35) 100%);
   transition: background 0.4s var(--ease);
 }
+/* 深色下暗化层要更重、且中间不再是全透明，让内容区均匀压暗而不是四周黑中间亮 */
+[data-theme="dark"] #wallpaper-dim {
+  background: radial-gradient(125% 125% at 50% 0%, rgba(0,0,0,.44) 0%, rgba(0,0,0,.66) 60%, rgba(0,0,0,.78) 100%);
+}
 [data-theme="light"] #wallpaper-dim { background: radial-gradient(120% 120% at 50% 0%, rgba(255,255,255,.18), rgba(255,255,255,.45) 100%); }
+/* 深色：壁纸只当质感，叠一层主底色到 83%，压回深色；同时把卡片/输入框等
+   表面改为不透明，避免半透明表面透出壁纸造成"灰底浮黑块"。 */
+[data-theme="dark"] #wallpaper-tint {
+  background: color-mix(in srgb, var(--bg) 83%, transparent);
+}
 #wallpaper-tint {
   position: fixed; inset: 0; z-index: 0;
   background: color-mix(in srgb, var(--bg) 62%, transparent);
   transition: background 0.4s var(--ease);
+}
+/* 深色：卡片/顶栏/侧栏用不透明表面，避免半透明+毛玻璃透出壁纸造成"灰底浮黑块"。
+   注意必须用 background 简写覆盖原规则里的 `background: var(--glass)`，
+   单写 background-color 覆盖不掉 shorthand（顶栏就会一直是灰蓝的毛玻璃）。 */
+[data-theme="dark"] .card,
+[data-theme="dark"] .topbar,
+[data-theme="dark"] .sidebar,
+[data-theme="dark"] .wp-panel {
+  background: var(--surface);
+  backdrop-filter: none;
+}
+[data-theme="dark"] .topbar { border-bottom-color: var(--border); }
+[data-theme="dark"] input,
+[data-theme="dark"] textarea,
+[data-theme="dark"] select {
+  background-color: var(--bg-2);
 }
 
 /* —— 整体壳 —— */

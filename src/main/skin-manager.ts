@@ -181,21 +181,27 @@ export class SkinManager {
       body:not([data-ds-dark-theme]) [class*="sidebarCol"] {
         background: linear-gradient(to right, rgba(247, 248, 250, 0.94), rgba(247, 248, 250, 0.18)) !important;
       }
-      /* 深色：压暗背景图，深色半透明层 */
+      /* 深色：壁纸必须压得够暗。只压到 0.92 的话，浅色壁纸（雾/白底图）会把
+         整个内容区托成灰蓝，而侧栏和卡片是深色 → "只有模块是黑的、背景一片灰"。
+         0.30 让壁纸退成质感，底色重新掌握在深色主题手里。 */
       body[data-ds-dark-theme]::before {
-        filter: brightness(0.92) !important;
+        filter: brightness(0.30) saturate(0.7) contrast(1.05) !important;
       }
+      /* 深色：面板/卡片改为不透明。原来是 rgba(...,alpha) 半透明，壁纸会透上来，
+         于是面板发灰、和黑色模块割裂——这正是用户反馈的观感问题。
+         基础底色保持 transparent，壁纸只在"没有面板覆盖"的地方透出。 */
       body[data-ds-dark-theme] {
         --dsw-alias-bg-base: transparent !important;
-        --dsw-alias-bg-layer-1: rgba(16, 18, 22, var(--dsh-skin-alpha)) !important;
-        --dsw-alias-bg-layer-2: rgba(24, 27, 33, var(--dsh-skin-alpha)) !important;
-        --dsw-alias-bg-overlay: rgba(16, 18, 22, var(--dsh-skin-alpha)) !important;
-        --dsw-specific-sidebar-fill: rgba(24, 27, 33, var(--dsh-skin-alpha)) !important;
+        --dsw-alias-bg-layer-1: #1c1f25 !important;
+        --dsw-alias-bg-layer-2: #23272e !important;
+        --dsw-alias-bg-overlay: #16191e !important;
+        --dsw-specific-sidebar-fill: #16191e !important;
         --dsw-specific-sidebar-nav-item-active: rgba(255, 255, 255, 0.08) !important;
         --dsw-specific-sidebar-nav-item-hover: rgba(255, 255, 255, 0.05) !important;
       }
+      /* 侧栏改成不透明实色：原来的渐变尾端有 0.25 透明度，壁纸直接透进导航区。 */
       body[data-ds-dark-theme] [class*="sidebarCol"] {
-        background: linear-gradient(to right, rgba(16, 18, 22, 0.94), rgba(16, 18, 22, 0.25)) !important;
+        background: #14171c !important;
       }
     `;
     try {

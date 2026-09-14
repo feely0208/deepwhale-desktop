@@ -19,3 +19,6 @@ Thumbs.db
 
 # 根目录截图等杂项
 /*.png
+
+# 随包 DSH 运行时：体积 280MB+，由构建时 npm install 生成（见 release.yml），不入库
+/dsh-runtime/

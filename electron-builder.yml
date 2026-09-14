@@ -20,6 +20,10 @@ npmRebuild: false
 extraResources:
   - from: legal-mode
     to: legal-mode
+  # DSH 运行时（整套 harness）：随包内置，用户机器无需 Node.js / npx / 联网。
+  # 主进程用 Electron 自带 Node（ELECTRON_RUN_AS_NODE）拉起 dsh-runtime/…/dsh/lib/bin.js。
+  - from: dsh-runtime
+    to: dsh-runtime
 
 # 发布目标：GitHub Releases。推送 v* 标签后由 .github/workflows/release.yml 自动出包并上传草稿。
 publish:

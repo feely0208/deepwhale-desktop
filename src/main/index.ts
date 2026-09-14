@@ -14,6 +14,7 @@ import * as path from 'path';
 import { Store } from './store';
 import { ServiceManager } from './service-manager';
 import { ensureLegalModeSetup, legalModeHome, legalModePayloadDir } from './legal-mode';
+import { bundledDshBin } from './dsh-runtime';
 import { createMainWindow } from './window';
 import { SkinManager } from './skin-manager';
 import { PetWindow } from './pet';
@@ -402,8 +403,16 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
       console.log(`[smoke] legal-mode setup: changed=${String(setup.changed)} pending=${String(setup.profilePending)}`);
     }
 
+    // 随包 DSH 运行时：安装包内置整套 DSH，用 Electron 自带 Node 拉起，
+    // 用户机器无需 Node.js / npx / 联网下载。缺失时回落到 settings.json 的 command。
+    const bundledBin = bundledDshBin(app.isPackaged, app.getAppPath(), process.resourcesPath);
+    if (SMOKE) {
+      console.log(`[smoke] bundled DSH runtime: ${bundledBin ?? '(none)'}`);
+    }
+
     service = new ServiceManager(store.get('command'), {
       port: store.get('port'),
+      bundledBin,
       // 让壳拉起的 DSH 使用应用专属 home：会话与设置不落到用户自己的 ~/.dsh
       env: { DSH_HOME: legalHome },
       onLogLine: (line) => {

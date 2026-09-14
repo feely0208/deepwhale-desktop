@@ -17,6 +17,12 @@ export interface ServiceOptions {
   onLogLine?: (line: string) => void;
   /** 子进程退出回调 */
   onExit?: (code: number | null) => void;
+  /**
+   * 随包 DSH 运行时入口（`…/dsh-runtime/node_modules/@deepseek-ai/dsh/lib/bin.js`）。
+   * 存在时优先用它：以 Electron 自带的 Node 拉起（ELECTRON_RUN_AS_NODE），
+   * 用户机器上无需安装 Node.js、无需 npx、无需联网下载。
+   */
+  bundledBin?: string;
 }
 
 /**
@@ -102,6 +108,16 @@ export class ServiceManager extends EventEmitter {
   }
 
   private spawn(): void {
+    const env: NodeJS.ProcessEnv = { ...process.env };
+    // 壳注入的环境变量（如 DSH_HOME）优先于继承来的环境
+    if (this.options.env) Object.assign(env, this.options.env);
+
+    // 随包 DSH 运行时优先：用户机器上无需 Node.js / npx / 联网
+    if (this.options.bundledBin) {
+      this.spawnBundled(env, this.options.bundledBin);
+      return;
+    }
+
     const { command, args } = parseCommand(this.command);
     const resolved = resolveExecutable(command);
     // Windows 下 npx 常装在带空格的目录（如 C:\Program Files\nodejs\ 或 E:\Program Files\...），
@@ -109,9 +125,6 @@ export class ServiceManager extends EventEmitter {
     // 因此路径含空格时必须给可执行文件整体加引号，否则 DSH 启动失败、端口就绪超时。
     const exec =
       process.platform === 'win32' && /\s/.test(resolved) ? `"${resolved}"` : resolved;
-    const env: NodeJS.ProcessEnv = { ...process.env };
-    // 壳注入的环境变量（如 DSH_HOME）优先于继承来的环境
-    if (this.options.env) Object.assign(env, this.options.env);
     // Finder 启动的 App PATH 极简（无 /usr/local/bin 等），npx 内部会再调 node 会失败。
     // 把可执行文件所在目录补进子进程 PATH（node 与 npx 通常同目录）。
     const exeDir = path.dirname(resolved);
@@ -127,16 +140,37 @@ export class ServiceManager extends EventEmitter {
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
+    this.attachChildHandlers();
+  }
 
-    this.child.stdout?.on('data', (chunk: Buffer) => this.handleOutput(chunk));
-    this.child.stderr?.on('data', (chunk: Buffer) => this.handleOutput(chunk));
-    this.child.on('exit', (code) => {
+  /**
+   * 用 Electron 自带的 Node 拉起随包 DSH 运行时（`ELECTRON_RUN_AS_NODE=1`）。
+   * 安装包自带运行时，用户无需安装 Node.js、无需 npx、无需联网下载。
+   */
+  private spawnBundled(env: NodeJS.ProcessEnv, bin: string): void {
+    env.ELECTRON_RUN_AS_NODE = '1';
+    const args = [bin, 'web', '--port', String(this.port), '--no-open'];
+    console.log(`[service] 启动随包 DSH 运行时（Electron 内置 Node）: ${bin}`);
+    this.child = spawn(process.execPath, args, {
+      env,
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    this.attachChildHandlers();
+  }
+
+  private attachChildHandlers(): void {
+    const child = this.child;
+    if (!child) return;
+    child.stdout?.on('data', (chunk: Buffer) => this.handleOutput(chunk));
+    child.stderr?.on('data', (chunk: Buffer) => this.handleOutput(chunk));
+    child.on('exit', (code) => {
       console.log(`[service] DSH 进程退出（code ${code}）`);
       this.child = null;
       this.options.onExit?.(code);
       this.emit('exit', code);
     });
-    this.child.on('error', (err) => {
+    child.on('error', (err) => {
       console.error(
         '[service] 启动 DSH 失败:',
         err,

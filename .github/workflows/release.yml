@@ -42,6 +42,16 @@ jobs:
       - name: Build (tsc + assets)
         run: npm run build
 
+      # 随包 DSH 运行时：把整套 harness 打进安装包，用户机器无需 Node.js / npx / 联网。
+      # 主进程用 Electron 自带 Node（ELECTRON_RUN_AS_NODE）拉起 dsh-runtime/…/dsh/lib/bin.js。
+      # 版本与 src/main/store.ts 的默认命令保持同一线（0.1.5-rc.1）。
+      - name: Prepare bundled DSH runtime
+        run: |
+          npm install @deepseek-ai/dsh@0.1.5-rc.1 \
+            --prefix dsh-runtime --no-audit --no-fund --loglevel=error
+          test -f dsh-runtime/node_modules/@deepseek-ai/dsh/lib/bin.js
+          node -e "console.log('bundled DSH runtime ready:', require('./dsh-runtime/node_modules/@deepseek-ai/dsh/package.json').version)"
+
       - name: Package (构建安装包，不发布)
         run: npm run dist -- --publish never ${{ matrix.args }}
         env:

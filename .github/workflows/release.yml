@@ -50,7 +50,11 @@ jobs:
         run: |
           npm install "@deepseek-ai/dsh@0.1.5-rc.1" --prefix dsh-runtime --no-audit --no-fund --loglevel=error
           test -f dsh-runtime/node_modules/@deepseek-ai/dsh/lib/bin.js
-          node -e "console.log('bundled DSH runtime ready:', require('./dsh-runtime/node_modules/@deepseek-ai/dsh/package.json').version)"
+          # electron-builder 会跳过 extraResources 里名为 node_modules 的目录（实测只复制到
+          # package.json），所以先改名 pkgs；打包后由 scripts/after-pack.js 改回 node_modules。
+          mv dsh-runtime/node_modules dsh-runtime/pkgs
+          test -f dsh-runtime/pkgs/@deepseek-ai/dsh/lib/bin.js
+          node -e "console.log('bundled DSH runtime ready:', require('./dsh-runtime/pkgs/@deepseek-ai/dsh/package.json').version)"
 
       - name: Package (构建安装包，不发布)
         run: npm run dist -- --publish never ${{ matrix.args }}

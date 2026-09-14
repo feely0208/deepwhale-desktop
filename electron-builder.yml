@@ -13,6 +13,9 @@ files:
   - package.json
 asar: true
 npmRebuild: false
+# 打包后把 dsh-runtime/pkgs 改回 node_modules（electron-builder 会跳过名为
+# node_modules 的 extraResources 目录，详见 scripts/after-pack.js）
+afterPack: scripts/after-pack.js
 
 # 法律模式载荷（约 130KB）：ui-legal-mode 插件包 + legal-mode 预设。
 # 首次启动由主进程注入到应用专属 DSH home，使"任何渠道切到法律模式都拉起律师端"
@@ -22,8 +25,14 @@ extraResources:
     to: legal-mode
   # DSH 运行时（整套 harness）：随包内置，用户机器无需 Node.js / npx / 联网。
   # 主进程用 Electron 自带 Node（ELECTRON_RUN_AS_NODE）拉起 dsh-runtime/…/dsh/lib/bin.js。
+  # ⚠️ filter 必须显式列出 node_modules/**：electron-builder 默认注入
+  # `!**/node_modules/**`（见 app-builder-lib out/fileMatcher.js），只写 from/to 会
+  # 得到一个只有 package.json 的空壳目录，运行时等于没打进去。
   - from: dsh-runtime
     to: dsh-runtime
+    filter:
+      - '**/*'
+      - 'node_modules/**'
 
 # 发布目标：GitHub Releases。推送 v* 标签后由 .github/workflows/release.yml 自动出包并上传草稿。
 publish:

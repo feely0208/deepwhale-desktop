@@ -10,7 +10,14 @@
   background: linear-gradient(160deg, #0a0d15, #101a2e 60%, #0a0d15);
   transition: opacity 0.6s var(--ease), visibility 0.6s var(--ease);
 }
-#boot.done { opacity: 0; visibility: hidden; }
+/* ⚠️ .done 必须同时交出指针事件！
+   #boot / #setup 都是 position:fixed; inset:0 的全屏遮罩，z-index 分别 5000 / 6000，
+   远高于 .modal-overlay 的 2000。隐藏时只设 opacity/visibility 不够：这层不可见的大
+   遮罩仍然叠在所有弹窗之上吃掉点击，导致「关闭/取消/保存」等按钮怎么点都没反应
+   （例如证据模块调看视频后点「关闭」关不掉；而原生 video 控件仍可用，因为它的控件
+   由浏览器单独合成，不受 DOM 遮挡影响 —— 这个组合正是用户报的现象）。
+   加 pointer-events:none 后点击才能穿透到下面的弹窗。 */
+#boot.done, #setup.done { opacity: 0; visibility: hidden; pointer-events: none; }
 .boot-logo {
   width: 92px; height: 92px; border-radius: 26px;
   display: grid; place-items: center;
@@ -561,7 +568,7 @@
   background: linear-gradient(160deg, #0a0d15, #101a2e 60%, #0a0d15);
   transition: opacity .5s var(--ease), visibility .5s var(--ease);
 }
-#setup.done { opacity: 0; visibility: hidden; }
+#setup.done { opacity: 0; visibility: hidden; pointer-events: none; }
 .setup-card {
   width: 380px; padding: 30px 34px; text-align: center;
   background: var(--surface); border: 1px solid var(--border); border-radius: 18px;

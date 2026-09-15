@@ -711,7 +711,11 @@
       "<div class='modal-actions'><a class='btn btn-ghost' href='" + c.url + "' download='" + c.name + "'> 下载</a>" +
       "<button class='btn' data-vclose>关闭</button></div></div>";
     v.addEventListener("click", function (e) {
-      if (e.target === v || e.target.getAttribute("data-vclose")) v.remove();
+      // 必须用 hasAttribute：data-vclose 是布尔属性，getAttribute 返回空字符串 "",
+      // 而 if ("") 为假 → remove() 永远不执行，弹窗关不掉（证据调看视频就是这个 bug）。
+      // 同时用 closest 兜住"点到按钮内部子元素"的情况。
+      var hit = e.target.closest ? e.target.closest("[data-vclose]") : null;
+      if (e.target === v || hit) v.remove();
     });
     document.body.appendChild(v);
   }
@@ -2069,7 +2073,11 @@
       "<a class='btn btn-ghost' href='" + ev.url + "' download='" + ev.name + "'> 下载原文件</a>" +
       "<button class='btn' data-vclose>关闭</button></div></div>";
     v.addEventListener("click", function (e) {
-      if (e.target === v || e.target.getAttribute("data-vclose")) v.remove();
+      // 同文件预览：必须用 closest + hasAttribute。原来写成
+      // `e.target.getAttribute("data-vclose")`，布尔属性取到空字符串 ""，
+      // if ("") 为假 → 关闭按钮点了没反应（视频能播、关不掉）。
+      var hit = e.target.closest ? e.target.closest("[data-vclose]") : null;
+      if (e.target === v || hit) v.remove();
     });
     document.body.appendChild(v);
   }

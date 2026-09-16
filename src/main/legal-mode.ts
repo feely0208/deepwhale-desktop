@@ -29,6 +29,134 @@ export function legalModePayloadDir(isPackaged: boolean, appPath: string, resour
   return isPackaged ? path.join(resourcesPath, 'legal-mode') : path.join(appPath, 'legal-mode');
 }
 
+/** 迁移标记文件：存在即表示已迁移过，避免重复搬运。 */
+const MIGRATION_MARKER = '.migrated-from-legacy-home';
+/** 迁移时要从旧 home 带过来的条目（不含 profiles：它由 DSH 按当前版本重建）。 */
+const MIGRATED_ENTRIES = [
+  'sessions',
+  'storages',
+  'attachments',
+  'llm-deepseek',
+  '.agent-presets',
+  'settings.yaml',
+  '.credentials.yaml',
+  '.anonymous-user-id',
+];
+
+/** 会话目录里是否有真实会话（递归一层，DSH 按 workspace 分目录存放）。 */
+function hasSessions(home: string): boolean {
+  const sessions = path.join(home, 'sessions');
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(sessions, { withFileTypes: true });
+  } catch {
+    return false;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    try {
+      if (fs.readdirSync(path.join(sessions, entry.name)).length > 0) return true;
+    } catch {
+      // 子目录不可读：跳过，继续看下一个
+    }
+  }
+  return false;
+}
+
+/** 判断一个 home 是否已有用户数据（以会话为准）。 */
+function homeHasUserData(home: string): boolean {
+  return hasSessions(home);
+}
+
+/**
+ * 把旧 home 的会话目录合并进目标 home。
+ *
+ * 不能像其他条目那样"目标已存在就跳过"：DSH 首次启动会先把 `sessions/` 建出来（空目录），
+ * 若按目录粒度跳过，历史会话会全部漏掉。这里按 workspace 子目录合并：
+ * 目标已有同名 workspace 就保留目标自己的，只补目标缺的。
+ *
+ * @param from - 旧 home 的 sessions 目录。
+ * @param to - 目标 home 的 sessions 目录。
+ * @returns 是否写入了任何内容。
+ */
+function mergeSessionsDir(from: string, to: string): boolean {
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(from, { withFileTypes: true });
+  } catch {
+    return false;
+  }
+  let merged = false;
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const src = path.join(from, entry.name);
+    const dest = path.join(to, entry.name);
+    try {
+      // 目标已有同名 workspace：保留目标自己的，不合并内部文件（避免半覆盖出乱状态）
+      if (fs.existsSync(dest)) continue;
+      fs.mkdirSync(to, { recursive: true });
+      fs.cpSync(src, dest, { recursive: true });
+      merged = true;
+    } catch (error) {
+      console.error(`[legal-mode] 迁移会话 ${entry.name} 失败（跳过）:`, error);
+    }
+  }
+  return merged;
+}
+
+/**
+ * 一次性把旧的外部 DSH home 搬进本应用的 userData home。
+ *
+ * 背景：早期版本的壳把 DSH_HOME 指向 `~/.deepwhale-legal/dsh-home`（由
+ * settings.json 的 command 脚本自己设置）；v1.0.13 起改用随包运行时后，壳一律用
+ * `<userData>/dsh-home`。如果不迁移，老用户升级后会看到**全新空白 workspace**，
+ * 会话全部"消失"（数据其实还在旧目录里）。
+ *
+ * 判据只看**会话**：目标 home 里没有任何会话、且旧 home 确实有会话时，才搬一次并落标记。
+ * 之所以不以"整个 home 为空"为判据，是因为 DSH 首次启动可能已经在目标 home 里写了
+ * 凭据/设置，那样会导致明明有历史会话却不迁移。
+ *
+ * 已存在的条目一律不覆盖（尤其凭据：目标已有就保留目标自己的）。
+ * 搬运是复制而非移动，旧目录原样保留，出错也不至于丢数据。
+ *
+ * @param home - 目标 home（本应用 userData 下的 dsh-home）。
+ * @param legacyHomes - 候选旧 home，按优先级排列。
+ * @returns 是否执行了迁移。
+ */
+export function migrateLegacyHomeOnce(home: string, legacyHomes: string[]): boolean {
+  if (fs.existsSync(path.join(home, MIGRATION_MARKER))) return false;
+  if (hasSessions(home)) return false;
+  const source = legacyHomes.find((dir) => dir !== home && hasSessions(dir));
+  if (!source) return false;
+
+  fs.mkdirSync(home, { recursive: true });
+  let copied = 0;
+  // 会话单独走合并逻辑（见 mergeSessionsDir）：DSH 会先把 sessions/ 建成空目录，
+  // 按目录粒度"已存在就跳过"会把历史会话全漏掉。
+  if (mergeSessionsDir(path.join(source, 'sessions'), path.join(home, 'sessions'))) {
+    copied += 1;
+  }
+  for (const name of MIGRATED_ENTRIES) {
+    if (name === 'sessions') continue;
+    const from = path.join(source, name);
+    const to = path.join(home, name);
+    try {
+      if (!fs.existsSync(from) || fs.existsSync(to)) continue;
+      fs.cpSync(from, to, { recursive: true });
+      copied += 1;
+    } catch (error) {
+      console.error(`[legal-mode] 迁移 ${name} 失败（跳过该项）:`, error);
+    }
+  }
+  try {
+    fs.writeFileSync(path.join(home, MIGRATION_MARKER), `migrated from ${source}\n`);
+  } catch (error) {
+    console.error('[legal-mode] 写迁移标记失败:', error);
+  }
+  console.log(`[legal-mode] 已从旧 home 迁移 ${copied} 项数据: ${source} -> ${home}`);
+  return true;
+}
+
 function readText(file: string): string | null {
   try {
     return fs.readFileSync(file, 'utf8');

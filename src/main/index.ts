@@ -13,7 +13,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { Store } from './store';
 import { ServiceManager } from './service-manager';
-import { ensureLegalModeSetup, legalModeHome, legalModePayloadDir } from './legal-mode';
+import { ensureLegalModeSetup, legalModeHome, legalModePayloadDir, migrateLegacyHomeOnce } from './legal-mode';
 import { bundledDshBin, dshNodeModulesDir } from './dsh-runtime';
 import { createMainWindow } from './window';
 import { SkinManager } from './skin-manager';
@@ -391,6 +391,17 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
     // 律师端"在用户机器上生效。首次启动时 profile 目录还不存在，就绪后会再补一次。
     const legalHome = legalModeHome(app.getPath('userData'));
     const payloadDir = legalModePayloadDir(app.isPackaged, app.getAppPath(), process.resourcesPath);
+    // 老的壳（有内置运行时之前）把 DSH_HOME 指向 ~/.deepwhale-legal/dsh-home（由
+    // settings.json 的 command 脚本自己设置）。升级到随包运行时后改用
+    // <userData>/dsh-home，若不迁移，老用户会看到空白 workspace（数据其实还在旧目录）。
+    // 只在目标尚无用户数据时搬一次，且是复制而非移动，旧目录原样保留。
+    try {
+      migrateLegacyHomeOnce(legalHome, [
+        path.join(app.getPath('home'), '.deepwhale-legal', 'dsh-home'),
+      ]);
+    } catch (error) {
+      console.error('[legal-mode] 旧 home 迁移失败（不影响启动）:', error);
+    }
     // 随包 DSH 运行时：安装包内置整套 DSH，用 Electron 自带 Node 拉起，
     // 用户机器无需 Node.js / npx / 联网下载。缺失时回落到 settings.json 的 command。
     // 注意要在注入预设之前解析：预设里的 persona 字段名必须跟随目标运行时的版本

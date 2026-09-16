@@ -21,6 +21,14 @@
 
 # The preset's own persona, shadowing the deployment default for this agent.
 # `{{model}}` and `{{cwd}}` resolve from the agent's own route and workspace.
+#
+# ⚠️ 这里的字段名按 **旧版** persona schema 写（`text`）。两代 DSH 的 persona Config 不兼容：
+#   · 0.1.2 一带：{ text: 必填, complete, includeRuntimeContext }
+#   · 0.1.5 一带：{ prefix: 必填, suffix, complete, includeRuntimeContext }
+#   在 0.1.5 上写 `text` 会 fail-loud：invalid config: S.prefix missing required value，
+#   导致整个法律模式预设挂载失败（Windows 实测踩到）。
+# 因此**不要手工在这里切字段名** —— 壳在注入预设时会按目标运行时的实际 schema 自动改写
+# （见 src/main/legal-mode.ts 的 adaptPresetToRuntime），本文件保持 0.1.2 形态即可。
 - id: persona
   name: '@deepseek-ai/dsh-persona'
   config:
@@ -102,6 +110,11 @@
 # resolves `goals` on the host and an entry-local realm here would hide it. The
 # registry is keyed by session anyway, so one host instance serves every
 # session. What a preset chooses is whether its agent can call the goal tool.
+# ⚠️ command-goal 是 0.1.5 基线预设里有的一行（本文件原先缺，属跟随版本时漏更新）；
+# 插件存在于随包运行时，补回以保证与同版本 standard 预设对齐。
+- id: command-goal
+  name: '@deepseek-ai/dsh-command-goal'
+
 - id: tool-goal
   name: '@deepseek-ai/dsh-tool-goal'
 
@@ -196,8 +209,14 @@
       config:
         provider: spawn
         toolName: subagent
+        # 0.1.5 基线预设含此项；跟随版本补齐
+        modelSelectionSettings: true
         backgroundMode: continuable
 
+    # Fork omits model selection so provider/model stay equal to the parent and
+    # the inherited history remains eligible for KV Cache reuse. This preset
+    # keeps fork continuable; parent and child inherit the same messaging tool,
+    # while the parent id and return guidance follow the inherited history.
     - id: tool-subagent-fork
       name: '@deepseek-ai/dsh-tool-subagent'
       config:
@@ -253,8 +272,14 @@
 
 # The `web` service and its search provider stay in the host composition; only
 # the model-facing tool is per-session.
+# 注：`fetch` 在此有意设为 false（法律模式下只保留搜索，不给联网抓取），
+# 与同版本 standard 预设的 true 不同，属有意定制。
 - id: tool-web
   name: '@deepseek-ai/dsh-tool-web'
   config:
     fetch: false
     searchTimeoutMs: 60000
+
+# 0.1.5 基线预设含此行；插件存在于随包运行时，跟随版本补齐。
+- id: present
+  name: '@deepseek-ai/dsh-tool-present'

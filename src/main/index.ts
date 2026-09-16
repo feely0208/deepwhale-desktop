@@ -14,7 +14,7 @@ import * as path from 'path';
 import { Store } from './store';
 import { ServiceManager } from './service-manager';
 import { ensureLegalModeSetup, legalModeHome, legalModePayloadDir } from './legal-mode';
-import { bundledDshBin } from './dsh-runtime';
+import { bundledDshBin, dshNodeModulesDir } from './dsh-runtime';
 import { createMainWindow } from './window';
 import { SkinManager } from './skin-manager';
 import { PetWindow } from './pet';
@@ -391,23 +391,25 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
     // 律师端"在用户机器上生效。首次启动时 profile 目录还不存在，就绪后会再补一次。
     const legalHome = legalModeHome(app.getPath('userData'));
     const payloadDir = legalModePayloadDir(app.isPackaged, app.getAppPath(), process.resourcesPath);
+    // 随包 DSH 运行时：安装包内置整套 DSH，用 Electron 自带 Node 拉起，
+    // 用户机器无需 Node.js / npx / 联网下载。缺失时回落到 settings.json 的 command。
+    // 注意要在注入预设之前解析：预设里的 persona 字段名必须跟随目标运行时的版本
+    // （0.1.2 用 text、0.1.5 用 prefix，写错会让整个法律模式预设挂载失败）。
+    const bundledBin = bundledDshBin(app.isPackaged, app.getAppPath(), process.resourcesPath);
+    const legalRuntimeDir = dshNodeModulesDir(bundledBin);
+    if (SMOKE) {
+      console.log(`[smoke] bundled DSH runtime: ${bundledBin ?? '(none)'}`);
+    }
     // 注入失败绝不能影响壳启动（例如文件系统不支持创建链接/权限不足）：
     // 这里整体兜底，最坏情况只是"用户端没有法律模式联动"。
     let setup: { changed: boolean; profilePending: boolean } = { changed: false, profilePending: false };
     try {
-      setup = ensureLegalModeSetup(legalHome, payloadDir);
+      setup = ensureLegalModeSetup(legalHome, payloadDir, legalRuntimeDir);
     } catch (error) {
       console.error('[legal-mode] 载荷注入失败（不影响启动）:', error);
     }
     if (SMOKE) {
       console.log(`[smoke] legal-mode setup: changed=${String(setup.changed)} pending=${String(setup.profilePending)}`);
-    }
-
-    // 随包 DSH 运行时：安装包内置整套 DSH，用 Electron 自带 Node 拉起，
-    // 用户机器无需 Node.js / npx / 联网下载。缺失时回落到 settings.json 的 command。
-    const bundledBin = bundledDshBin(app.isPackaged, app.getAppPath(), process.resourcesPath);
-    if (SMOKE) {
-      console.log(`[smoke] bundled DSH runtime: ${bundledBin ?? '(none)'}`);
     }
 
     service = new ServiceManager(store.get('command'), {
@@ -454,7 +456,7 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
       // 这一段单独兜底：注入失败不能被当成"DSH 启动失败"弹错框。
       let after: { changed: boolean; profilePending: boolean } = { changed: false, profilePending: false };
       try {
-        after = ensureLegalModeSetup(legalHome, payloadDir);
+        after = ensureLegalModeSetup(legalHome, payloadDir, legalRuntimeDir);
       } catch (error) {
         console.error('[legal-mode] profile 注入失败（不影响启动）:', error);
       }

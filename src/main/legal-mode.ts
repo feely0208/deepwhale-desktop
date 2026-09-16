@@ -57,8 +57,7 @@ function copyIfChanged(src: string, dest: string): boolean {
 function copyTreeIfChanged(srcDir: string, destDir: string): boolean {
   if (!fs.existsSync(srcDir)) return false;
   let changed = false;
-  for (const entry of fs.readdirSync(srcDir, { withFileTypes: true })) {
-    const src = path.join(srcDir, entry.name);
+  for (const entry of fs.readdirSync(srcDir, { withFileTypes: true })) {    const src = path.join(srcDir, entry.name);
     const dest = path.join(destDir, entry.name);
     if (entry.isDirectory()) changed = copyTreeIfChanged(src, dest) || changed;
     else if (entry.isFile()) changed = copyIfChanged(src, dest) || changed;
@@ -155,6 +154,60 @@ function ensurePluginEntry(entryPath: string, pluginDir: string): boolean {
   return true;
 }
 
+/** 随包运行时入口的相对路径（相对 dsh 包目录）。 */
+const RUNTIME_PERSONA_ENTRY = ['node_modules', '@deepseek-ai', 'dsh-persona', 'lib', 'index.js'];
+/** 用户自备 DSH 的解析根（相对 DSH_HOME，DSH 会在此解析 profile 依赖）。 */
+const HOME_PERSONA_ENTRIES = [
+  ['profiles', 'node_modules', '@deepseek-ai', 'dsh-persona', 'lib', 'index.js'],
+  ['node_modules', '@deepseek-ai', 'dsh-persona', 'lib', 'index.js'],
+];
+
+/**
+ * 目标 DSH 的 persona 配置要 `text` 还是 `prefix`。
+ *
+ * 两代 DSH 的 `@deepseek-ai/dsh-persona` Config 不兼容：
+ * - 0.1.2 一带：`{ text: 必填, complete, includeRuntimeContext }`
+ * - 0.1.5 一带：`{ prefix: 必填, suffix, complete, includeRuntimeContext }`
+ *
+ * 随包预设只能写一种，写错的那一代会 fail-loud（`S.prefix missing required value`），
+ * 整个法律模式预设挂载失败。所以注入前按目标运行时的实际源码判定并改写。
+ *
+ * @param candidates - 可能的 persona 源码文件路径，按优先级排列。
+ * @returns 需要写成 `prefix` 时返回 true；读不到任何线索时返回 null（保持原样）。
+ */
+function personaNeedsPrefix(candidates: string[]): boolean | null {
+  for (const file of candidates) {
+    const source = readText(file);
+    if (source === null) continue;
+    // 新版把 text 拆成 prefix/suffix；以 prefix 是否为必填字段为准。
+    if (/prefix:\s*z\.string\(\)\s*\.required\(\)/.test(source)) return true;
+    if (/text:\s*z\.string\(\)\s*\.required\(\)/.test(source)) return false;
+  }
+  return null;
+}
+
+/**
+ * 按目标运行时改写预设里的 persona 字段名（`text` ⇄ `prefix`）。
+ *
+ * 只动 persona 那一行 `config:` 下的单个键，其余内容逐字保留。
+ * 无法判定目标版本时原样返回，不猜。
+ */
+function adaptPresetToRuntime(content: string, needsPrefix: boolean | null): string {
+  if (needsPrefix === null) return content;
+  const lines = content.split('\n');
+  const personaAt = lines.findIndex((line) => /^- id:\s*persona\s*$/.test(line));
+  if (personaAt < 0) return content;
+  for (let i = personaAt + 1; i < lines.length && i < personaAt + 6; i += 1) {
+    const from = needsPrefix ? '    text:' : '    prefix:';
+    const to = needsPrefix ? '    prefix:' : '    text:';
+    if (lines[i].startsWith(from)) {
+      lines[i] = to + lines[i].slice(from.length);
+      return lines.join('\n');
+    }
+  }
+  return content;
+}
+
 /**
  * 幂等注入法律模式载荷。
  *
@@ -170,9 +223,15 @@ function ensurePluginEntry(entryPath: string, pluginDir: string): boolean {
  *
  * @param home - 本应用专属的 DSH home。
  * @param payloadDir - 随包载荷目录（内含 `plugin/` 与 `preset/`）。
+ * @param runtimeDshDir - 实际要拉起的 dsh 包目录（随包运行时或用户自备的），
+ *   用于判定 persona 字段名；省略时按随包运行时之外保守处理。
  * @returns 是否写盘，以及 profile 是否还没就位。
  */
-export function ensureLegalModeSetup(home: string, payloadDir: string): LegalModeSetupResult {
+export function ensureLegalModeSetup(
+  home: string,
+  payloadDir: string,
+  runtimeDshDir?: string,
+): LegalModeSetupResult {
   const pluginSrc = path.join(payloadDir, 'plugin');
   const presetSrc = path.join(payloadDir, 'preset');
   if (!fs.existsSync(pluginSrc) || !fs.existsSync(presetSrc)) {
@@ -185,11 +244,34 @@ export function ensureLegalModeSetup(home: string, payloadDir: string): LegalMod
   // 1. 插件本体与预设
   const pluginDir = path.join(home, 'plugins', 'dsh-client-ui-legal-mode');
   changed = copyTreeIfChanged(pluginSrc, pluginDir) || changed;
+
+  // 预设里的 persona 字段名要跟随目标运行时的版本（见 personaNeedsPrefix）。
+  // 候选顺序即优先级，**必须让实际要拉起的运行时排在最前**：
+  // home 下可能留着上一次用别的 DSH 版本解析出的旧副本，若让它抢先，
+  // 判定出来的字段名会和真正运行的运行时不符（正是本次踩的坑）。
+  const personaCandidates = [
+    ...(runtimeDshDir ? [path.join(runtimeDshDir, ...RUNTIME_PERSONA_ENTRY)] : []),
+    ...HOME_PERSONA_ENTRIES.map((parts) => path.join(home, ...parts)),
+  ];
+  const needsPrefix = personaNeedsPrefix(personaCandidates);
+
   for (const name of ['preset.yml', 'agent.cordis.yml']) {
-    changed = copyIfChanged(
-      path.join(presetSrc, name),
-      path.join(home, '.agent-presets', PRESET_ID, name),
-    ) || changed;
+    const sourceText = readText(path.join(presetSrc, name));
+    const dest = path.join(home, '.agent-presets', PRESET_ID, name);
+    if (sourceText === null) continue;
+    const next = name === 'agent.cordis.yml'
+      ? adaptPresetToRuntime(sourceText, needsPrefix)
+      : sourceText;
+    let current: string | null = null;
+    try {
+      current = fs.readFileSync(dest, 'utf8');
+    } catch {
+      current = null;
+    }
+    if (current === next) continue;
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.writeFileSync(dest, next);
+    changed = true;
   }
 
   // 2. profile 侧：DSH 首次启动后才会创建 profiles/web

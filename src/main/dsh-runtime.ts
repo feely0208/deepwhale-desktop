@@ -33,3 +33,19 @@ export function bundledDshBin(
   }
   return undefined;
 }
+
+/**
+ * 从 dsh 入口反推它所在的 `node_modules` 目录。
+ *
+ * 入口形如 `<root>/node_modules/@deepseek-ai/dsh/lib/bin.js`，向上三级即为
+ * `node_modules`。该目录是 `@deepseek-ai/dsh-persona` 等插件的解析根，
+ * 调用方据此判定目标运行时的插件 schema 版本（见 legal-mode.ts）。
+ *
+ * @param bin - `bundledDshBin` 返回的入口绝对路径。
+ * @returns `node_modules` 绝对路径；层级不符时返回 undefined。
+ */
+export function dshNodeModulesDir(bin: string | undefined): string | undefined {
+  if (!bin) return undefined;
+  const dir = path.resolve(path.dirname(bin), '..', '..', '..');
+  return path.basename(dir) === 'node_modules' ? dir : undefined;
+}

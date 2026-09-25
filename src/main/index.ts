@@ -7,6 +7,7 @@ import {
   MenuItemConstructorOptions,
   nativeTheme,
   Notification,
+  shell,
   Tray,
 } from 'electron';
 import * as fs from 'fs';
@@ -21,6 +22,8 @@ import { PetWindow } from './pet';
 import { createTray, applyMenu, buildAppMenuTemplate, TrayMenuActions } from './tray';
 import { UsageManager, UsageSnapshot } from './usage-manager';
 import { injectSettingsExtension } from './settings-inject';
+import { UpdateManager } from './update-manager';
+import { installCrashGuard, crashLogDir, appendCrashLog } from './crash-guard';
 
 /** 冒烟测试模式：自动启动、打印关键事件、8 秒后退出（供 CI/自动化验证） */
 const SMOKE = !!process.env.DSH_DESKTOP_SMOKE;
@@ -38,10 +41,25 @@ let pet: PetWindow | null = null;
 let tray: Tray | null = null;
 let apiKeyWin: BrowserWindow | null = null;
 let petStudioWin: BrowserWindow | null = null;
+/** 首次启动引导窗（仅全新安装的第一次出现） */
+let welcomeWin: BrowserWindow | null = null;
 let quitting = false;
 let service: ServiceManager | null = null;
+/**
+ * 自动更新：读取本仓库 GitHub Releases。
+ * 纯增量模块，不参与法律模式/桌宠/皮肤/用量等任何既有逻辑；
+ * 只在打包态启用，失败只记日志。
+ */
+let updates: UpdateManager | null = null;
 /** DSH 日志里解析出的带 token 访问地址（鉴权部署时由 dsh web 打印） */
 let dshTokenUrl = '';
+
+// 崩溃兜底：全局异常只记**本地**日志（绝不上传），并在必要时给可操作提示。
+// 冒烟测试下关闭弹窗，避免卡住自动化。
+installCrashGuard({
+  interactive: !SMOKE,
+  getWindow: () => (mainWin !== null && !mainWin.isDestroyed() ? mainWin : null),
+});
 
 function pushUsageToWindow(snapshot: UsageSnapshot): void {
   if (mainWin && !mainWin.isDestroyed()) {
@@ -104,6 +122,47 @@ function openApiKeyDialog(): void {
   apiKeyWin.on('closed', () => {
     apiKeyWin = null;
   });
+}
+
+/**
+ * 首次启动引导窗。
+ *
+ * 仅在**全新安装的第一次启动**由 whenReady 调用（判断见该处注释）。
+ * 用户点「开始使用」或按 Esc/Enter 后写入 onboarded 标记并关闭，永不再显示。
+ * 老用户升级路径完全不经过这里。
+ */
+function openWelcomeWindow(): void {
+  if (welcomeWin !== null && !welcomeWin.isDestroyed()) {
+    welcomeWin.focus();
+    return;
+  }
+  welcomeWin = new BrowserWindow({
+    width: 460,
+    height: 460,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    title: '欢迎使用深鲸壳',
+    // 引导期间不挂 parent：主窗口此刻可能还在显示"正在启动 DSH"
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      preload: path.join(__dirname, '../preload/preload.js'),
+    },
+  });
+  void welcomeWin.loadFile(path.join(__dirname, '../welcome/welcome.html'));
+  welcomeWin.on('closed', () => {
+    welcomeWin = null;
+  });
+}
+
+/** 结束引导：写标记并关窗（重复调用安全） */
+function finishWelcome(): void {
+  store.set('onboarded', true);
+  store.save();
+  if (welcomeWin !== null && !welcomeWin.isDestroyed()) {
+    welcomeWin.close();
+  }
 }
 
 /** 选择背景图片（原生文件对话框） */
@@ -228,6 +287,7 @@ function buildMenuActions(): TrayMenuActions {
       rebuildMenus();
     },
     onRefreshUsage: () => void usage.refresh(),
+    onCheckUpdate: () => void updates?.checkNow(),
     skinSubmenu,
     petSubmenu,
     usagePanelVisible: store.get('usagePanelVisible'),
@@ -352,6 +412,10 @@ function registerIpc(): void {
   });
 
   ipcMain.on('apikey:close', () => apiKeyWin?.close());
+
+  // ---- 首次启动引导窗 ----
+  ipcMain.on('welcome:finish', () => finishWelcome());
+  ipcMain.on('welcome:open-api-key', () => openApiKeyDialog());
 }
 
 // 单实例：多个实例会互相争抢 3080 端口
@@ -374,11 +438,110 @@ function startingPageHtml(failed: boolean): string {
   </style></head><body><div class="box"><div class="icon">${icon}</div><div class="title">DeepWhale Desktop</div><p class="msg">${msg}</p></div></body></html>`;
 }
 
+/**
+ * DSH 启动失败时的可操作恢复流程。
+ *
+ * 原实现只弹一个 `showErrorBox`（仅"确定"按钮），用户拿不到任何操作入口。
+ * 现在给出四个选项，并支持**原地重试**——DSH 启动失败常见于端口占用、
+ * 依赖未就绪等瞬时原因，重试往往就能成功。
+ *
+ * @param firstError - 首次失败的原因
+ * @returns 重试成功返回 true；用户放弃返回 false（调用方据此显示失败页）
+ */
+async function handleDshStartFailure(firstError: unknown): Promise<boolean> {
+  let error: unknown = firstError;
+
+  for (;;) {
+    const tail = service?.lastOutput() ?? '';
+    const detail = [
+      error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      tail ? `\n--- DSH 输出（末尾 20 行）---\n${tail}` : '',
+    ].join('\n');
+
+    // 记本地日志：每次都记，便于还原"重试了几次、每次什么原因"
+    appendCrashLog({
+      kind: 'dsh-start-failed',
+      summary: 'DSH 服务启动失败',
+      detail,
+      at: new Date().toISOString(),
+    });
+
+    const buttons = ['重试', '查看日志', '打开设置', '退出'];
+    const options = {
+      type: 'error' as const,
+      title: 'DSH 启动失败',
+      message: '深鲸壳无法连接到 DSH 服务',
+      detail: `${detail}\n\n可以先点「重试」；若反复失败，请查看日志并把内容反馈给我们。`,
+      buttons,
+      defaultId: 0,
+      cancelId: 3,
+      noLink: true,
+    };
+    const win = mainWin !== null && !mainWin.isDestroyed() ? mainWin : null;
+    const result =
+      win !== null ? await dialog.showMessageBox(win, options) : await dialog.showMessageBox(options);
+
+    // 重试
+    if (result.response === 0) {
+      try {
+        if (service === null) {
+          throw new Error('服务管理器未初始化');
+        }
+        await service.ensureReady();
+        console.log('[main] DSH 启动重试成功');
+        return true;
+      } catch (retryError) {
+        console.error('[main] DSH 启动重试仍失败:', retryError);
+        error = retryError;
+        continue;
+      }
+    }
+
+    // 查看日志：打开本地日志目录（含 fault.log 与 Electron 的 minidump）
+    if (result.response === 1) {
+      void shell.openPath(crashLogDir());
+      continue;
+    }
+
+    // 打开设置：定位 settings.json，便于用户改 command / port
+    if (result.response === 2) {
+      const settingsFile = path.join(app.getPath('userData'), 'settings.json');
+      try {
+        fs.mkdirSync(path.dirname(settingsFile), { recursive: true });
+        if (!fs.existsSync(settingsFile)) {
+          fs.writeFileSync(settingsFile, '{}\n', 'utf-8');
+        }
+        shell.showItemInFolder(settingsFile);
+      } catch (openError) {
+        console.error('[main] 打开设置失败:', openError);
+        dialog.showErrorBox('无法打开设置', String(openError));
+      }
+      continue;
+    }
+
+    // 退出
+    return false;
+  }
+}
+
 async function showStartingPage(win: BrowserWindow, failed = false): Promise<void> {
   await win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(startingPageHtml(failed)));
 }
 
   app.whenReady().then(async () => {
+    // ⚠️ 首次启动判断必须在**任何 store.set()/save() 之前**取值：
+    //    settings.json 由本应用在保存设置时创建，所以"本次启动前它不存在"
+    //    就等价于"全新安装"。老用户升级时该文件早已存在 → 永不显示引导。
+    //    第二道保险是 onboarded 标记（走完引导后写入）。
+    const settingsFilePath = path.join(app.getPath('userData'), 'settings.json');
+    let firstRun = false;
+    try {
+      firstRun = !fs.existsSync(settingsFilePath) && !store.get('onboarded');
+    } catch (error) {
+      console.error('[welcome] 首次启动判断失败（按非首次处理）:', error);
+      firstRun = false;
+    }
+
     // 原生界面主题跟随设置（跟随系统/浅色/深色），默认跟随系统
     nativeTheme.themeSource = store.get('theme');
 
@@ -489,9 +652,9 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
         app.exit(1);
         return;
       }
-      const detail = service.lastOutput() ? `\n\n--- DSH 输出 ---\n${service.lastOutput()}` : '';
-      dialog.showErrorBox('DSH 启动失败', `${String(e)}${detail}`);
-      // 不退出：用户可修改命令后从托盘重启
+      // 记入本地故障日志（不上传），并把原先"只有确定按钮"的提示改成可操作对话框：
+      // 用户可以重试、看日志、打开设置，不必自己去找原因。
+      dshReady = await handleDshStartFailure(e);
     }
 
     if (dshReady) {
@@ -504,6 +667,27 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
 
     tray = createTray(buildMenuActions());
     rebuildMenus();
+
+    // 自动更新：等应用完全可用后再启动，避免与 DSH 冷启动争抢资源。
+    // DSH 没起来时（dshReady=false）不启动——此时用户有更紧急的问题要处理。
+    // 整个流程纯增量，出错只记日志，不影响任何既有功能。
+    if (dshReady) {
+      updates = new UpdateManager({
+        getWindow: () => (mainWin !== null && !mainWin.isDestroyed() ? mainWin : null),
+      });
+      try {
+        updates.start();
+      } catch (error) {
+        console.error('[update] 自动更新启动失败（不影响使用）:', error);
+      }
+    }
+
+    // 首次启动引导：只在全新安装且未标记 onboarded 时弹出。
+    // 放在主窗口可用之后，避免与"正在启动 DSH"页抢焦点；
+    // 老用户升级时 firstRun 恒为 false，这条分支不会进入。
+    if (firstRun) {
+      openWelcomeWindow();
+    }
 
     if (SMOKE) {
       // 端到端检查：打开设置页 → 验证注入的"宠物/用量/皮肤"导航项与面板激活
@@ -548,6 +732,7 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
   app.on('before-quit', () => {
     quitting = true;
     usage.stop();
+    updates?.dispose();
     if (service) {
       if (store.get('keepDshRunning')) {
         console.log('[main] 退出时保留 DSH 服务（keepDshRunning=true，下次启动秒开）');

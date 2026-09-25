@@ -42,6 +42,12 @@ export interface Settings {
   usageLowBalanceAlert: number;
   /** 手动填写的 API Key（safeStorage 加密后的 base64），null 表示未设置 */
   apiKeyEncrypted: string | null;
+  /**
+   * 是否已完成首次启动引导。
+   * 仅在**全新安装的第一次**弹引导；老用户升级时 settings.json 已存在，
+   * 主进程据文件存在性直接跳过，不依赖本字段（本字段是第二道保险）。
+   */
+  onboarded: boolean;
 }
 
 const DEFAULTS: Settings = {
@@ -63,6 +69,7 @@ const DEFAULTS: Settings = {
   usageRefreshMinutes: 5,
   usageLowBalanceAlert: 5,
   apiKeyEncrypted: null,
+  onboarded: false,
 };
 
 export class Store {

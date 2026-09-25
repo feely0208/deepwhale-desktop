@@ -7,16 +7,16 @@
 
 > 🏠 [项目主页](https://feely0208.github.io/deepwhale-desktop) · [下载 Releases](https://github.com/feely0208/deepwhale-desktop/releases)
 
-![Free Forever](https://img.shields.io/badge/永久免费-forever-brightgreen)
+![Free & Open Source](https://img.shields.io/badge/免费开源-MIT-brightgreen)
 ![Open Source](https://img.shields.io/badge/开源-Open%20Source-4CAF50)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
 ![Electron](https://img.shields.io/badge/Electron-43-green)
 ![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)
 
-## ✨ 永久免费 · 开源 · 无套路
+## ✨ 免费 · 开源 · 无套路
 
-- 💯 **永久免费**：软件本身完全免费——无内购、无订阅、无广告、无隐藏收费，而且会一直保持
+- 💯 **免费开源**：软件本身完全免费——无内购、无订阅、无广告、无隐藏收费，且以 MIT 协议开源，任何人都可以永久使用
 - 🌍 **开源透明**：全部源码在 GitHub 公开（MIT），可审计、可提 PR、可自由二次开发
 - 🔒 **数据自主**：API Key 由系统钥匙串加密存储在本机，余额直连 DeepSeek 官方接口，无第三方中转
 - 🚫 **拒绝倒卖**：如果有人向您以任何形式出售此软件，请拒绝交易并告诉我们
@@ -27,7 +27,7 @@
 - 🎨 **背景皮肤**：选一张喜欢的图片完全覆盖原界面（深浅色模式都生效，不改变 DSH 基础深浅色外观），可见度可调、拓展到工作区栏并做渐变过渡
 - 🐾 **桌面宠物**：帧动画精灵图（spritesheet）宠物，支持走路/快走/慢跑/快跑/电脑前工作/挥手/跳跃等动作；也支持自制 SVG/GIF/PNG 宠物与宠物工坊
 - 💰 **用量与额度**：右下角面板 + DSH 设置页"用量"栏，展示余额/赠送/充值/今日请求/tokens，绿色进度条与低余额提醒
-- 🔑 **API Key 安全**：`safeStorage`（系统钥匙串）加密存储，绝不落明文；或在设置页用量栏内嵌输入
+- 🔑 **API Key 安全**：`safeStorage`（系统钥匙串）加密存储，不会落明文；或在设置页用量栏内嵌输入
 - 📦 **三平台打包**：macOS `.dmg` / Windows `.nsis` / Linux `.AppImage`·`.deb`，GitHub Actions CI 已配置
 
 
@@ -151,13 +151,13 @@ dsh-desktop/
 
 ## 常见问题（FAQ）
 
-**收费吗？** 永久免费、开源（MIT）。无内购、无订阅、无广告、无试用期。
+**收费吗？** 免费、开源（MIT）。无内购、无订阅、无广告、无试用期。
 
-**需要注册或登录吗？** 不需要。唯一可选的是你自己的 DeepSeek API Key（用于在应用内查看余额/用量；不填也能正常使用 DSH）。
+**需要注册或登录吗？** 不需要。可选的只有你自己的 DeepSeek API Key（用于在应用内查看余额/用量；不填也能正常使用 DSH）。
 
 **用量面板不显示余额？** 需要在 **设置 → 用量** 栏输入 `sk-...` API Key 并点"保存 Key"后才会拉取余额（DSH 设置页任意位置填入 `sk-` 开头的 Key 也会自动同步）。未配置时用量面板不可用，但不影响 DSH 正常使用。
 
-**我的 API Key 安全吗？** 由系统钥匙串（`safeStorage`）加密存储在本机，只在主进程使用，绝不落明文、绝不上传（详见 [SECURITY.md](SECURITY.md)）。
+**我的 API Key 安全吗？** 由系统钥匙串（`safeStorage`）加密存储在本机，只在主进程使用，不会落明文、不会上传（详见 [SECURITY.md](SECURITY.md)）。
 
 **和 DeepSeek Harness 是什么关系？** 本项目是社区桌面壳，基于 DeepSeek Harness 构建，**并非 DeepSeek 官方产品**，也不代表官方立场。
 

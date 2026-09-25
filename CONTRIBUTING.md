@@ -13,7 +13,7 @@
 1. **保持模块职责单一**：主进程各模块（service-manager / skin-manager / pet / tray / usage-manager / store）互不耦合，新增功能请放对地方。
 2. **错误处理兜底**：IPC、文件读写、网络请求都要 try/catch，失败时静默降级或明确报错，不阻塞主流程。
 3. **尽量不新增第三方依赖**：能用 Electron/Node 内置能力解决就不加包；确需新增请在 PR 说明理由。
-4. **不提交密钥**：绝不要把 API Key、token、证书放入代码或提交历史（见 SECURITY.md）。
+4. **不提交密钥**：不要把 API Key、token、证书放入代码或提交历史（见 SECURITY.md）。
 5. **通过构建与冒烟**：
    ```bash
    npm run build    # tsc 编译通过

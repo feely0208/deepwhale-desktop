@@ -25,6 +25,11 @@ contextBridge.exposeInMainWorld('dsh', {
   setApiKey: (key: string) => ipcRenderer.send('usage:set-key', key),
   closeWindow: () => ipcRenderer.send('apikey:close'),
 
+  // ---- 首次启动引导窗 ----
+  // 引导只在全新安装的第一次出现（判断在主进程），完成后写入标记永不再显示
+  welcomeFinish: () => ipcRenderer.send('welcome:finish'),
+  welcomeOpenApiKey: () => ipcRenderer.send('welcome:open-api-key'),
+
   // ---- 通用设置读写（设置页扩展用） ----
   getSetting: (key: string) => ipcRenderer.invoke('settings:get', key),
   setSetting: (key: string, value: unknown) => ipcRenderer.send('settings:set', { key, value }),

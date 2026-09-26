@@ -44,41 +44,65 @@ jobs:
       - name: 安装依赖
         run: npm ci
 
-      - name: 构建 macOS zip（arm64）
-        run: npx electron-builder --mac --arm64 --publish never
+      # 两个架构都要出：Intel Mac 用户同样需要律师端。
+      # electron-builder 的默认输出目录是 dist/mac（x64）与 dist/mac-arm64（arm64）。
+      - name: 构建 macOS zip（arm64 + x64）
+        run: npx electron-builder --mac --arm64 --x64 --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
 
+      # ⚠️ electron-builder 的输出目录名不统一：**arm64 是 dist/mac-arm64，
+      # 但 x64 是 dist/mac**（不是 dist/mac-x64）。按 `dist/mac-${ARCH}` 拼会在
+      # x64 上找不到 .app —— 实测会打出一个**内容为空的 zip**（构建却照样成功）。
       - name: 校验 ad-hoc 签名与 entitlements（坏包不许出门）
         run: |
           set -e
-          APP=$(find dist -maxdepth 3 -name '*.app' -print -quit)
-          echo "app: $APP"
-          codesign -dvvv "$APP" 2>&1 | grep -E '^(Identifier|Signature|TeamIdentifier|flags)=' || true
-          codesign --verify --strict "$APP"
-          codesign -dvvv "$APP" 2>&1 | grep -q 'Signature=adhoc'
-          codesign -dvvv "$APP" 2>&1 | grep -q 'flags=.*adhoc'
-          codesign -d --entitlements - "$APP" 2>&1 | grep -q 'disable-library-validation'
-          echo "✅ ad-hoc 封印 + disable-library-validation 校验通过"
+          for ARCH in arm64 x64; do
+            case "$ARCH" in
+              arm64) APPDIR="dist/mac-arm64" ;;
+              x64)   APPDIR="dist/mac" ;;
+            esac
+            APP=$(find "$APPDIR" -maxdepth 1 -name '*.app' -print -quit)
+            test -n "$APP" || { echo "❌ $ARCH: $APPDIR 下找不到 .app"; exit 1; }
+            echo "---- $ARCH: $APP ----"
+            codesign -dvvv "$APP" 2>&1 | grep -E '^(Identifier|Signature|TeamIdentifier|flags)=' || true
+            codesign --verify --strict "$APP"
+            codesign -dvvv "$APP" 2>&1 | grep -q 'Signature=adhoc'
+            codesign -dvvv "$APP" 2>&1 | grep -q 'flags=.*adhoc'
+            codesign -d --entitlements - "$APP" 2>&1 | grep -q 'disable-library-validation'
+            echo "✅ $ARCH ad-hoc 封印 + disable-library-validation 校验通过"
+          done
 
-      - name: 打成「首次使用」zip（App + 去隔离助手，与站点命名一致）
-        # 站点上那份 zip 的顶层是「深鲸律师端-首次使用/」，里面是 .app + 「首次使用请双击我.command」
+      - name: 打成「首次使用」zip（两个架构各一份，与站点命名一致）
+        # 站点上那份 zip 的顶层是「深鲸·律师端-首次使用/」，里面是 .app + 「首次使用请双击我.command」
         # （双击助手会 xattr -dr com.apple.quarantine 并 open，省得用户自己敲命令）。
         # 这一步把 electron-builder 的裸 zip 换成同一形态，CI 产物才等于可直接发布的资产。
         run: |
           set -e
           VER=$(node -p "require('./package.json').version")
-          APP=$(find dist -maxdepth 3 -name '*.app' -print -quit)
-          OUT="dist/深鲸律师端-首次使用"
-          rm -rf "$OUT" "$OUT.zip"
-          mkdir -p "$OUT"
-          cp -R "$APP" "$OUT/"
-          cp "build/首次使用请双击我.command" "$OUT/"
-          chmod +x "$OUT/首次使用请双击我.command"
-          ditto -c -k --sequesterRsrc --keepParent "$OUT" "dist/DeepWhale-Lawyer-${VER}-arm64.zip"
+          for ARCH in arm64 x64; do
+            case "$ARCH" in
+              arm64) APPDIR="dist/mac-arm64" ;;
+              x64)   APPDIR="dist/mac" ;;
+            esac
+            APP=$(find "$APPDIR" -maxdepth 1 -name '*.app' -print -quit)
+            test -n "$APP" || { echo "❌ $ARCH: $APPDIR 下找不到 .app"; exit 1; }
+            OUT="dist/深鲸·律师端-首次使用-${ARCH}"
+            ZIP="dist/DeepWhale-Lawyer-${VER}-${ARCH}.zip"
+            rm -rf "$OUT" "$ZIP"
+            mkdir -p "$OUT"
+            cp -R "$APP" "$OUT/"
+            cp "build/首次使用请双击我.command" "$OUT/"
+            chmod +x "$OUT/首次使用请双击我.command"
+            ditto -c -k --sequesterRsrc --keepParent "$OUT" "$ZIP"
+            rm -rf "$OUT"
+            # 断言 zip 里真的装了 app 与助手脚本 —— 空 zip 是最难发现的一类坏包
+            COUNT=$(unzip -l "$ZIP" | grep -c 'Contents/MacOS/' || true)
+            test "$COUNT" -ge 1 || { echo "❌ $ZIP 里没有 app 内容"; exit 1; }
+            echo "---- $ZIP（含 $COUNT 条 app 条目）----"
+            unzip -l "$ZIP" | head -6
+          done
           rm -f dist/*.blockmap dist/builder-debug.yml
-          echo "---- zip 顶层内容 ----"
-          unzip -l "dist/DeepWhale-Lawyer-${VER}-arm64.zip" | head -6
 
       - name: 上传 macOS 产物
         uses: actions/upload-artifact@v4

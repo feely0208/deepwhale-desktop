@@ -4,9 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>法律模式 · 律师工作台</title>
-  <link rel="stylesheet" href="css/base.css?v=wb4" />
+  <link rel="stylesheet" href="css/base.css?v=wb3" />
   <link rel="stylesheet" href="css/components.css?v=wb1" />
-  <link rel="stylesheet" href="css/workbench.css?v=wb18" />
+  <link rel="stylesheet" href="css/workbench.css?v=wb14" />
   <link rel="stylesheet" href="css/profile.css?v=wb2" />
   <link rel="stylesheet" href="assets/cropperjs/cropper.min.css" />
 </head>
@@ -140,15 +140,8 @@
     </div>
   </div>
 
-  <!-- 壁纸选择面板。
-       ⚠️ 不要给这个面板加 .card 或 .glow 类！
-       二者都声明了 position:relative：.card 在 workbench.css 里有两处（261 行与 696 行），
-       696 行那条排在 .wp-panel{position:fixed}（300 行）之后，同优先级会把 fixed 覆盖成
-       relative；.glow 在 components.css 里同理。
-       面板一旦变成 relative，就随文档流被排到视口下方（文档被内容撑到 ~1500px 高），
-       点「打开壁纸面板」后屏幕里什么都看不见 —— 表现为"壁纸设置不了 / 点了没反应"。
-       .wp-panel 自身已提供 fixed 定位、宽度、背景与圆角，不需要 .card。 -->
-  <div class="wp-panel" id="wallPanel" style="display:none">
+  <!-- 壁纸选择面板 -->
+  <div class="wp-panel card glow" id="wallPanel" style="display:none">
     <div class="card-head"><h2>更换壁纸</h2></div>
     <div class="wp-grid" id="wpGrid"></div>
     <div style="margin-top:14px;display:flex;gap:8px">
@@ -157,8 +150,9 @@
     </div>
   </div>
 
+  <script src="js/log.js?v=wb1"></script>
   <script src="js/theme.js?v=wb1"></script>
-  <script src="js/wallpapers.js?v=wb2"></script>
+  <script src="js/wallpapers.js?v=wb1"></script>
   <script src="js/key-manager.js?v=wb1"></script>
   <script src="js/ai.js?v=wb16"></script>
   <script src="js/intl-kb.js?v=wb1"></script>
@@ -168,7 +162,7 @@
   <script src="js/intl-arb.js?v=wb1"></script>
   <script src="js/wb-data.js?v=wb4"></script>
   <script src="js/data-import.js?v=wb1"></script>
-  <script src="js/workbench.js?v=wb23"></script>
+  <script src="js/workbench.js?v=wb19"></script>
   <script src="js/feedback.js?v=wb2"></script>
   <script src="assets/cropperjs/cropper.min.js"></script>
   <script src="js/profile.js?v=wb7"></script>

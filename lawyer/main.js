@@ -1,7 +1,13 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const { execFile } = require('child_process');
+
+// ⚠️ 跨平台用户目录：**不能用 process.env.HOME** —— Windows 上该变量通常不存在
+// （Windows 用 USERPROFILE），会让下面的路径变成 null、所有写盘静默失败。
+// 统一走 os.homedir()：macOS/Linux 取 HOME，Windows 取 USERPROFILE。
+const USER_HOME = os.homedir();
 let XLSX = null;
 try { XLSX = require('xlsx'); } catch (e) { XLSX = null; }
 
@@ -41,7 +47,7 @@ const DEEPSEEK_DEFAULT = 'https://api.deepseek.com/v1';
 function readDshKey() {
   const home = process.env.DSH_HOME && process.env.DSH_HOME.trim()
     ? process.env.DSH_HOME.trim()
-    : (process.env.HOME ? path.join(process.env.HOME, '.dsh-legal') : null);
+    : path.join(USER_HOME, '.dsh-legal');
   if (!home) return '';
   const f = path.join(home, '.credentials.yaml');
   try {
@@ -218,7 +224,7 @@ ipcMain.handle('import:parseBuffer', async (_ev, buf, name) => {
 });
 
 // —— 公益律师/法学生 免费申请 审核存储（本地 JSON，运营后台读取/审核）——
-const FREE_STORE = process.env.HOME ? path.join(process.env.HOME, '.deepwhale-legal', 'free-applications.json') : null;
+const FREE_STORE = path.join(USER_HOME, '.deepwhale-legal', 'free-applications.json');
 function readFreeStore() {
   try { return JSON.parse(fs.readFileSync(FREE_STORE, 'utf8')); } catch { return { applications: [] }; }
 }
@@ -227,10 +233,39 @@ function writeFreeStore(d) {
 }
 // 用户端提交免费申请（写入待审核）
 ipcMain.handle('free:submit', async (_ev, app) => {
-  if (!app) return { ok: false, msg: '空申请' };
+  if (!app) { return { ok: false, msg: '空申请' }; }
+
+  // ① 本地留档（离线也保住申请内容）
   const d = readFreeStore();
-  d.applications.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), status: 'pending', app, at: Date.now() });
-  return { ok: writeFreeStore(d) };
+  const localId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  d.applications.push(Object.assign({ id: localId, status: 'pending', at: Date.now() }, app));
+  writeFreeStore(d);
+
+  // ② 上报服务端 —— 与鸿蒙端同一接口、同一字段名
+  //    ⚠ 原先只写本地，运营侧根本收不到申请。这是对齐鸿蒙端时补上的缺口。
+  const payload = {
+    applyType: app.applyType === 'half' ? 'half' : 'free',
+    name: app.name || '',
+    no: app.no || '',
+    org: app.org || app.firm || '',
+    phone: app.phone || '',
+    machine: app.machine || '',
+    fileName: app.fileName || (app.file && app.file.name) || '',
+    fileBase64: app.fileBase64 || (app.file && app.file.data) || '',
+    certName: app.certName || '',
+    certBase64: app.certBase64 || '',
+    certExplain: app.certExplain || '',
+    certSite: app.certSite || '',
+    agreed: app.agreed === true
+  };
+  const r = await smsCall('/api/free-apply', payload);
+  if (r && r.ok) {
+    const d2 = readFreeStore();
+    const it = (d2.applications || []).find(x => x.id === localId);
+    if (it) { it.status = 'submitted'; it.serverOk = true; writeFreeStore(d2); }
+    return { ok: true };
+  }
+  return { ok: false, msg: (r && r.msg) || '后台上报失败', savedLocal: true };
 });
 // 运营后台读取申请列表
 ipcMain.handle('free:list', async () => {
@@ -255,22 +290,55 @@ ipcMain.handle('free:check', async (_ev, machine) => {
 });
 
 // —— 律师实名核验 审核存储（用户提交律师信息 → 后台人工核验 → 通过才可登录）——
-const RESTORE_STORE = process.env.HOME ? path.join(process.env.HOME, '.deepwhale-legal', 'lawyer-applications.json') : null;
+const RESTORE_STORE = path.join(USER_HOME, '.deepwhale-legal', 'lawyer-applications.json');
 function readResStore() {
   try { return JSON.parse(fs.readFileSync(RESTORE_STORE, 'utf8')); } catch { return { applications: [] }; }
 }
 function writeResStore(d) {
   try { fs.mkdirSync(path.dirname(RESTORE_STORE), { recursive: true }); fs.writeFileSync(RESTORE_STORE, JSON.stringify(d, null, 2)); return true; } catch { return false; }
 }
-// 用户提交律师实名（写入待核验）
+// 用户提交律师实名（① 本地留档 ② 上报运营后台）
 ipcMain.handle('lawyer:submit', async (_ev, app) => {
   if (!app) return { ok: false, msg: '空申请' };
+
+  // ① 本地留档（离线也保住申请内容；运营后台仍可读本机文件）
   const d = readResStore();
   // 去重：同机器同时最多一个待核验/已通过
   const existing = (d.applications || []).findIndex(x => x.app && x.app.machine === app.machine && (x.status === 'pending' || x.status === 'approved'));
-  if (existing >= 0) { const old = d.applications[existing]; old.app = app; old.at = Date.now(); return { ok: writeResStore(d) }; }
-  d.applications.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), status: 'pending', app, at: Date.now() });
-  return { ok: writeResStore(d) };
+  let localId;
+  if (existing >= 0) {
+    const old = d.applications[existing];
+    old.app = app; old.at = Date.now();
+    localId = old.id;
+  } else {
+    localId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    d.applications.push({ id: localId, status: 'pending', app, at: Date.now() });
+  }
+  const localOk = writeResStore(d);
+
+  // ② 上报服务端 —— 与鸿蒙端同一接口、同一字段名
+  //    ⚠ 原先只写本地，运营侧根本收不到律师核验申请
+  //    （与 free:submit 当初“只写本地、运营收不到”是同一个缺口，那边已补、这边漏了）。
+  const payload = {
+    machine: app.machine || '',
+    name: app.name || '',
+    license: app.license || app.no || '',
+    firm: app.firm || app.org || '',
+    mode: app.mode || 'lawyer',
+    authName: app.authName || '',
+    authLicense: app.authLicense || ''
+  };
+  const r = await smsCall('/api/lawyer-verify', payload);
+  if (r && r.ok) {
+    const d2 = readResStore();
+    const it = (d2.applications || []).find(x => x.id === localId);
+    if (it) { it.status = 'submitted'; it.serverOk = true; it.serverId = r.id || ''; writeResStore(d2); }
+    return { ok: true };
+  }
+  // 上报失败也必须给出可读原因：原来返回 {ok:false} 不带 msg，
+  // 界面（workbench.js）拼出来只有“提交失败：请重试”，完全无法定位。
+  if (!localOk) return { ok: false, msg: '本地保存与后台上报均失败：' + ((r && r.msg) || '未知错误') };
+  return { ok: false, msg: (r && r.msg) || '后台上报失败', savedLocal: true };
 });
 // 运营后台读取律师实名申请
 ipcMain.handle('lawyer:list', async () => {
@@ -329,7 +397,7 @@ ipcMain.handle('dsh:focus', async () => {
 });
 
 // —— 反馈/Bug 存储（运营后台读取/采纳/加试用时长）——
-const FB_STORE = process.env.HOME ? path.join(process.env.HOME, '.deepwhale-legal', 'feedback.json') : null;
+const FB_STORE = path.join(USER_HOME, '.deepwhale-legal', 'feedback.json');
 function readFb() { try { return JSON.parse(fs.readFileSync(FB_STORE, 'utf8')); } catch { return { items: [] }; } }
 function writeFb(d) { try { fs.mkdirSync(path.dirname(FB_STORE), { recursive: true }); fs.writeFileSync(FB_STORE, JSON.stringify(d, null, 2)); return true; } catch { return false; } }
 
@@ -408,7 +476,7 @@ function createWindow() {
     height: 950,
     minWidth: 1100,
     minHeight: 720,
-    title: '深鲸律师端 · 律师工作台',
+    title: '深鲸·律师端 · 律师工作台',
     backgroundColor: '#0d1424',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),

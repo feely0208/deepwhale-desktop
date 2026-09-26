@@ -1,7 +1,7 @@
 {
   "name": "lvjing-lawyer",
-  "productName": "深鲸律师端",
-  "version": "0.1.0",
+  "productName": "深鲸·律师端",
+  "version": "0.1.1",
   "description": "面向律师的 AI 法律工作台桌面端",
   "main": "main.js",
   "homepage": "https://deepwhale.org",
@@ -16,12 +16,12 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
-    "electron": "43.4.0",
+    "electron": "^43.4.0",
     "electron-builder": "^26.15.3"
   },
   "build": {
     "appId": "com.deepwhale.lawyer",
-    "productName": "深鲸律师端",
+    "productName": "深鲸·律师端",
     "asar": true,
     "files": [
       "main.js",
@@ -36,14 +36,8 @@
       "target": [
         "zip"
       ],
-      "artifactName": "DeepWhale-Lawyer-${version}-${arch}.${ext}",
       "category": "public.app-category.business",
       "icon": "build/icon.icns",
-      "identity": "-",
-      "hardenedRuntime": true,
-      "gatekeeperAssess": false,
-      "entitlements": "build/entitlements.mac.plist",
-      "entitlementsInherit": "build/entitlements.mac.plist",
       "extendInfo": {
         "CFBundleURLTypes": [
           {
@@ -59,7 +53,8 @@
       "target": [
         "nsis"
       ],
-      "icon": "build/icon.ico"
+      "icon": "build/icon.ico",
+      "artifactName": "DeepWhale-Lawyer-${version}-x64-Setup.${ext}"
     },
     "linux": {
       "target": [
@@ -67,7 +62,8 @@
         "deb"
       ],
       "category": "Office",
-      "icon": "build/icon.png"
+      "icon": "build/icon.png",
+      "artifactName": "DeepWhale-Lawyer-${version}-x86_64.${ext}"
     }
   }
 }

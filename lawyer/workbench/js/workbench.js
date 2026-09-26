@@ -490,7 +490,23 @@
           }).join("") + "</div>") +
         setCard("", "#7b5bff", "壁纸", "<button class='btn btn-ghost' data-wall>打开壁纸面板</button>") +
         setCard("", "#f43f8e", "数据", "<div style='display:flex;gap:8px;flex-wrap:wrap'><button class='btn btn-primary btn-sm' data-open-lic>注册 / 激活</button><button class='btn btn-primary btn-sm' data-open-data>管理数据(.swj)</button><button class='btn btn-ghost btn-sm' data-open-key>算力与 Key</button><button class='btn btn-ghost btn-sm' data-reset>清空本地数据</button></div>") +
-        setCard("ℹ", "#12b5a5", "关于", "<div class='tl-meta' style='line-height:1.8'>法律模式 · 律师工作台（前置代理模块）<br>数据仅本地保存</div>") +
+        setCard("📋", "#8b5cf6", "运行日志（仅存本机 · 用于故障排查）",
+          "<div class='tl-meta' style='line-height:1.8;margin-bottom:8px'>" +
+          "记录启动、AI 调用、授权校验等技术事件，用于排查问题。" +
+          "不含案件、客户、文书等业务内容，也不含完整 API Key。" +
+          "最多保留 30 天或 1000 条，全部保存在本机。</div>" +
+          "<div style='display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px'>" +
+          "<label style='display:flex;align-items:center;gap:6px;cursor:pointer'>" +
+          "<input type='checkbox' id='logOn'" + ((window.Log && window.Log.enabled) ? " checked" : "") + ">记录运行日志</label>" +
+          "<span class='badge badge-info' id='logCount'>当前已记录 " + (window.Log ? window.Log.count() : 0) + " 条</span>" +
+          "</div>" +
+          "<div style='display:flex;gap:8px;flex-wrap:wrap'>" +
+          "<button class='btn btn-ghost' id='logExport'>导出为 txt</button>" +
+          "<button class='btn btn-ghost' id='logCopy'>复制全文</button>" +
+          "<button class='btn btn-ghost' id='logClear'>清空</button>" +
+          "</div>" +
+          "<div class='tl-meta' style='margin-top:8px'>日志是否提供给我们，完全由你决定。" +
+          "提供可显著加快定位速度；不提供也不影响我们按既定流程为你排查。</div>") +
         "</div>";
     } else if (key === "profile") {
       const name = meName();
@@ -524,6 +540,55 @@
     el.content.querySelectorAll("[data-switch]").forEach(function (b) {
       b.addEventListener("click", function () { switchTo(b.getAttribute("data-switch")); });
     });
+    // 运行日志：开关 / 导出 / 复制 / 清空
+    (function () {
+      var lo = el.content.querySelector("#logOn");
+      if (lo) {
+        lo.addEventListener("change", function () {
+          if (window.Log) { window.Log.enabled = lo.checked; }
+          toast(lo.checked ? "已开启运行日志记录" : "已关闭运行日志记录");
+        });
+      }
+      var lx = el.content.querySelector("#logExport");
+      if (lx) {
+        lx.addEventListener("click", function () {
+          if (!window.Log) { return; }
+          var blob = new Blob([window.Log.exportText()], { type: "text/plain;charset=utf-8" });
+          var a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = "深鲸·律师端-运行日志-" + new Date().toISOString().slice(0, 10) + ".txt";
+          a.click();
+          toast("运行日志已导出");
+        });
+      }
+      var lc = el.content.querySelector("#logCopy");
+      if (lc) {
+        lc.addEventListener("click", function () {
+          if (!window.Log) { return; }
+          var t = window.Log.exportText();
+          if (navigator.clipboard) { navigator.clipboard.writeText(t); }
+          else {
+            var ta = document.createElement("textarea");
+            ta.value = t; document.body.appendChild(ta); ta.select();
+            try { document.execCommand("copy"); } catch (e) {}
+            document.body.removeChild(ta);
+          }
+          toast("运行日志已复制");
+        });
+      }
+      var lk = el.content.querySelector("#logClear");
+      if (lk) {
+        lk.addEventListener("click", function () {
+          if (!window.Log) { return; }
+          if (!confirm("确认清空本机运行日志？")) { return; }
+          window.Log.clear();
+          var c = el.content.querySelector("#logCount");
+          if (c) { c.textContent = "当前已记录 0 条"; }
+          toast("运行日志已清空");
+        });
+      }
+    })();
+
     // 设置：主题/壁纸/重置
     el.content.querySelectorAll("[data-theme]").forEach(function (b) {
       b.addEventListener("click", function () { Theme.set(b.getAttribute("data-theme")); toast("主题已切换", "success"); });
@@ -711,11 +776,7 @@
       "<div class='modal-actions'><a class='btn btn-ghost' href='" + c.url + "' download='" + c.name + "'> 下载</a>" +
       "<button class='btn' data-vclose>关闭</button></div></div>";
     v.addEventListener("click", function (e) {
-      // 必须用 hasAttribute：data-vclose 是布尔属性，getAttribute 返回空字符串 "",
-      // 而 if ("") 为假 → remove() 永远不执行，弹窗关不掉（证据调看视频就是这个 bug）。
-      // 同时用 closest 兜住"点到按钮内部子元素"的情况。
-      var hit = e.target.closest ? e.target.closest("[data-vclose]") : null;
-      if (e.target === v || hit) v.remove();
+      if (e.target === v || e.target.getAttribute("data-vclose")) v.remove();
     });
     document.body.appendChild(v);
   }
@@ -2073,11 +2134,7 @@
       "<a class='btn btn-ghost' href='" + ev.url + "' download='" + ev.name + "'> 下载原文件</a>" +
       "<button class='btn' data-vclose>关闭</button></div></div>";
     v.addEventListener("click", function (e) {
-      // 同文件预览：必须用 closest + hasAttribute。原来写成
-      // `e.target.getAttribute("data-vclose")`，布尔属性取到空字符串 ""，
-      // if ("") 为假 → 关闭按钮点了没反应（视频能播、关不掉）。
-      var hit = e.target.closest ? e.target.closest("[data-vclose]") : null;
-      if (e.target === v || hit) v.remove();
+      if (e.target === v || e.target.getAttribute("data-vclose")) v.remove();
     });
     document.body.appendChild(v);
   }
@@ -2435,9 +2492,7 @@
       ["正在切换至 律师工作台…", 88],
       ["就绪", 100],
     ];
-    // 注意：壁纸引擎不在这里初始化。boot() 只在"已有档案"或"建档成功"后才跑，
-    // 未建档时 init() 走 showSetup() 永不 boot —— 若 init 放在这里，壁纸层会一直是空的
-    // （el.layer 为 null，点任何缩略图都抛 TypeError）。初始化改到 init() 最前面。
+    Wallpapers.init();
     let i = 0;
     function next() {
       if (i >= steps.length) {
@@ -2507,9 +2562,6 @@
   }
 
   function init() {
-    // 壁纸引擎必须在这里（DOMContentLoaded）就绪：boot() 只在"已建档/建档成功"后才跑，
-    // 未建档时不会执行，届时点壁纸缩略图会因 el.layer 为 null 抛 TypeError 且壁纸层空白。
-    if (window.Wallpapers) Wallpapers.init();
     renderNav();
     bindTopbar();
     updateThemeIcon();
@@ -2540,13 +2592,15 @@
   }
 
   // 生产环境：这里调用后台 —— 国家律师查询系统 + 律所登记核对。此处为前端演示校验。
-  const COMPLIANCE = {
-    lawyers: {
-      "张冬宝": { license: "13101202011231234", firm: "靖之霖律师事务所" },
-      "李慧敏": { license: "13101202109876543", firm: "靖之霖律师事务所" },
-      "王建国": { license: "13101202211223344", firm: "靖之霖律师事务所" },
-    },
-  };
+  // ── 实名核验 ──
+  // 与鸿蒙端保持同一套模型（本产品是一个体系，只是平台不同）：
+  //   ① 本地只做「格式校验」—— 按司法部《律师和律师事务所执业证号编制办法》
+  //      17 位逐位校验，不做任何名册比对（本地名册既不可维护，也等于放水）
+  //   ② 真实性由运营后台人工核验后放行（见 __lawyerSubmit / __lawyerCheck）
+  //
+  // ⚠ 此处原有 3 人硬编码名单（张冬宝/李慧敏/王建国），是测试阶段产物，已删除。
+  //   它的返回值除 dev 分支外从未被使用，属死代码；留着会让人误以为
+  //   「本地有名册可比对」，反而掩盖真实核验通道。
   // 开发者特权：name=(feely|张冬宝) 且相关证号为任意 17 位数字  直接登录（免律所）
   function isDevAuth(name, mode, d) {
     if (name !== "feely" && name !== "张冬宝") return false;
@@ -2562,34 +2616,36 @@
   }
   function verifyLawyerIdentity(mode, d) {
     const name = (d.name || "").trim();
-    if (!name) return { ok: false, msg: "请输入姓名" };
+    if (name.length < 2) return { ok: false, msg: "请输入真实姓名（至少 2 个字）" };
+
     if (mode === "lawyer") {
       const license = (d.license || "").trim(), firm = (d.firm || "").trim();
       if (!license) return { ok: false, msg: "请输入执业证号" };
-      // 开发者特权：张冬宝/feely + 17 位执业证号  直接登录（无需律所）
+      // 开发者特权：仅 feely / 张冬宝，且证号格式合法（release 构建由开关关闭）
       if (isDevAuth(name, mode, d)) return { ok: true, dev: true };
-      if (!firm) return { ok: false, msg: "请输入所属律所" };
-      const rec = COMPLIANCE.lawyers[name];
-      if (rec && rec.license === license && rec.firm === firm) return { ok: true };
-      if (rec && rec.license === license && rec.firm !== firm) return { ok: false, msg: "该律师所属律所与登记不符，请核实" };
-      return { ok: false, msg: "姓名与执业证号不匹配，未能在国家律师查询系统核对到，不能登录" };
+      const licErr = (window.License && window.License.checkLawyerLicense)
+        ? window.License.checkLawyerLicense(license) : '';
+      if (licErr) return { ok: false, msg: licErr };
+      if (firm.length < 4) return { ok: false, msg: "请输入所属律所全称（至少 4 个字）" };
+      return { ok: true, dev: false };
     }
-    // 实习律师
-    const il = (d.ilicense || "").trim(), firm = (d.firm || "").trim(), an = (d.authName || "").trim(), al = (d.authLicense || "").trim();
+
+    // 实习律师：实习证号无全国统一编码规则，保持较宽；
+    // 但为其背书的执业律师证号走严格校验（链路仍有硬门槛）
+    const il = (d.ilicense || "").trim(), firm = (d.firm || "").trim();
+    const an = (d.authName || "").trim(), al = (d.authLicense || "").trim();
     if (!il) return { ok: false, msg: "请输入实习证号" };
-    // 开发者特权：登录人 或 授权律师为 张冬宝/feely  免律所/直接授权
     if (isDevAuth(name, mode, d)) return { ok: true, dev: true };
     if (isDevAuthorizer(mode, d)) return { ok: true, dev: true };
-    if (!firm) return { ok: false, msg: "请输入所属律所" };
-    if (!an) return { ok: false, msg: "请输入授权执业律师姓名" };
-    if (!al) return { ok: false, msg: "请输入授权执业律师执业证号" };
-    const authRec = COMPLIANCE.lawyers[an];
-    if (authRec && authRec.license === al && authRec.firm === firm) return { ok: true };
-    if (authRec && authRec.license === al && authRec.firm !== firm) return { ok: false, msg: "实习律师所属律所与授权律师不一致" };
-    return { ok: false, msg: "授权执业律师信息不匹配，实习律师无法登录" };
+    if (firm.length < 4) return { ok: false, msg: "请输入所属律所全称（至少 4 个字）" };
+    if (an.length < 2) return { ok: false, msg: "请输入授权执业律师姓名" };
+    const alErr = (window.License && window.License.checkLawyerLicense)
+      ? window.License.checkLawyerLicense(al) : '';
+    if (alErr) return { ok: false, msg: "授权律师" + alErr };
+    return { ok: true, dev: false };
   }
 
-  function showSetup() {
+    function showSetup() {
     const setup = document.getElementById("setup");
     const bootEl = document.getElementById("boot");
     if (setup) setup.classList.remove("done");
@@ -2616,6 +2672,9 @@
         : { name: val("suIName"), ilicense: val("suILicense"), firm: val("suIFirm"), authName: val("suAuthName"), authLicense: val("suAuthLicense") };
       // 开发者特权：张冬宝/feely + 17 位证号 → 直接登录（免律所、免核验），方便测试
       const dv = verifyLawyerIdentity(mode, data);
+      // 格式不合格：直接拦下并说明是哪一位不对
+      // （此前这里的返回值除 dev 分支外从未被使用，等于没有本地校验）
+      if (!dv.ok) { setStatus(dv.msg || "信息格式不正确", "err"); return; }
       if (dv.ok && dv.dev) {
         const lawyer = mode === "lawyer"
           ? { name: data.name.trim(), license: data.license.trim(), firm: data.firm.trim() || "（开发者）", role: "执业律师", dev: true, date: nowStr() }
@@ -2632,7 +2691,7 @@
       if (!data.name || (!data.license && !data.ilicense)) { setStatus("请填写姓名与证件号", "err"); toast("请填写姓名与证件号", "error"); return; }
       if (!data.firm) { setStatus("请填写所属律所", "err"); toast("请填写所属律所", "error"); return; }
       const machine = (window.__licenseGetMachine && window.__licenseGetMachine()) || "";
-      const rec = { name: data.name.trim(), license: data.license.trim(), firm: data.firm.trim(), mode: mode, machine: machine, at: Date.now() };
+      const rec = { name: data.name.trim(), license: (data.license || data.ilicense || "").trim(), firm: data.firm.trim(), mode: mode, machine: machine, authName: (data.authName || "").trim(), authLicense: (data.authLicense || "").trim(), at: Date.now() };
       // 提交到后台人工核验
       if (window.__lawyerSubmit && typeof window.__lawyerSubmit === "function") {
         window.__lawyerSubmit(rec).then(function (r) {

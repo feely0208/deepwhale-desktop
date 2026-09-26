@@ -27,7 +27,36 @@
   ];
 
   function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
-  function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* ignore */ } }
+  // ── 授权到期后的只读门禁 ──────────────────────────────────────
+  // 对外承诺：到期 + 7 天犹豫期后转只读 —— 已录入数据仍可查看与导出，
+  // 不能新增、编辑、使用 AI 与导入。
+  // 收口点选在这里：本模块的 localStorage 写入是业务数据落盘的必经之处。
+  var READONLY_ALLOWED = [
+    "legal-mode.graceStart",   // 犹豫期起算标记
+    "legal-mode.llm",          // API Key
+    "legal-mode.accent",       // 主题色
+    "legal-mode.isDark",       // 深浅色
+    "legal-mode.wallpaper",    // 壁纸
+    "legal-mode.dataVersion",
+    "legal-mode.trialStart",
+    "legal-mode.trialExtends",
+  ];
+
+  function writeAllowed(k) {
+    if (!window.License || !window.License.isReadOnly || !window.License.isReadOnly()) {
+      return true;
+    }
+    for (var i = 0; i < READONLY_ALLOWED.length; i++) {
+      if (k === READONLY_ALLOWED[i]) { return true; }
+    }
+    if (window.License.guardWritable) { window.License.guardWritable("保存改动"); }
+    return false;
+  }
+
+  function lsSet(k, v) {
+    if (!writeAllowed(k)) { return; }
+    try { localStorage.setItem(k, v); } catch (e) { /* ignore */ }
+  }
   function lsDel(k) { try { localStorage.removeItem(k); } catch (e) { /* ignore */ } }
 
   // —— 收集：把工作台数据按类别汇总（C-1 也用它做 agent 数据访问） ——
@@ -119,7 +148,7 @@
   function download(filename, blob) {
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = filename || ('深鲸律师端-' + new Date().toISOString().slice(0, 10) + '.swj');
+    a.download = filename || ('深鲸·律师端-' + new Date().toISOString().slice(0, 10) + '.swj');
     a.click();
   }
 

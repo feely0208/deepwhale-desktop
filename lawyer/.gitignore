@@ -1,9 +1,40 @@
+# 深鲸·律师端（桌面端）—— 不入库清单
+#
+# 密钥/配置：防止密钥被提交或被打包进安装包泄漏
+# 真实密钥放在 sms-config.json（本文件已忽略）；仓库内只保留脱敏示例 sms-config.example.json
+sms-config.json
+sms-config.local.json
+*.secret
+.env
+.env.local
+
+# 依赖与构建产物：体积大（合计约 280MB），且可由源码重建
 node_modules/
 dist/
-release/
+build/
 icon.iconset/
+*.dmg
 *.zip
-*.blockmap
-# 真实短信密钥文件不进仓库（用 example 占位，CI 构建时复制）
-sms-config.json
+*.app/
+
+# 本地备份：含历史代码快照
+*.bak
+*.bak-*
+*.old
+*.orig
+
+# 系统与编辑器
 .DS_Store
+Thumbs.db
+*.swp
+*~
+.idea/
+.vscode/
+
+# 日志
+*.log
+npm-debug.log*
+
+# 嵌套仓库：workbench/ 是独立 git 仓库（有自己的历史），
+# 由它自己管版本；外层仓库不重复登记，避免变成脆弱的 submodule 引用。
+workbench/

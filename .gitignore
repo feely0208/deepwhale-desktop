@@ -22,3 +22,10 @@ Thumbs.db
 
 # 随包 DSH 运行时：体积 280MB+，由构建时 npm install 生成（见 release.yml），不入库
 /dsh-runtime/
+
+# office 载荷：精简 CPython + 文档库，100MB+，由 scripts/build-office-runtime.js
+# 在构建时按目标架构生成（见 release.yml），不入库
+/office-runtime/
+
+# 随包插件载荷：由 scripts/build-bundled-plugins.js 从 npm 拉取已发布正式包生成，不入库
+/bundled-plugins/

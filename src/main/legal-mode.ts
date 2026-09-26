@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { DEV_REPO_ROOT } from './dsh-runtime';
 
 /** 插件包名（行 id 与此不同，行 id 是 `ui-legal-mode`）。 */
 const PLUGIN_NAME = '@deepseek-ai/dsh-client-ui-legal-mode';
@@ -26,7 +27,18 @@ export function legalModeHome(userDataDir: string): string {
 
 /** 随包载荷目录：打包后在 `Resources/legal-mode`，开发态在仓库根 `legal-mode`。 */
 export function legalModePayloadDir(isPackaged: boolean, appPath: string, resourcesPath: string): string {
-  return isPackaged ? path.join(resourcesPath, 'legal-mode') : path.join(appPath, 'legal-mode');
+  if (isPackaged) return path.join(resourcesPath, 'legal-mode');
+  // 开发态：app.getAppPath() 在 `electron dist/main/index.js` 下是入口脚本所在目录，
+  // 不是仓库根（见 dsh-runtime.ts 的 DEV_REPO_ROOT 说明），所以按存在性依次探测。
+  for (const root of [appPath, DEV_REPO_ROOT, process.cwd()]) {
+    const candidate = path.join(root, 'legal-mode');
+    try {
+      if (fs.existsSync(candidate)) return candidate;
+    } catch {
+      // 目录不可读：继续下一个候选
+    }
+  }
+  return path.join(appPath, 'legal-mode');
 }
 
 /** 迁移标记文件：存在即表示已迁移过，避免重复搬运。 */
@@ -282,8 +294,17 @@ function ensurePluginEntry(entryPath: string, pluginDir: string): boolean {
   return true;
 }
 
-/** 随包运行时入口的相对路径（相对 dsh 包目录）。 */
-const RUNTIME_PERSONA_ENTRY = ['node_modules', '@deepseek-ai', 'dsh-persona', 'lib', 'index.js'];
+/**
+ * 随包运行时里 persona 包的相对路径 —— **相对 `node_modules` 目录**
+ * （即 `dshNodeModulesDir()` 的返回值），不是相对 dsh 包目录。
+ *
+ * ⚠️ 这里曾多写一层 `node_modules`，拼出
+ * `<node_modules>/node_modules/@deepseek-ai/dsh-persona/...` 这种永不存在的路径，
+ * 于是 `personaNeedsPrefix` 读不到源码、返回 null、预设原样保留 `text:`；
+ * 而 0.1.5 起 persona 要求 `prefix:` —— 预设会 fail-loud 挂载失败，
+ * 表现就是「选了法律模式但律师端弹不出来」。
+ */
+const RUNTIME_PERSONA_ENTRY = ['@deepseek-ai', 'dsh-persona', 'lib', 'index.js'];
 /** 用户自备 DSH 的解析根（相对 DSH_HOME，DSH 会在此解析 profile 依赖）。 */
 const HOME_PERSONA_ENTRIES = [
   ['profiles', 'node_modules', '@deepseek-ai', 'dsh-persona', 'lib', 'index.js'],

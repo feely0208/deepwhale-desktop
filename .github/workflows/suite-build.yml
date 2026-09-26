@@ -1,0 +1,104 @@
+# 套装构建工作流：把「壳 + 律师端」的各平台产物组装成深鲸套装（三平台合体包）。
+#
+# 为什么需要它：套装此前是**纯手工**打的（手工下载产物、手工压缩、手工核对 sha256），
+# 所以它总是落后于壳 —— 壳已经发到 1.0.16 时，套装还停在 1.0.15。这个工作流把
+# 整件事变成点一次按钮。
+#
+# 触发：手动（workflow_dispatch）。输入要组装的两个版本 + 存放产物的 release tag。
+# 产出：Draft Release `suite-<shell_tag>`，含三个平台 zip + sha256 清单。
+#
+# ⚠️ 发布纪律：套装 release **必须勾 Pre-release**，否则它会抢走 GitHub 的 "latest"，
+# 让桌面端的自动更新静默失效（详见 RELEASING.md 与 2026-09-25 交接文档第四节）。
+name: Build Suite
+
+on:
+  workflow_dispatch:
+    inputs:
+      shell_tag:
+        description: '壳的 tag（如 v1.0.17），同时用作套装版本号与产物名前缀'
+        required: true
+        default: 'v1.0.17'
+      lawyer_version:
+        description: '律师端版本（如 0.1.1）'
+        required: true
+        default: '0.1.1'
+      source_release:
+        description: '从哪个 release 下载壳 + 律师端产物（默认与 shell_tag 相同）'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  suite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 解析参数
+        id: v
+        run: |
+          TAG="${{ inputs.shell_tag }}"
+          echo "shell=${TAG#v}" >> "$GITHUB_OUTPUT"
+          echo "src=${{ inputs.source_release != '' && inputs.source_release || inputs.shell_tag }}" >> "$GITHUB_OUTPUT"
+          echo "lawyer=${{ inputs.lawyer_version }}" >> "$GITHUB_OUTPUT"
+
+      - name: 下载壳与律师端产物
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          mkdir -p artifacts
+          SRC="${{ steps.v.outputs.src }}"
+          echo "从 release $SRC 下载产物…"
+          gh release download "$SRC" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir artifacts \
+            --clobber \
+            --pattern 'DeepWhale-Desktop-*' \
+            --pattern 'DeepWhale-Lawyer-*' || true
+          echo "---- 下到的文件 ----"
+          ls -la artifacts/ | head -30
+
+      - name: 组装套装
+        run: |
+          node scripts/build-suite.js \
+            --shell-version "${{ steps.v.outputs.shell }}" \
+            --lawyer-version "${{ steps.v.outputs.lawyer }}" \
+            --artifacts artifacts \
+            --out suite-out
+
+      - name: 汇总清单
+        id: manifest
+        run: |
+          {
+            echo "## 深鲸套装 ${{ inputs.shell_tag }}"
+            echo ""
+            echo "壳 \`${{ steps.v.outputs.shell }}\` ｜ 律师端 \`${{ steps.v.outputs.lawyer }}\`"
+            echo ""
+            echo '```'
+            cat suite-out/套装四平台-sha256.txt
+            echo '```'
+          } > notes.md
+          cat notes.md
+
+      # ⚠️ 创建为 **draft**，由人工确认后发布；发布时必须勾 Pre-release（见文件头说明）。
+      - name: 创建 Draft Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          TAG="suite-${{ inputs.shell_tag }}"
+          gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes 2>/dev/null || true
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "深鲸套装 ${{ inputs.shell_tag }}" \
+            --notes-file notes.md \
+            --draft \
+            suite-out/*.zip suite-out/套装四平台-sha256.txt suite-out/安装说明.txt
+          echo "✅ 已创建草稿 release: $TAG（发布时记得勾 Pre-release）"

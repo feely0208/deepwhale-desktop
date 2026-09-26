@@ -16,6 +16,8 @@ import { Store } from './store';
 import { ServiceManager } from './service-manager';
 import { ensureLegalModeSetup, legalModeHome, legalModePayloadDir, migrateLegacyHomeOnce } from './legal-mode';
 import { bundledDshBin, dshNodeModulesDir } from './dsh-runtime';
+import { ensureOfficeSetup, officePayloadDir } from './office-runtime';
+import { ensureBundledPlugins, bundledPluginsPayloadDir } from './bundled-plugins';
 import { createMainWindow } from './window';
 import { SkinManager } from './skin-manager';
 import { PetWindow } from './pet';
@@ -27,6 +29,70 @@ import { installCrashGuard, crashLogDir, appendCrashLog } from './crash-guard';
 
 /** 冒烟测试模式：自动启动、打印关键事件、8 秒后退出（供 CI/自动化验证） */
 const SMOKE = !!process.env.DSH_DESKTOP_SMOKE;
+
+/**
+ * 载荷/ profile 注入失败统一处置：既打 console，**也写进 fault.log**。
+ *
+ * 这些 catch 刻意设计成"不影响壳启动"，但如果只打 console，问题在打包应用里等于
+ * 扔进黑洞：用户看到的现象只有"选了法律模式没反应""排版没生效"，无从反馈，
+ * 支持侧也拿不到线索。写进 fault.log 后，用户端「帮助 → 查看日志」即可取到。
+ *
+ * @param scope - 出错的子系统（legal-mode / office / plugins）。
+ * @param stage - 出错阶段（载荷注入 / profile 注入）。
+ * @param error - 捕获到的异常。
+ */
+function logInjectionFailure(scope: string, stage: string, error: unknown): void {
+  console.error(`[${scope}] ${stage}失败（不影响启动）:`, error);
+  appendCrashLog({
+    kind: 'injection-failed',
+    summary: `${scope} ${stage}失败`,
+    detail:
+      error instanceof Error
+        ? `${error.name}: ${error.message}\n${error.stack ?? '(无堆栈)'}`
+        : String(error),
+    at: new Date().toISOString(),
+  });
+}
+
+/** 深链接通知只弹一次，避免连续触发时刷屏。 */
+let lawyerUnreachableNotified = false;
+
+/**
+ * 深链接拉起律师端失败时的**可操作**提示。
+ *
+ * 三种最常见原因都写清楚，并给一个「去下载律师端」入口 —— 比"点了没反应"强得多；
+ * 同时落 fault.log，支持侧据此就能判断是"没装"还是"没打开过"。
+ */
+async function notifyLawyerAppUnreachable(): Promise<void> {
+  if (lawyerUnreachableNotified) return;
+  lawyerUnreachableNotified = true;
+
+  appendCrashLog({
+    kind: 'deep-link-failed',
+    summary: '法律模式拉起律师端失败',
+    detail: 'deepwhale-law:// 协议未被系统接受（未安装 / 从未打开过 / 已被移走）',
+    at: new Date().toISOString(),
+  });
+
+  const { response } = await dialog.showMessageBox({
+    type: 'warning',
+    title: '未找到深鲸律师端',
+    message: '法律模式需要「深鲸律师端」配合，但这个应用没能被系统拉起。',
+    detail: [
+      '常见原因：',
+      '· 还没有安装深鲸律师端；',
+      '· 装好了但从未打开过 —— Windows / Linux 需要至少打开一次才会登记链接协议；',
+      '· 律师端被移动或删除了。',
+      '',
+      '你也可以直接从开始菜单 / 启动台手动打开深鲸律师端，功能不受影响。',
+    ].join('\n'),
+    buttons: ['去下载律师端', '我知道了'],
+    defaultId: 0,
+    cancelId: 1,
+    noLink: true,
+  });
+  if (response === 0) void shell.openExternal('https://deepwhale.org.cn/download.html');
+}
 
 const store = new Store();
 const skin = new SkinManager(store);
@@ -580,10 +646,40 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
     try {
       setup = ensureLegalModeSetup(legalHome, payloadDir, legalRuntimeDir);
     } catch (error) {
-      console.error('[legal-mode] 载荷注入失败（不影响启动）:', error);
+      logInjectionFailure('legal-mode', '载荷注入', error);
     }
     if (SMOKE) {
       console.log(`[smoke] legal-mode setup: changed=${String(setup.changed)} pending=${String(setup.profilePending)}`);
+    }
+
+    // office 能力（Word / Excel / PPT 生成 + 内置 LibreOffice 渲染 PDF）：
+    // 纯增量，只往 profile patch 追加自己的 insert 行，不碰法律模式的任何行。
+    const officePayload = officePayloadDir(app.isPackaged, app.getAppPath(), process.resourcesPath);
+    let officeSetup: { changed: boolean; profilePending: boolean } = { changed: false, profilePending: false };
+    try {
+      officeSetup = ensureOfficeSetup(legalHome, officePayload, legalRuntimeDir, process.execPath);
+    } catch (error) {
+      logInjectionFailure('office', '载荷注入', error);
+    }
+    if (SMOKE) {
+      console.log(`[smoke] office setup: changed=${String(officeSetup.changed)} pending=${String(officeSetup.profilePending)} payload=${officePayload}`);
+    }
+
+    // 随包插件（中文合规 + 公文排版）：从 npm 拉取的正式包随 app 分发，
+    // 装完即用、不依赖联网。走标准 bundle 机制（dsh.profile.bundles）。
+    const pluginsPayload = bundledPluginsPayloadDir(
+      app.isPackaged,
+      app.getAppPath(),
+      process.resourcesPath,
+    );
+    let pluginsSetup: { changed: boolean; profilePending: boolean } = { changed: false, profilePending: false };
+    try {
+      pluginsSetup = ensureBundledPlugins(legalHome, pluginsPayload);
+    } catch (error) {
+      logInjectionFailure('plugins', '载荷注入', error);
+    }
+    if (SMOKE) {
+      console.log(`[smoke] bundled plugins: changed=${String(pluginsSetup.changed)} pending=${String(pluginsSetup.profilePending)} payload=${pluginsPayload}`);
     }
 
     service = new ServiceManager(store.get('command'), {
@@ -614,6 +710,10 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
       closeToTray: store.get('closeToTray'),
       isQuitting: () => quitting,
       onPageReady,
+      // 深链接（法律模式拉起律师端）失败时给出可操作提示，而不是静默无反应。
+      onOpenExternalFailed: (url) => {
+        if (/^deepwhale-law:/i.test(url)) void notifyLawyerAppUnreachable();
+      },
     });
     mainWin.on('closed', () => {
       mainWin = null;
@@ -632,9 +732,27 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
       try {
         after = ensureLegalModeSetup(legalHome, payloadDir, legalRuntimeDir);
       } catch (error) {
-        console.error('[legal-mode] profile 注入失败（不影响启动）:', error);
+        logInjectionFailure('legal-mode', 'profile 注入', error);
       }
-      if (after.changed && !after.profilePending && mainWin !== null) {
+      let afterOffice: { changed: boolean; profilePending: boolean } = { changed: false, profilePending: false };
+      try {
+        afterOffice = ensureOfficeSetup(legalHome, officePayload, legalRuntimeDir, process.execPath);
+      } catch (error) {
+        logInjectionFailure('office', 'profile 注入', error);
+      }
+      let afterPlugins: { changed: boolean; profilePending: boolean } = { changed: false, profilePending: false };
+      try {
+        afterPlugins = ensureBundledPlugins(legalHome, pluginsPayload);
+      } catch (error) {
+        logInjectionFailure('plugins', 'profile 注入', error);
+      }
+      if (SMOKE) {
+        console.log(`[smoke] profile injection: legal=${String(after.changed)} office=${String(afterOffice.changed)} plugins=${String(afterPlugins.changed)}`);
+      }
+      // 任一注入写了盘且 profile 已就位，就重载一次让新入口图生效。
+      const profileReady =
+        !after.profilePending && !afterOffice.profilePending && !afterPlugins.profilePending;
+      if ((after.changed || afterOffice.changed || afterPlugins.changed) && profileReady && mainWin !== null) {
         // 等带 token 的那次导航落定再重载：两次并发导航会互相 abort
         // （表现为一条 ERR_ABORTED 告警），这里让重载晚一步。
         const win = mainWin;
@@ -734,13 +852,30 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
     usage.stop();
     updates?.dispose();
     if (service) {
-      if (store.get('keepDshRunning')) {
+      // 冒烟模式不保留服务（见下面的 will-quit），其余情况沿用用户的 keepDshRunning。
+      if (!SMOKE && store.get('keepDshRunning')) {
         console.log('[main] 退出时保留 DSH 服务（keepDshRunning=true，下次启动秒开）');
-      } else {
-        void service.stop();
       }
     }
     store.save();
+  });
+
+  // ⚠️ 冒烟模式的 DSH 回收必须在这里做，不能放进 before-quit：
+  // `service.stop()` 是异步的，而 before-quit 里 await 不了 —— app 会立刻退出，
+  // DSH 子进程变成孤儿，继续占着端口（下一次冒烟就会被 isPortReady 误判为"已就绪"
+  // 而复用，测出假结果）。这里先拦住退出，等回收真正完成再退。
+  let smokeCleanedUp = false;
+  app.on('will-quit', (event) => {
+    if (!SMOKE || smokeCleanedUp || !service) return;
+    smokeCleanedUp = true;
+    event.preventDefault();
+    console.log('[smoke] 停掉 DSH 服务（冒烟模式不保留）');
+    void service
+      .stop()
+      .catch((error: unknown) => {
+        console.error('[smoke] 停止 DSH 服务失败:', error);
+      })
+      .finally(() => app.exit(0));
   });
 
   app.on('window-all-closed', () => {

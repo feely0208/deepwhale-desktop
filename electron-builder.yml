@@ -11,11 +11,32 @@ files:
   - dist/**/*
   - assets/**/*
   - package.json
+  # ── DSH 运行时打进 asar（而不是 extraResources 散文件）──
+  #
+  # 为什么：散着放是 26,444 个文件，实测写入 12.1 秒；打进 asar 后是 1 个文件、0.31 秒
+  # —— 快约 40 倍，且 asar 更小（431M vs 495M，省掉文件系统块开销）。这才是"安装慢"
+  # 的真正解法：Windows 上 Defender 要逐个文件扫，散文件会让安装拖到几分钟。
+  #
+  # 顺带干掉了一个历史 hack：electron-builder 会跳过 extraResources 里名为 node_modules
+  # 的目录（即使显式 filter 也无效），所以旧方案要先把目录改名成 pkgs、打包后再由
+  # after-pack 改回 node_modules。走 `files` 没有这个限制，不再需要改名。
+  #
+  # ⚠️ DSH 是**子进程 + ESM** 跑的，必须确认 Electron-as-Node 能从 asar 里 import ESM
+  # （实测通过；普通 Node 不行，但我们用的是 Electron）。
+  - dsh-runtime/**/*
 asar: true
 npmRebuild: false
-# 打包后把 dsh-runtime/pkgs 改回 node_modules（electron-builder 会跳过名为
-# node_modules 的 extraResources 目录，详见 scripts/after-pack.js）
-afterPack: scripts/after-pack.js
+# 原生模块不能从 asar 里 dlopen，必须解包成真实文件。
+# 实测整个运行时只有 13 个 .node，分布在下列包中；这里按包目录整体解包（比只解包
+# *.node 稳，避免某些包还需要同目录的共享库/预编译产物）。
+# 平台无关写法：用 `-*` 覆盖各平台后缀包名，免得漏掉某一个平台。
+asarUnpack:
+  - dsh-runtime/node_modules/node-pty/**
+  - dsh-runtime/node_modules/@img/**
+  - dsh-runtime/node_modules/@koromix/**
+  - dsh-runtime/node_modules/sherpa-onnx-*/**
+  - dsh-runtime/node_modules/node-addon-require-builtin-*/**
+  - dsh-runtime/node_modules/@deepseek-ai/node-addon-system-*/**
 
 # 法律模式载荷（约 130KB）：ui-legal-mode 插件包 + legal-mode 预设。
 # 首次启动由主进程注入到应用专属 DSH home，使"任何渠道切到法律模式都拉起律师端"
@@ -23,16 +44,22 @@ afterPack: scripts/after-pack.js
 extraResources:
   - from: legal-mode
     to: legal-mode
-  # DSH 运行时（整套 harness）：随包内置，用户机器无需 Node.js / npx / 联网。
-  # 主进程用 Electron 自带 Node（ELECTRON_RUN_AS_NODE）拉起 dsh-runtime/…/dsh/lib/bin.js。
-  # ⚠️ filter 必须显式列出 node_modules/**：electron-builder 默认注入
-  # `!**/node_modules/**`（见 app-builder-lib out/fileMatcher.js），只写 from/to 会
-  # 得到一个只有 package.json 的空壳目录，运行时等于没打进去。
-  - from: dsh-runtime
-    to: dsh-runtime
+  # office 载荷：精简 CPython + 文档库（Word / Excel / PPT 生成）。
+  # ⚠️ 这一份必须留在 extraResources（真实文件），不能进 asar —— Python 解释器与
+  # 扩展模块要被操作系统 exec/dlopen，asar 里的文件做不到。
+  # PDF 渲染由 dsh-runtime 里随 dsh 0.1.7 自带的 LibreOffice Kit 提供，不在这里。
+  # 注入方式见 src/main/office-runtime.ts；`bin/node` 是壳运行时生成的包装脚本，
+  # 用 Electron 充当 Node，因此不随包一份完整 Node（省约 50–90MB）。
+  - from: office-runtime
+    to: office-runtime
     filter:
       - '**/*'
-      - 'node_modules/**'
+  # 随包插件：中文合规 + 公文排版（从 npm 拉取的正式包，各 <110KB）。
+  # 走标准 bundle 机制挂载，注入方式见 src/main/bundled-plugins.ts。
+  - from: bundled-plugins
+    to: bundled-plugins
+    filter:
+      - '**/*'
 
 # 发布目标：GitHub Releases。推送 v* 标签后由 .github/workflows/release.yml 自动出包并上传草稿。
 publish:

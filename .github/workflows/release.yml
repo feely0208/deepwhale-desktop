@@ -20,13 +20,21 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # ⚠️ mac 的 arm64 与 x64 必须拆成两个 job：office 载荷里的 CPython 是架构绑定的，
+          # 一个 job 只能让 extraResources 指到一份载荷 —— 合在一起会让 Intel 用户拿到
+          # arm64 的解释器（装得上、用不了）。矩阵里用 office-target 标明各自要构建哪份。
           - os: macos-latest
-            # mac 同时构建 arm64 与 x64（Intel 用户可下载 x64 包）
-            args: --mac --x64 --arm64
+            args: --mac --arm64
+            office-target: darwin-arm64
+          - os: macos-latest
+            args: --mac --x64
+            office-target: darwin-x64
           - os: windows-latest
             args: --win
+            office-target: win32-x64
           - os: ubuntu-latest
             args: --linux
+            office-target: linux-x64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -44,17 +52,28 @@ jobs:
 
       # 随包 DSH 运行时：把整套 harness 打进安装包，用户机器无需 Node.js / npx / 联网。
       # 主进程用 Electron 自带 Node（ELECTRON_RUN_AS_NODE）拉起 dsh-runtime/…/dsh/lib/bin.js。
-      # 版本与 src/main/store.ts 的默认命令保持同一线（0.1.5-rc.1）。
+      # 版本与 src/main/store.ts 的默认命令保持同一线（0.1.7-rc.2，与官方桌面端同版）。
+      # 运行时由 electron-builder 打进 asar（见 electron-builder.yml 的 files/asarUnpack），
+      # 因此**不再需要**旧的 "先把 node_modules 改名 pkgs、打包后再改回" 的绕行。
       - name: Prepare bundled DSH runtime
         shell: bash
         run: |
-          npm install "@deepseek-ai/dsh@0.1.5-rc.1" --prefix dsh-runtime --no-audit --no-fund --loglevel=error
+          npm install "@deepseek-ai/dsh@0.1.7-rc.2" --prefix dsh-runtime --no-audit --no-fund --loglevel=error
           test -f dsh-runtime/node_modules/@deepseek-ai/dsh/lib/bin.js
-          # electron-builder 会跳过 extraResources 里名为 node_modules 的目录（实测只复制到
-          # package.json），所以先改名 pkgs；打包后由 scripts/after-pack.js 改回 node_modules。
-          mv dsh-runtime/node_modules dsh-runtime/pkgs
-          test -f dsh-runtime/pkgs/@deepseek-ai/dsh/lib/bin.js
-          node -e "console.log('bundled DSH runtime ready:', require('./dsh-runtime/pkgs/@deepseek-ai/dsh/package.json').version)"
+          node -e "console.log('bundled DSH runtime ready:', require('./dsh-runtime/node_modules/@deepseek-ai/dsh/package.json').version)"
+
+      # office 载荷：精简 CPython 3.12 + 文档库（Word / Excel / PPT 生成）。
+      # PDF 渲染由随 dsh 0.1.7 自带的 LibreOffice Kit 提供，不含在这里。
+      # 按 job 的目标架构构建：CPython 二进制与 lxml / Pillow 的 wheel 都是架构绑定的；
+      # 宿主架构与目标不一致时，脚本用 pip --platform 交叉安装（无需 Intel runner）。
+      - name: Prepare office runtime
+        shell: bash
+        run: node scripts/build-office-runtime.js "${{ matrix.office-target }}"
+
+      # 随包插件：从 npm 拉取已发布的正式包（中文合规 + 公文排版），让用户装完即用。
+      - name: Prepare bundled plugins
+        shell: bash
+        run: node scripts/build-bundled-plugins.js
 
       - name: Package (构建安装包，不发布)
         run: npm run dist -- --publish never ${{ matrix.args }}

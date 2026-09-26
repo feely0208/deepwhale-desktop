@@ -34,12 +34,22 @@ function parseArgs(argv) {
   const out = { _: [] };
   for (let i = 0; i < argv.length; i += 1) {
     const k = argv[i];
-    if (k.startsWith('--')) {
-      const key = k.slice(2);
-      const next = argv[i + 1];
-      if (next === undefined || next.startsWith('--')) out[key] = true;
-      else { out[key] = next; i += 1; }
-    } else out._.push(k);
+    if (!k.startsWith('--')) {
+      out._.push(k);
+      continue;
+    }
+    // 必须同时支持 `--key value` 与 `--key=value` 两种写法。
+    // 只支持前者时，`--renew-within=30` 会被整串当成键名、取值变 undefined，
+    // 于是阈值静默丢失、脚本退回"不需要续期" —— 一次彻底的假成功（实测踩过）。
+    const eq = k.indexOf('=');
+    if (eq > 2) {
+      out[k.slice(2, eq)] = k.slice(eq + 1);
+      continue;
+    }
+    const key = k.slice(2);
+    const next = argv[i + 1];
+    if (next === undefined || next.startsWith('--')) out[key] = true;
+    else { out[key] = next; i += 1; }
   }
   return out;
 }
@@ -103,6 +113,12 @@ async function cmdCheck(args) {
   // 让工作流据此决定"该续期了"，而不是把这种情况当成错误（退出码 1）。
   // 把「该续期」和「出错了」分开，是无人值守任务能被信任的前提。
   const renewWithin = Number(args['renew-within'] ?? NaN);
+  // 护栏：调用方明确传了 --renew-within，却没解析出数字 —— 直接报错。
+  // 否则会退回"不需要续期"，表现为一次彻底的假成功（实测踩过：参数写成
+  // --renew-within=30 而解析只认空格分隔，阈值静默丢失）。
+  if (process.argv.some((a) => a.startsWith('--renew-within')) && Number.isNaN(renewWithin)) {
+    throw new Error(`--renew-within 解析失败：${JSON.stringify(args['renew-within'])} 不是数字`);
+  }
   const client = buildClient();
   console.log(`[cdn] 查询 ${domain} 的证书信息…`);
 

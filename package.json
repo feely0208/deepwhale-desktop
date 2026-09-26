@@ -18,6 +18,7 @@
     "dev": "npm run build && electron .",
     "smoke": "npm run build && DSH_DESKTOP_SMOKE=1 electron .",
     "smoke:win": "npm run build && set DSH_DESKTOP_SMOKE=1&& electron .",
+    "test:inject": "npm run build && node scripts/test-inject-race.js",
     "icons": "node scripts/gen-icons.js",
     "dist": "npm run build && electron-builder",
     "dist:mac": "npm run build && electron-builder --mac",

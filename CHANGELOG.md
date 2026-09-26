@@ -4,6 +4,30 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [SemVer](https://semver.org/lang/zh-CN/)。
 
+## [1.0.17] - 2026-09-26
+
+装完即用：把 AI 运行环境、文档生成能力与两个合规插件全部随包带走，用户无需再装 Node.js、无需按需下载。
+
+### 新增
+- **随包 DSH 运行时升到 0.1.7-rc.2**：Electron 随之升到 44.0.0（0.1.7 按 Node/V8 指纹精确匹配运行时白名单），用户机器上不再需要 Node.js
+- **office 能力**：随包精简 CPython 3.12 + 文档库（python-docx / python-pptx / openpyxl / XlsxWriter / Pillow / lxml），可直接生成 Word / Excel / PPT；PDF 渲染由随 dsh 0.1.7 自带的 LibreOffice Kit 提供。按平台各自打包，macOS Intel 与 Apple 芯片拿到的是各自架构的解释器
+- **随包合规插件**：中文合规扫描 + 公文排版两个插件默认注入，无需另行安装
+- **深鲸·律师端 macOS Intel 版**：此前只有 Apple 芯片包，Intel Mac 用户现在也有对应产物（Windows / Linux / macOS 两个架构共 5 个包）
+- **深鲸套装改为脚本化构建**：四平台（含 macOS Intel）一键组装，不再手工压缩、手工核对
+
+### 修复
+- 律师端：Windows 上因 `process.env.HOME` 为空导致 `path.dirname(null)`，表现为"提交失败：请重试"
+- 律师端：`lawyer:submit` 未上报后台核验接口，补齐
+- 律师端：实习律师模式下 `license` 字段为空时抛 TypeError
+
+### 变更
+- 打包体积上升（每个安装包约 +80 MB），换来的是装完即用：不再要求用户有 Node.js，也不再依赖按需下载
+- 官网与 GitHub 版本对齐：两个站点、五个平台，桌面端与律师端指向同一版本
+- 官网同步排除桌面端 `.zip`（官网下载页不提供该格式，约占同步量 29%）
+
+> ⚠️ 已知缺陷（已在下一版修复）：首次启动时 profile 注入存在偶发失败，
+> 表现为「选法律模式弹不出律师端」，重启一次即恢复。根因与修复见 [Unreleased]。
+
 ## [1.0.16] - 2026-09-25
 
 三项均为纯增量，不改动既有行为。
@@ -36,6 +60,13 @@
 - Windows：启动 DSH 服务时隐藏 cmd 窗口（`windowsHide`），不再弹出黑窗口、不再依赖 cmd 后台运行，打开桌面端即可直接使用
 
 ## [Unreleased]
+
+### 修复
+- **首次启动「选法律模式弹不出律师端」**：profile 注入改为「按文件内容校验 + 60 秒看护补回」。
+  根因是 DSH 首次启动会把旧 home 的设置**分阶段**写进 `profiles/web/cordis.patch.yml`，
+  这一次写入可能落在我们追加三行之后，把三行整段覆盖掉；而旧实现只看"函数是否返回 changed"，
+  判定为成功，于是注入静默丢失。实测同一个包用全新隔离 home 连跑：修复前 4 次里 2 次失败，
+  加看护后 6 次全部成功
 
 ### 变更
 - 冷启动体验：先显示"正在启动 DSH"窗口，DSH 后台拉起（不再长时间无窗口）；启动失败弹窗附带 DSH 实际日志

@@ -76,16 +76,23 @@ async function main() {
     }
     console.log(`[acme-obs] ✅ 已放置验证文件 obs://${bucket}/${key}`);
   } else if (OP === 'delete') {
-    // 清理失败不影响签发结果，只提示 —— certbot 的 cleanup 不该把整件事搞失败
+    // 清理验证文件时**预期会 403**：CI 凭据的 OBS 策略刻意只给了读+写，
+    // 没给删除 —— 因为给 CI 删除权意味着"凭据泄露就能清空整个下载桶"，
+    // 而这里要删的只是一个 43 字节、已用过的随机验证文件，代价不对等。
+    // 残留物由桶的生命周期规则自动清理（前缀 .well-known/acme-challenge/）。
+    // 所以这里把 403 当作正常结果说明，而不是报警 —— 报警会训练人忽略日志。
     try {
       const res = await obs.deleteObject({ Bucket: bucket, Key: key });
-      if (res.CommonMsg.Status >= 300 && res.CommonMsg.Status !== 404) {
-        console.warn(`[acme-obs] ⚠️ 删除返回 HTTP ${res.CommonMsg.Status}`);
+      const st = res.CommonMsg.Status;
+      if (st === 403) {
+        console.log(`[acme-obs] ℹ️ 无删除权限（预期内），验证文件留待生命周期规则清理：${key}`);
+      } else if (st >= 300 && st !== 404) {
+        console.warn(`[acme-obs] ⚠️ 删除返回 HTTP ${st}`);
       } else {
         console.log(`[acme-obs] ✅ 已清理 ${key}`);
       }
     } catch (e) {
-      console.warn(`[acme-obs] ⚠️ 清理失败（忽略）: ${e.message}`);
+      console.log(`[acme-obs] ℹ️ 清理跳过（预期内）：${e.message}`);
     }
   } else {
     throw new Error('用法：acme-obs.js put|delete');

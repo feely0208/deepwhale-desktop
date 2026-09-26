@@ -103,7 +103,14 @@ async function main() {
     // npm tarball 里统一是 package/ 前缀，解到临时目录再提上来。
     const staging = path.join(outDir, `.staging-${dirName}`);
     fs.mkdirSync(staging, { recursive: true });
-    execFileSync('tar', ['-xzf', tgz, '-C', staging], { stdio: 'inherit' });
+    // 同 build-office-runtime：绝对路径里的盘符会被 GNU tar 当成远程主机
+    // （Windows 上 `D:\...` → "Cannot connect to D: resolve failed"），
+    // 所以用 cwd + 相对路径。tgz 在 outDir、解压目标是 outDir/.staging-*，
+    // 因此是 `../<文件名>` 而不是裸文件名。
+    execFileSync('tar', ['-xzf', path.join('..', path.basename(tgz))], {
+      cwd: staging,
+      stdio: 'inherit',
+    });
     fs.rmSync(tgz, { force: true });
 
     const pkgDir = path.join(staging, 'package');

@@ -187,7 +187,11 @@ async function main() {
   await download(url, tarball);
 
   console.log('[office-runtime] extract');
-  execFileSync('tar', ['-xzf', tarball, '-C', depsDir], { stdio: 'inherit' });
+  // 不能把绝对路径直接交给 tar：Windows 上 `D:\a\...` 会被 GNU tar 当成
+  // `host:path` 去解析远程主机，报 "Cannot connect to D: resolve failed"。
+  // 改成 cwd + 相对文件名，盘符不进参数表，GNU tar 与 bsdtar 都适用
+  // （--force-local 是 GNU 专有，bsdtar 会直接报未知选项）。
+  execFileSync('tar', ['-xzf', path.basename(tarball)], { cwd: depsDir, stdio: 'inherit' });
   fs.rmSync(tarball, { force: true });
 
   const pyExe = path.join(pyDir, ...pyRel, windows ? 'python.exe' : 'python3');

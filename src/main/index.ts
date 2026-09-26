@@ -728,27 +728,95 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
       // 首次启动：DSH 这时才建好 profiles/web，补齐 profile 侧注入并让窗口重载，
       // 否则页面已经按"没有该插件"的入口图渲染过了。
       // 这一段单独兜底：注入失败不能被当成"DSH 启动失败"弹错框。
+      // ⚠️ 不能只看"函数返回了 changed"就收工，也不能只看写完那一刻。
+      // 实测：DSH 首次启动会把旧 home 的设置**分阶段**写进
+      // profiles/web/cordis.patch.yml（217 → 343 → 1529/2153 字节），
+      // 而这一次写入可能落在我们追加**之后**，把刚写进去的三行整段覆盖掉 ——
+      // 同一个包连跑四次全新启动，两次 0/3、两次 3/3；失败那两次的
+      // package.json 注入都是好的，只有 patch 被覆盖。
+      // 所以：**按文件内容校验，并要求连续两轮都看到三行**才认为稳定，
+      // 中途被覆盖就重新注入（三个 ensure 都是幂等的，重跑无副作用）。
+      const INJECT_ATTEMPTS = 12;
+      const INJECT_RETRY_MS = 1500;
+      const injectedIds = ['ui-legal-mode', 'skill-office', 'tool-workspace-dependencies'];
+      const patchHasAllRows = (): boolean => {
+        try {
+          const text = fs.readFileSync(
+            path.join(legalHome, 'profiles', 'web', 'cordis.patch.yml'),
+            'utf8',
+          );
+          return injectedIds.every((id) => text.includes(id));
+        } catch {
+          return false;
+        }
+      };
       let after: { changed: boolean; profilePending: boolean } = { changed: false, profilePending: false };
-      try {
-        after = ensureLegalModeSetup(legalHome, payloadDir, legalRuntimeDir);
-      } catch (error) {
-        logInjectionFailure('legal-mode', 'profile 注入', error);
-      }
       let afterOffice: { changed: boolean; profilePending: boolean } = { changed: false, profilePending: false };
-      try {
-        afterOffice = ensureOfficeSetup(legalHome, officePayload, legalRuntimeDir, process.execPath);
-      } catch (error) {
-        logInjectionFailure('office', 'profile 注入', error);
-      }
       let afterPlugins: { changed: boolean; profilePending: boolean } = { changed: false, profilePending: false };
-      try {
-        afterPlugins = ensureBundledPlugins(legalHome, pluginsPayload);
-      } catch (error) {
-        logInjectionFailure('plugins', 'profile 注入', error);
+      let stableRounds = 0;
+      for (let attempt = 1; attempt <= INJECT_ATTEMPTS; attempt += 1) {
+        try {
+          after = ensureLegalModeSetup(legalHome, payloadDir, legalRuntimeDir);
+        } catch (error) {
+          logInjectionFailure('legal-mode', 'profile 注入', error);
+        }
+        try {
+          afterOffice = ensureOfficeSetup(legalHome, officePayload, legalRuntimeDir, process.execPath);
+        } catch (error) {
+          logInjectionFailure('office', 'profile 注入', error);
+        }
+        try {
+          afterPlugins = ensureBundledPlugins(legalHome, pluginsPayload);
+        } catch (error) {
+          logInjectionFailure('plugins', 'profile 注入', error);
+        }
+        const ready =
+          !after.profilePending && !afterOffice.profilePending && !afterPlugins.profilePending;
+        const rows = patchHasAllRows();
+        if (ready && rows) {
+          stableRounds += 1;
+        } else {
+          stableRounds = 0;
+        }
+        if (SMOKE) {
+          console.log(
+            `[smoke] profile injection (第 ${String(attempt)} 次): legal=${String(after.changed)} ` +
+              `office=${String(afterOffice.changed)} plugins=${String(afterPlugins.changed)} ` +
+              `ready=${String(ready)} rows=${String(rows)} stable=${String(stableRounds)}`,
+          );
+        }
+        if (stableRounds >= 2) {
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, INJECT_RETRY_MS));
       }
-      if (SMOKE) {
-        console.log(`[smoke] profile injection: legal=${String(after.changed)} office=${String(afterOffice.changed)} plugins=${String(afterPlugins.changed)}`);
-      }
+      // 兜底看护：DSH 的设置导入可能在我们收工之后才写 patch，把三行覆盖掉
+      // （实测 6 次全新启动里有 1 次发生在上面那个窗口之外）。
+      // 每 2 秒确认一次，发现三行不见了就补回去；连续 10 次（20 秒）都在就撤，
+      // 最长看护 60 秒。只读文件 + 幂等重写，代价可忽略，
+      // 且 60 秒后一定停止，不会长期干扰用户自己编辑这个文件。
+      let guardTicks = 0;
+      let steadyTicks = 0;
+      const injectGuard = setInterval(() => {
+        guardTicks += 1;
+        if (patchHasAllRows()) {
+          steadyTicks += 1;
+        } else {
+          steadyTicks = 0;
+          try {
+            ensureLegalModeSetup(legalHome, payloadDir, legalRuntimeDir);
+            ensureOfficeSetup(legalHome, officePayload, legalRuntimeDir, process.execPath);
+            ensureBundledPlugins(legalHome, pluginsPayload);
+            console.warn('[inject] profile 注入行被覆盖，已补回');
+          } catch (error) {
+            logInjectionFailure('inject-guard', 'profile 注入补回', error);
+          }
+        }
+        if (steadyTicks >= 10 || guardTicks >= 30) {
+          clearInterval(injectGuard);
+        }
+      }, 2000);
+
       // 任一注入写了盘且 profile 已就位，就重载一次让新入口图生效。
       const profileReady =
         !after.profilePending && !afterOffice.profilePending && !afterPlugins.profilePending;

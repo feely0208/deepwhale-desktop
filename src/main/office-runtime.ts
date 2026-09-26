@@ -177,7 +177,11 @@ export function ensureOfficeSetup(
   changed = wrapper.changed || changed;
 
   const profileDir = path.join(home, 'profiles', 'web');
-  const profilePending = !fs.existsSync(profileDir);
+  // 与 legal-mode 同一套时序约定：目录先于文件落盘，文件还没就位要算 pending，
+  // 否则会静默放弃写入（详见 legal-mode.ts 里同处的说明）。
+  const profilePending =
+    !fs.existsSync(profileDir) ||
+    !fs.existsSync(path.join(profileDir, 'cordis.patch.yml'));
   if (!profilePending) {
     changed = ensureOfficePatchRows(
       path.join(profileDir, 'cordis.patch.yml'),

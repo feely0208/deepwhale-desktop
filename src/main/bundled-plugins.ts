@@ -182,7 +182,11 @@ export function ensureBundledPlugins(home: string, payloadDir: string): BundledP
   }
 
   const profileDir = path.join(home, 'profiles', 'web');
-  const profilePending = !fs.existsSync(profileDir);
+  // 与 legal-mode / office 同一套时序约定：目录先于文件落盘，文件还没就位要算
+  // pending，否则会静默放弃写入（详见 legal-mode.ts 里同处的说明）。
+  const profilePending =
+    !fs.existsSync(profileDir) ||
+    !fs.existsSync(path.join(profileDir, 'package.json'));
   if (!profilePending) {
     for (const plugin of available) {
       const pluginDir = path.join(home, 'plugins', plugin.dir);

@@ -424,8 +424,18 @@ export function ensureLegalModeSetup(
   }
 
   // 2. profile 侧：DSH 首次启动后才会创建 profiles/web
+  //
+  // ⚠️ 目录**先于文件**落盘：DSH 把 profiles/web 建出来后，cordis.patch.yml 与
+  // package.json 还要过一会儿才写。早先这里只在"目录不存在"时算 pending，于是
+  // 文件那一瞬间不在，下面就静默 `return false` 放弃写入 —— 注入丢失，用户首次
+  // 启动选「法律模式」弹不出，重启一次才好。实测同一个包两次全新启动：
+  // 一次 3/3 注入成功，一次 0/3。所以把"要写的文件还没就位"也算作 pending，
+  // 交给调用方重试。
   const profileDir = path.join(home, 'profiles', 'web');
-  const profilePending = !fs.existsSync(profileDir);
+  const profilePending =
+    !fs.existsSync(profileDir) ||
+    !fs.existsSync(path.join(profileDir, 'package.json')) ||
+    !fs.existsSync(path.join(profileDir, 'cordis.patch.yml'));
   if (!profilePending) {
     changed = ensurePluginEntry(
       path.join(profileDir, 'node_modules', ...PLUGIN_NAME.split('/')),

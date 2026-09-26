@@ -23,7 +23,11 @@ on:
         required: true
         default: '0.1.1'
       source_release:
-        description: '从哪个 release 下载壳 + 律师端产物（默认与 shell_tag 相同）'
+        description: '从哪个 release 下载壳产物（默认与 shell_tag 相同）'
+        required: false
+        default: ''
+      lawyer_source:
+        description: '从哪个 release 下载律师端产物（默认与 source_release 相同）。律师端没变版时可指向旧 tag，省得把几百 MB 搬一遍'
         required: false
         default: ''
 
@@ -55,12 +59,19 @@ jobs:
           set -e
           mkdir -p artifacts
           SRC="${{ steps.v.outputs.src }}"
-          echo "从 release $SRC 下载产物…"
+          LAWYER_SRC="${{ inputs.lawyer_source != '' && inputs.lawyer_source || (inputs.source_release != '' && inputs.source_release || inputs.shell_tag) }}"
+          echo "壳产物来自 release: $SRC"
+          echo "律师端产物来自 release: $LAWYER_SRC"
+          # 壳与律师端可以来自不同 release —— 律师端没变版时不必把几百 MB 再传一份
           gh release download "$SRC" \
             --repo "$GITHUB_REPOSITORY" \
             --dir artifacts \
             --clobber \
-            --pattern 'DeepWhale-Desktop-*' \
+            --pattern 'DeepWhale-Desktop-*' || true
+          gh release download "$LAWYER_SRC" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir artifacts \
+            --clobber \
             --pattern 'DeepWhale-Lawyer-*' || true
           echo "---- 下到的文件 ----"
           ls -la artifacts/ | head -30

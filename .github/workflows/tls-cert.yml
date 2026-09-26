@@ -1,0 +1,77 @@
+# TLS 证书自动化（签发 / 续期 / 推送到 CDN）
+#
+# 背景：免费 DV 证书 90 天一到期，HTTPS 就失效、用户下载会被浏览器直接拦下。
+# 这件事必须自动化，否则半年后一定出事，而且没人会记得是证书过期。
+#
+# 域名归属验证走 **HTTP-01 经 OBS**（而不是 DNS-01）：
+#   DNS-01 需要一个能改 DNS 记录的凭据 —— 那等于域名劫持权限，为了续个
+#   证书开这种口子不值得。HTTP-01 只需要往已有的 OBS 桶里放一个临时验证文件，
+#   Let's Encrypt 通过 dl.deepwhale.org.cn 来取，一分新权限都不用加。
+#
+# 当前阶段：先只做**权限自检**（check），确认真实 API 调用能通过，
+# 再打开签发与续期。分两步是为了不把"权限没配好"和"签发逻辑有问题"混在一起排查。
+name: TLS Certificate
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'check = 只验权限与当前证书；issue = 签发并推送'
+        required: true
+        default: 'check'
+        type: choice
+        options:
+          - check
+          - issue
+
+permissions:
+  contents: read
+
+jobs:
+  tls:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 检查凭据是否齐备
+        env:
+          OBS_AK: ${{ secrets.OBS_AK }}
+          OBS_SK: ${{ secrets.OBS_SK }}
+        run: |
+          set -e
+          for n in OBS_AK OBS_SK; do
+            v="${!n}"
+            [ -n "$v" ] || { echo "::error::缺少 Secret $n"; exit 1; }
+            echo "  ✅ $n 已配置（长度 ${#v}）"
+          done
+
+      # ── 权限自检：验证 CDN 策略真的生效 ────────────────────────────
+      # 这一步会真实调用华为云 CDN API。它能同时回答两个问题：
+      #   ① AK/SK 与 Endpoint 是否正确
+      #   ② ci-uploader 是否真的通过用户组拿到了 deepwhale-cdn-cert 策略
+      - name: ① CDN 权限自检（真实 API 调用）
+        env:
+          OBS_AK: ${{ secrets.OBS_AK }}
+          OBS_SK: ${{ secrets.OBS_SK }}
+        run: |
+          set -e
+          node scripts/cdn-cert.js check --domain dl.deepwhale.org.cn
+
+      - name: ② 说明
+        if: inputs.mode == 'check'
+        run: |
+          {
+            echo "## CDN 证书权限自检"
+            echo ""
+            echo "上面那一步是**真实 API 调用**，不是模拟。跑通即代表："
+            echo ""
+            echo "- AK/SK 与 Endpoint 正确"
+            echo "- \`ci-uploader\` 已通过用户组拿到 \`deepwhale-cdn-cert\` 策略"
+            echo "- 策略里的操作项足够读取域名证书信息"
+            echo ""
+            echo "下一步：把 mode 改成 \`issue\` 打开签发与续期。"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -94,11 +94,17 @@ jobs:
         run: |
           set -e
           TAG="suite-${{ inputs.shell_tag }}"
+          # GitHub 会把附件名里的非 ASCII 字符剥掉：实测「套装四平台-sha256.txt」
+          # 变成「-sha256.txt」、「安装说明.txt」变成「default.txt」，发布页上没人
+          # 看得懂。所以上传的是 ASCII 名的副本，**内容仍是中文**。
+          # 套装 zip 内部的《安装说明.txt》不受影响（那是给解压的用户看的）。
+          cp "suite-out/套装四平台-sha256.txt" "suite-out/SHA256SUMS.txt"
+          cp "suite-out/安装说明.txt" "suite-out/INSTALL-zh.txt"
           gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes 2>/dev/null || true
           gh release create "$TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --title "深鲸套装 ${{ inputs.shell_tag }}" \
             --notes-file notes.md \
             --draft \
-            suite-out/*.zip suite-out/套装四平台-sha256.txt suite-out/安装说明.txt
+            suite-out/*.zip suite-out/SHA256SUMS.txt suite-out/INSTALL-zh.txt
           echo "✅ 已创建草稿 release: $TAG（发布时记得勾 Pre-release）"

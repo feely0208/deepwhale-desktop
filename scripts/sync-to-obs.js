@@ -100,26 +100,38 @@ async function main() {
 
   const bucket = need('OBS_BUCKET');
   const prefix = args['key-prefix'].replace(/^\/+|\/+$/g, '');
+  const concurrency = Math.max(1, Number(args.concurrency) || 4);
   let failed = 0;
 
-  for (const f of files) {
-    const key = prefix ? `${prefix}/${f.rel}` : f.rel;
-    const t0 = Date.now();
-    const res = await obs.putObject({
-      Bucket: bucket,
-      Key: key,
-      SourceFile: f.full,
-      // SDK 内部按文件大小自动走分片并发上传
-    });
-    const secs = ((Date.now() - t0) / 1000).toFixed(1);
-    const mbps = (f.size / 1048576 / Math.max(Number(secs), 0.1)).toFixed(2);
-    if (res.CommonMsg.Status < 300) {
-      console.log(`  ✅ ${key}  ${secs}s  ${mbps} MB/s`);
-    } else {
-      failed += 1;
-      console.error(`  ❌ ${key}  HTTP ${res.CommonMsg.Status} ${res.CommonMsg.Message}`);
+  // 并发上传多个文件。
+  // 为什么需要：实测串行上传 3.3 GB 用时 14.5 分钟，但逐文件速率差异极大 ——
+  // 多数文件 8–12 MB/s，却有 3 个只有 0.56–1.8 MB/s，这三个单独就占了总时长的
+  // 58%。串行时一个慢文件会挡住后面所有文件；并发能让别的文件在它卡着时继续走，
+  // 既快又不会被单个坏连接拖死。
+  const queue = [...files];
+  const runOne = async () => {
+    for (;;) {
+      const f = queue.shift();
+      if (!f) return;
+      const key = prefix ? `${prefix}/${f.rel}` : f.rel;
+      const t0 = Date.now();
+      try {
+        const res = await obs.putObject({ Bucket: bucket, Key: key, SourceFile: f.full });
+        const secs = ((Date.now() - t0) / 1000).toFixed(1);
+        const mbps = (f.size / 1048576 / Math.max(Number(secs), 0.1)).toFixed(2);
+        if (res.CommonMsg.Status < 300) {
+          console.log(`  ✅ ${key}  ${secs}s  ${mbps} MB/s`);
+        } else {
+          failed += 1;
+          console.error(`  ❌ ${key}  HTTP ${res.CommonMsg.Status} ${res.CommonMsg.Message}`);
+        }
+      } catch (error) {
+        failed += 1;
+        console.error(`  ❌ ${key}  ${error.message}`);
+      }
     }
-  }
+  };
+  await Promise.all(Array.from({ length: concurrency }, () => runOne()));
 
   obs.close();
   if (failed) throw new Error(`${failed} 个文件上传失败`);

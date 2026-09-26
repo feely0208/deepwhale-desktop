@@ -153,6 +153,14 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      # 同步到 OBS 那一步要跑仓库里的 scripts/sync-to-obs.js，
+      # 所以这里必须有 checkout —— 原来这个 job 只跑 gh 命令，不需要仓库。
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - name: 汇总三平台产物
         uses: actions/download-artifact@v4
         with:
@@ -234,33 +242,38 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # 把桌面端安装包同步到官网服务器（deepwhale.org.cn），让国内用户从官网直接下载
-      # 需要在仓库 Settings → Secrets → Actions 配置 DW_DEPLOY_KEY（部署用 SSH 私钥）
-      - name: 同步安装包到官网服务器
+      # 把桌面端安装包同步到 OBS，用户经 CDN（https://dl.deepwhale.org.cn）下载。
+      #
+      # 此前这一步是 scp 到 ECS：实测 GitHub 美国 runner → 国内 ECS 只有
+      # 0.19–1.0 MB/s，仅桌面端就约 1.4 GB、要 90 分钟以上；传 OBS 多数文件
+      # 8–12 MB/s，几分钟完成。下载侧也由 CDN 承担，不再占那台 ECS 的公网带宽。
+      #
+      # 前置 Secrets：OBS_AK / OBS_SK / OBS_BUCKET / OBS_ENDPOINT
+      # （律师端与套装由 sync-downloads 工作流负责，那条会在 Release 发布时自动跑）
+      - name: 同步桌面端安装包到 OBS
         env:
-          DW_DEPLOY_KEY: ${{ secrets.DW_DEPLOY_KEY }}
-          DW_HOST: ${{ secrets.DW_DEPLOY_HOST }}
+          OBS_AK: ${{ secrets.OBS_AK }}
+          OBS_SK: ${{ secrets.OBS_SK }}
+          OBS_BUCKET: ${{ secrets.OBS_BUCKET }}
+          OBS_ENDPOINT: ${{ secrets.OBS_ENDPOINT }}
         run: |
           set -e
-          if [ -z "$DW_DEPLOY_KEY" ]; then
-            echo "未配置 DW_DEPLOY_KEY，跳过官网同步"
+          if [ -z "$OBS_AK" ]; then
+            echo "::warning::未配置 OBS_AK，跳过同步（请在 Settings → Secrets 添加）"
             exit 0
           fi
-          HOST="${DW_HOST:-root@115.120.202.30}"
-          DEST="/var/www/deepwhale.org.cn/downloads"
-          mkdir -p ~/.ssh && printf '%s\n' "$DW_DEPLOY_KEY" > ~/.ssh/dw_deploy && chmod 600 ~/.ssh/dw_deploy
-          ssh-keyscan -H "${HOST#*@}" >> ~/.ssh/known_hosts 2>/dev/null || true
-          ssh -i ~/.ssh/dw_deploy -o StrictHostKeyChecking=no "${HOST}" "mkdir -p ${DEST}"
-          n=0
+          # sync-to-obs.js 默认就排除桌面端 .zip（官网不提供该格式，占同步量约 29%）、
+          # blockmap 与 latest*.yml —— 与官网下载页实际引用的格式一致。
+          mkdir -p obs-desktop
           for f in dist-assets/DeepWhale-Desktop-*; do
-            # 桌面端的 .zip 不上官网：官网下载页只提供 dmg / exe / AppImage / deb，
-          # 而 .zip 是给 electron-updater 在 macOS 上自动更新用的（走 GitHub）。
-          # 实测这一项占同步总量的 29%（577 MB / 1.96 GB）—— 传过去也没人下。
-          case "$f" in *.blockmap|*.yml|*.zip) continue;; esac
             [ -f "$f" ] || continue
-            echo "上传 $(basename "$f")"
-            scp -i ~/.ssh/dw_deploy -o StrictHostKeyChecking=no "$f" "${HOST}:${DEST}/"
-            n=$((n+1))
+            case "$f" in *.blockmap|*.yml|*.zip) continue;; esac
+            cp "$f" obs-desktop/
           done
-          ssh -i ~/.ssh/dw_deploy -o StrictHostKeyChecking=no "${HOST}" "chmod 644 ${DEST}/*"
-          echo "已上传 $n 个安装包到官网（并设好读权限）"
+          echo "待同步 $(find obs-desktop -type f | wc -l) 个文件"
+          START=$(date +%s)
+          node scripts/sync-to-obs.js --dir obs-desktop --concurrency 4
+          END=$(date +%s)
+          D=$((END-START)); [ "$D" -eq 0 ] && D=1
+          SZ=$(du -sm obs-desktop | cut -f1)
+          echo "✅ 桌面端已同步到 OBS：${SZ} MB / ${D}s / $((SZ/D)) MB/s"

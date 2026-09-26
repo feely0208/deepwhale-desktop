@@ -1,23 +1,26 @@
-# 同步安装包到官网服务器（deepwhale.org.cn）
+# 同步安装包到 OBS（用户经 CDN https://dl.deepwhale.org.cn 下载）
 #
-# 用途：把某个 Release 的桌面端安装包从 GitHub 同步到官网服务器，
-#       让国内用户从官网直接下载（GitHub 在国内很慢）。
+# 用途：把某个 Release 的安装包从 GitHub 同步到 OBS，让国内用户走 CDN 下载。
+#
+# 为什么从「scp 到 ECS」换成 OBS：
+#   实测 GitHub 美国 runner → 国内 ECS 走 scp 只有 0.19–1.0 MB/s，
+#   1.96 GB 要 93 分钟；传到 OBS 实测多数文件 8–12 MB/s，同样的量几分钟就完。
+#   下载侧则由 CDN 承担，不再靠那台 ECS 的公网带宽。
 #
 # 触发方式：
-#   1. 手动：Actions → Sync downloads → Run workflow，填 tag（如 v1.0.5）
+#   1. 手动：Actions → Sync downloads → Run workflow，填 tag
 #   2. 自动：每次发布 Release 时自动执行
 #
-# 前置：仓库 Settings → Secrets → Actions 配置 DW_DEPLOY_KEY（部署 SSH 私钥）
-#       可选 DW_DEPLOY_HOST（默认 root@115.120.202.30）
+# 前置 Secrets：OBS_AK / OBS_SK / OBS_BUCKET / OBS_ENDPOINT
 name: Sync downloads
 
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag to sync (e.g. v1.0.5)'
+        description: 'Release tag to sync (e.g. v1.0.17)'
         required: true
-        default: 'v1.0.5'
+        default: 'v1.0.17'
   release:
     types: [published]
 
@@ -28,6 +31,12 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - name: 下载 Release 安装包
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -35,52 +44,65 @@ jobs:
           set -e
           TAG="${{ github.event.release.tag_name || inputs.tag }}"
           echo "同步 tag: $TAG"
-          mkdir -p assets
+          # ⚠️ 目录名不能叫 assets —— 本仓库根目录已有一个 assets/（应用图标、
+          # 联系二维码等），mkdir -p 不会新建，Release 产物会混进仓库资源里被
+          # 一起上传（实测因此多传了 11 个无关文件到桶里）。
+          mkdir -p obs-upload
           # 三类产物都要同步。此前只同步 DeepWhale-Desktop-*，律师端与套装
-          # 一直是手工上传的 —— 这就是「官网与 GitHub 长期不一致」的根因
-          # （壳发到 v1.0.16 时，官网的套装还停在 1.0.15）。
-          # 逐个 pattern 拉取：某个 tag 下没有该类资产时只提示、不失败
-          # （例如套装 release 里不会有桌面端安装包）。
+          # 一直是手工上传的 —— 这就是「官网与 GitHub 长期不一致」的根因。
+          # 逐个 pattern 拉取：某个 tag 下没有该类资产时只提示、不失败。
           for PAT in 'DeepWhale-Desktop-*' 'DeepWhale-Lawyer-*' 'DeepWhale-Suite-*'; do
             echo "→ 拉取 ${PAT}"
-            gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir assets \
+            gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir obs-upload \
               --pattern "$PAT" --clobber || echo "  （该 tag 下没有匹配 $PAT 的资产，跳过）"
           done
           # 去掉 electron-builder 的调试/元数据文件
-          rm -f assets/*.blockmap assets/*.yml
-          COUNT=$(find assets -type f | wc -l | tr -d ' ')
+          rm -f obs-upload/*.blockmap obs-upload/*.yml
+          COUNT=$(find obs-upload -type f | wc -l | tr -d ' ')
           echo "共取到 $COUNT 个资产"
           # 一个都没取到说明 tag 填错了 —— 这时静默「成功」最危险，
           # 会让官网停留在旧版本却以为已经同步过了。
           [ "$COUNT" -gt 0 ] || { echo "::error::tag $TAG 下没有可同步的安装包，请检查 tag"; exit 1; }
-          ls -lh assets
+          ls -lh obs-upload
 
-      - name: 上传到官网服务器
+      - name: 上传到 OBS
         env:
-          DW_DEPLOY_KEY: ${{ secrets.DW_DEPLOY_KEY }}
-          DW_DEPLOY_HOST: ${{ secrets.DW_DEPLOY_HOST }}
+          OBS_AK: ${{ secrets.OBS_AK }}
+          OBS_SK: ${{ secrets.OBS_SK }}
+          OBS_BUCKET: ${{ secrets.OBS_BUCKET }}
+          OBS_ENDPOINT: ${{ secrets.OBS_ENDPOINT }}
         run: |
           set -e
-          if [ -z "$DW_DEPLOY_KEY" ]; then
-            echo "::warning::未配置 DW_DEPLOY_KEY，跳过上传（请在 Settings → Secrets 添加）"
+          if [ -z "$OBS_AK" ]; then
+            echo "::warning::未配置 OBS_AK，跳过上传"
             exit 0
           fi
-          HOST="${DW_DEPLOY_HOST:-root@115.120.202.30}"
-          DEST="/var/www/deepwhale.org.cn/downloads"
-          mkdir -p ~/.ssh && printf '%s\n' "$DW_DEPLOY_KEY" > ~/.ssh/dw && chmod 600 ~/.ssh/dw
-          ssh-keyscan -H "${HOST#*@}" >> ~/.ssh/known_hosts 2>/dev/null || true
-          ssh -i ~/.ssh/dw -o StrictHostKeyChecking=no "$HOST" "mkdir -p $DEST"
-          n=0
           # 桌面端的 .zip 不上官网：官网只提供 dmg / exe / AppImage / deb，
           # .zip 是 electron-updater 在 macOS 上自动更新用的（走 GitHub）。
-          # 套装（DeepWhale-Suite-*.zip）官网是要的，所以只排除桌面的。
-          rm -f assets/DeepWhale-Desktop-*.zip
-          for f in assets/DeepWhale-*; do
-            [ -f "$f" ] || continue
-            echo "→ $(basename "$f")"
-            scp -i ~/.ssh/dw -o StrictHostKeyChecking=no "$f" "$HOST:$DEST/"
-            n=$((n+1))
-          done
-          ssh -i ~/.ssh/dw -o StrictHostKeyChecking=no "$HOST" "chmod 644 $DEST/*"
-          echo "✅ 已同步 $n 个安装包到官网（并设好读权限）"
-          ssh -i ~/.ssh/dw -o StrictHostKeyChecking=no "$HOST" "ls -lh $DEST | tail -n +2"
+          # sync-to-obs.js 默认就会排除它，以及 blockmap 与 latest*.yml。
+          START=$(date +%s)
+          node scripts/sync-to-obs.js --dir obs-upload --concurrency 4
+          END=$(date +%s)
+          D=$((END-START)); [ "$D" -eq 0 ] && D=1
+          SZ=$(du -sm obs-upload | cut -f1)
+          echo "✅ 已同步到 OBS：${SZ} MB / ${D}s / $((SZ/D)) MB/s"
+
+      # 经 CDN 验证 —— 那才是用户真正走的路径。
+      # ⚠️ 必须用 HEAD：用 `curl -o /dev/null` 会把每个安装包**整份下载回来**
+      # 只为看一眼状态码，3.3 GB 白等十几分钟（实测踩过）。
+      - name: 经 CDN 验证
+        run: |
+          set -e
+          fail=0
+          while read -r f; do
+            [ -n "$f" ] || continue
+            code=$(curl -sS --max-time 30 -o /dev/null -w '%{http_code}' -I \
+              "https://dl.deepwhale.org.cn/$f" 2>/dev/null || echo ERR)
+            if [ "$code" = "200" ]; then
+              echo "  ✅ $f"
+            else
+              echo "  ❌ $code  $f"; fail=$((fail+1))
+            fi
+          done < <(cd obs-upload && ls -1)
+          test "$fail" -eq 0 || { echo "::error::有 $fail 个文件经 CDN 取不到"; exit 1; }
+          echo "✅ 全部可经 CDN 下载"

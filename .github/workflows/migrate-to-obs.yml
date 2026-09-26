@@ -57,19 +57,22 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
-          mkdir -p assets
+          # ⚠️ 目录名不能叫 assets —— 本仓库根目录已经有一个 assets/（应用图标、
+          # 联系二维码等），mkdir -p 不会新建，release 产物会混进仓库资源里
+          # 被一起上传（实测因此多传了 11 个无关文件）。
+          mkdir -p obs-upload
           echo "── 壳 + 律师端（${{ inputs.shell_tag }}）──"
-          gh release download "${{ inputs.shell_tag }}" --repo "$GITHUB_REPOSITORY" --dir assets \
+          gh release download "${{ inputs.shell_tag }}" --repo "$GITHUB_REPOSITORY" --dir obs-upload \
             --pattern 'DeepWhale-Desktop-*' --pattern 'DeepWhale-Lawyer-*' --clobber
           echo "── 套装（${{ inputs.suite_tag }}）──"
-          gh release download "${{ inputs.suite_tag }}" --repo "$GITHUB_REPOSITORY" --dir assets \
+          gh release download "${{ inputs.suite_tag }}" --repo "$GITHUB_REPOSITORY" --dir obs-upload \
             --pattern 'DeepWhale-Suite-*' --clobber
           echo "── 手机端（${{ inputs.mobile_tag }}）──"
-          gh release download "${{ inputs.mobile_tag }}" --repo "$GITHUB_REPOSITORY" --dir assets \
+          gh release download "${{ inputs.mobile_tag }}" --repo "$GITHUB_REPOSITORY" --dir obs-upload \
             --pattern 'DeepWhale-Mobile-*' --clobber
           echo
           echo "取到 $(find assets -type f | wc -l) 个文件，合计 $(du -sh assets | cut -f1)"
-          find assets -type f -printf '%10s  %f\n' | sort -k2
+          find obs-upload -type f -printf '%10s  %f\n' | sort -k2
 
       - name: 上传到 OBS
         env:
@@ -80,10 +83,10 @@ jobs:
         run: |
           set -e
           START=$(date +%s)
-          node scripts/sync-to-obs.js --dir assets --concurrency 4
+          node scripts/sync-to-obs.js --dir obs-upload --concurrency 4
           END=$(date +%s)
           D=$((END-START)); [ "$D" -eq 0 ] && D=1
-          SZ=$(du -sm assets | cut -f1)
+          SZ=$(du -sm obs-upload | cut -f1)
           echo "### 迁移完成 — ${SZ} MB / ${D}s / $((SZ/D)) MB/s" >> "$GITHUB_STEP_SUMMARY"
           echo "**${SZ} MB / ${D}s / $((SZ/D)) MB/s**" >> "$GITHUB_STEP_SUMMARY"
 
@@ -93,13 +96,13 @@ jobs:
           fail=0
           while read -r f; do
             [ -n "$f" ] || continue
-            code=$(curl -sS --max-time 60 -o /dev/null -w '%{http_code}' "https://dl.deepwhale.org.cn/$f" 2>/dev/null || echo "ERR")
+            code=$(curl -sS --max-time 30 -o /dev/null -w '%{http_code}' -I "https://dl.deepwhale.org.cn/$f" 2>/dev/null || echo "ERR")
             if [ "$code" = "200" ]; then
               echo "  ✅ $f"
             else
               echo "  ❌ $code  $f"
               fail=$((fail+1))
             fi
-          done < <(cd assets && ls -1)
+          done < <(cd obs-upload && ls -1)
           test "$fail" -eq 0 || { echo "::error::有 $fail 个文件经 CDN 取不到"; exit 1; }
           echo "✅ 全部可经 CDN 下载"

@@ -71,6 +71,10 @@ jobs:
           ssh-keyscan -H "${HOST#*@}" >> ~/.ssh/known_hosts 2>/dev/null || true
           ssh -i ~/.ssh/dw -o StrictHostKeyChecking=no "$HOST" "mkdir -p $DEST"
           n=0
+          # 桌面端的 .zip 不上官网：官网只提供 dmg / exe / AppImage / deb，
+          # .zip 是 electron-updater 在 macOS 上自动更新用的（走 GitHub）。
+          # 套装（DeepWhale-Suite-*.zip）官网是要的，所以只排除桌面的。
+          rm -f assets/DeepWhale-Desktop-*.zip
           for f in assets/DeepWhale-*; do
             [ -f "$f" ] || continue
             echo "→ $(basename "$f")"

@@ -253,7 +253,10 @@ jobs:
           ssh -i ~/.ssh/dw_deploy -o StrictHostKeyChecking=no "${HOST}" "mkdir -p ${DEST}"
           n=0
           for f in dist-assets/DeepWhale-Desktop-*; do
-            case "$f" in *.blockmap|*.yml) continue;; esac
+            # 桌面端的 .zip 不上官网：官网下载页只提供 dmg / exe / AppImage / deb，
+          # 而 .zip 是给 electron-updater 在 macOS 上自动更新用的（走 GitHub）。
+          # 实测这一项占同步总量的 29%（577 MB / 1.96 GB）—— 传过去也没人下。
+          case "$f" in *.blockmap|*.yml|*.zip) continue;; esac
             [ -f "$f" ] || continue
             echo "上传 $(basename "$f")"
             scp -i ~/.ssh/dw_deploy -o StrictHostKeyChecking=no "$f" "${HOST}:${DEST}/"

@@ -1,0 +1,105 @@
+# 把安装包灌进 OBS（首次迁移 / 灾后重建都能用）
+#
+# 为什么从 GitHub Release 取而不是从 ECS 取：
+#   runner 与 GitHub Release 同机房（快），runner → OBS 实测 13.43 MB/s；
+#   而 runner → 国内 ECS 只有 0.19–1.0 MB/s。3.3 GB 走前一条约 4 分钟，
+#   走后一条要 80 分钟以上。而且这样完全不用碰服务器、不用把凭据放上去。
+#
+# 只迁**官网当前实际引用**的那些文件 —— 老版本留在 GitHub 存档即可，
+# 官网本来也只保留最新全量入口。
+name: Migrate to OBS
+
+on:
+  workflow_dispatch:
+    inputs:
+      shell_tag:
+        description: '壳 + 律师端所在的 Release tag'
+        required: true
+        default: 'v1.0.17'
+      suite_tag:
+        description: '套装所在的 Release tag'
+        required: true
+        default: 'suite-v1.0.17'
+      mobile_tag:
+        description: '手机端 APK 所在的 Release tag'
+        required: true
+        default: 'v1.0.2'
+
+permissions:
+  contents: read
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 检查 Secret
+        env:
+          OBS_AK: ${{ secrets.OBS_AK }}
+          OBS_SK: ${{ secrets.OBS_SK }}
+          OBS_BUCKET: ${{ secrets.OBS_BUCKET }}
+          OBS_ENDPOINT: ${{ secrets.OBS_ENDPOINT }}
+        run: |
+          set -e
+          for n in OBS_AK OBS_SK OBS_BUCKET OBS_ENDPOINT; do
+            v="${!n}"
+            [ -n "$v" ] || { echo "::error::缺少 Secret $n"; exit 1; }
+            echo "  ✅ $n 已配置（长度 ${#v}）"
+          done
+
+      - name: 从 GitHub Release 取官网引用的全部产物
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          mkdir -p assets
+          echo "── 壳 + 律师端（${{ inputs.shell_tag }}）──"
+          gh release download "${{ inputs.shell_tag }}" --repo "$GITHUB_REPOSITORY" --dir assets \
+            --pattern 'DeepWhale-Desktop-*' --pattern 'DeepWhale-Lawyer-*' --clobber
+          echo "── 套装（${{ inputs.suite_tag }}）──"
+          gh release download "${{ inputs.suite_tag }}" --repo "$GITHUB_REPOSITORY" --dir assets \
+            --pattern 'DeepWhale-Suite-*' --clobber
+          echo "── 手机端（${{ inputs.mobile_tag }}）──"
+          gh release download "${{ inputs.mobile_tag }}" --repo "$GITHUB_REPOSITORY" --dir assets \
+            --pattern 'DeepWhale-Mobile-*' --clobber
+          echo
+          echo "取到 $(find assets -type f | wc -l) 个文件，合计 $(du -sh assets | cut -f1)"
+          find assets -type f -printf '%10s  %f\n' | sort -k2
+
+      - name: 上传到 OBS
+        env:
+          OBS_AK: ${{ secrets.OBS_AK }}
+          OBS_SK: ${{ secrets.OBS_SK }}
+          OBS_BUCKET: ${{ secrets.OBS_BUCKET }}
+          OBS_ENDPOINT: ${{ secrets.OBS_ENDPOINT }}
+        run: |
+          set -e
+          START=$(date +%s)
+          node scripts/sync-to-obs.js --dir assets --concurrency 4
+          END=$(date +%s)
+          D=$((END-START)); [ "$D" -eq 0 ] && D=1
+          SZ=$(du -sm assets | cut -f1)
+          echo "### 迁移完成 — ${SZ} MB / ${D}s / $((SZ/D)) MB/s" >> "$GITHUB_STEP_SUMMARY"
+          echo "**${SZ} MB / ${D}s / $((SZ/D)) MB/s**" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 经 CDN 逐个验证（这是用户真正走的那条路）
+        run: |
+          set -e
+          fail=0
+          while read -r f; do
+            [ -n "$f" ] || continue
+            code=$(curl -sS --max-time 60 -o /dev/null -w '%{http_code}' "https://dl.deepwhale.org.cn/$f" 2>/dev/null || echo "ERR")
+            if [ "$code" = "200" ]; then
+              echo "  ✅ $f"
+            else
+              echo "  ❌ $code  $f"
+              fail=$((fail+1))
+            fi
+          done < <(cd assets && ls -1)
+          test "$fail" -eq 0 || { echo "::error::有 $fail 个文件经 CDN 取不到"; exit 1; }
+          echo "✅ 全部可经 CDN 下载"

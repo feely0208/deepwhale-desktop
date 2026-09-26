@@ -3,29 +3,43 @@
 # 背景：免费 DV 证书 90 天一到期，HTTPS 就失效、用户下载会被浏览器直接拦下。
 # 这件事必须自动化，否则半年后一定出事，而且没人会记得是证书过期。
 #
-# 域名归属验证走 **HTTP-01 经 OBS**（而不是 DNS-01）：
-#   DNS-01 需要一个能改 DNS 记录的凭据 —— 那等于域名劫持权限，为了续个
-#   证书开这种口子不值得。HTTP-01 只需要往已有的 OBS 桶里放一个临时验证文件，
-#   Let's Encrypt 通过 dl.deepwhale.org.cn 来取，一分新权限都不用加。
+# ── 域名归属验证为什么走 HTTP-01 经 OBS（而不是 DNS-01）────────────────
+# DNS-01 需要一个能改 DNS 记录的凭据 —— 那等于把域名劫持权限交出去，
+# 为了自动续个证书不值得。HTTP-01 只需要往已有的 OBS 桶里放一个临时验证文件
+# （key 为 /.well-known/acme-challenge/<token>），Let's Encrypt 通过
+# dl.deepwhale.org.cn 来取，CDN 回源即可拿到 —— 一分新权限都不用加。
 #
-# 当前阶段：先只做**权限自检**（check），确认真实 API 调用能通过，
-# 再打开签发与续期。分两步是为了不把"权限没配好"和"签发逻辑有问题"混在一起排查。
+# ── 触发 ─────────────────────────────────────────────────────────────
+# 每月 1 号自动跑一次（90 天证书 + 30 天阈值 ≈ 每两个月真正续一次），
+# 也可手动 workflow_dispatch。
 name: TLS Certificate
 
 on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'check = 只验权限与当前证书；issue = 签发并推送'
+        description: 'check = 只验权限与当前证书；renew = 按需签发并推送'
         required: true
         default: 'check'
         type: choice
         options:
           - check
-          - issue
+          - renew
+      email:
+        description: 'Let''s Encrypt 通知邮箱（证书到期/吊销时收信）'
+        required: true
+        default: 'feely0208@gmail.com'
+  schedule:
+    # 每月 1 号 06:00 UTC（北京时间 14:00）
+    - cron: '0 6 1 * *'
 
 permissions:
   contents: read
+
+env:
+  DOMAIN: dl.deepwhale.org.cn
+  # 剩余有效期低于这个天数就续期。90 天证书配 30 天阈值 ≈ 每两个月续一次。
+  RENEW_WITHIN: '30'
 
 jobs:
   tls:
@@ -41,37 +55,105 @@ jobs:
         env:
           OBS_AK: ${{ secrets.OBS_AK }}
           OBS_SK: ${{ secrets.OBS_SK }}
+          OBS_BUCKET: ${{ secrets.OBS_BUCKET }}
+          OBS_ENDPOINT: ${{ secrets.OBS_ENDPOINT }}
         run: |
           set -e
-          for n in OBS_AK OBS_SK; do
+          for n in OBS_AK OBS_SK OBS_BUCKET OBS_ENDPOINT; do
             v="${!n}"
             [ -n "$v" ] || { echo "::error::缺少 Secret $n"; exit 1; }
             echo "  ✅ $n 已配置（长度 ${#v}）"
           done
 
-      # ── 权限自检：验证 CDN 策略真的生效 ────────────────────────────
-      # 这一步会真实调用华为云 CDN API。它能同时回答两个问题：
-      #   ① AK/SK 与 Endpoint 是否正确
-      #   ② ci-uploader 是否真的通过用户组拿到了 deepwhale-cdn-cert 策略
-      - name: ① CDN 权限自检（真实 API 调用）
+      # ── 判断需不需要动 ──────────────────────────────────────────
+      # 退出码 2 = 证书缺失或快到期（该续了）；0 = 还早，什么都不做。
+      # 把「该续期」和「出错了」分成不同退出码，是无人值守任务能被信任的前提。
+      - name: ① 查当前证书，判断是否需要续期
+        id: need
+        env:
+          OBS_AK: ${{ secrets.OBS_AK }}
+          OBS_SK: ${{ secrets.OBS_SK }}
+        run: |
+          set +e
+          node scripts/cdn-cert.js check --domain "$DOMAIN" --renew-within="$RENEW_WITHIN"
+          code=$?
+          set -e
+          case "$code" in
+            0) echo "renew=no"  >> "$GITHUB_OUTPUT"; echo "→ 证书尚在有效期内，本次不续期" ;;
+            2) echo "renew=yes" >> "$GITHUB_OUTPUT"; echo "→ 需要签发/续期" ;;
+            *) echo "::error::CDN 查询失败（退出码 $code），不继续"; exit 1 ;;
+          esac
+
+      # 手动模式下 mode=check 就到此为止
+      - name: ② 安装 certbot
+        if: steps.need.outputs.renew == 'yes' && (github.event_name != 'workflow_dispatch' || inputs.mode == 'renew')
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq certbot
+
+      # ── 签发：HTTP-01，验证文件经 OBS 由 CDN 回源提供 ─────────────
+      - name: ③ 签发证书（HTTP-01 经 OBS）
+        if: steps.need.outputs.renew == 'yes' && (github.event_name != 'workflow_dispatch' || inputs.mode == 'renew')
+        env:
+          OBS_AK: ${{ secrets.OBS_AK }}
+          OBS_SK: ${{ secrets.OBS_SK }}
+          OBS_BUCKET: ${{ secrets.OBS_BUCKET }}
+          OBS_ENDPOINT: ${{ secrets.OBS_ENDPOINT }}
+          LE_EMAIL: ${{ inputs.email || 'feely0208@gmail.com' }}
+        run: |
+          set -e
+          LE="$GITHUB_WORKSPACE/le"
+          certbot certonly --manual --preferred-challenges http \
+            --manual-auth-hook "node $GITHUB_WORKSPACE/scripts/acme-obs.js put" \
+            --manual-cleanup-hook "node $GITHUB_WORKSPACE/scripts/acme-obs.js delete" \
+            -d "$DOMAIN" \
+            --config-dir "$LE/config" --work-dir "$LE/work" --logs-dir "$LE/logs" \
+            --agree-tos --email "$LE_EMAIL" --non-interactive --force-renewal
+          echo "---- 签发结果 ----"
+          openssl x509 -in "$LE/config/live/$DOMAIN/fullchain.pem" -noout -subject -issuer -dates
+
+      # ── 推送：证书挂到 CDN 上 ────────────────────────────────────
+      - name: ④ 推送证书到 CDN
+        if: steps.need.outputs.renew == 'yes' && (github.event_name != 'workflow_dispatch' || inputs.mode == 'renew')
         env:
           OBS_AK: ${{ secrets.OBS_AK }}
           OBS_SK: ${{ secrets.OBS_SK }}
         run: |
           set -e
-          node scripts/cdn-cert.js check --domain dl.deepwhale.org.cn
+          LE="$GITHUB_WORKSPACE/le/config/live/$DOMAIN"
+          node scripts/cdn-cert.js update \
+            --domain "$DOMAIN" \
+            --cert "$LE/fullchain.pem" \
+            --key "$LE/privkey.pem" \
+            --name "deepwhale-le-$(date -u +%Y%m%d)"
 
-      - name: ② 说明
-        if: inputs.mode == 'check'
+      # ── 验证：从公网确认 HTTPS 真的生效 ──────────────────────────
+      - name: ⑤ 验证 HTTPS
+        if: steps.need.outputs.renew == 'yes' && (github.event_name != 'workflow_dispatch' || inputs.mode == 'renew')
+        run: |
+          set -e
+          echo "等待 CDN 证书配置生效…"
+          ok=0
+          for i in $(seq 1 12); do
+            sleep 10
+            if out=$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' "https://$DOMAIN/_verify/verify.txt" 2>&1); then
+              [ "$out" = "200" ] && { ok=1; break; }
+            fi
+            echo "  第 $i 次：尚未生效（$out）"
+          done
+          [ "$ok" = "1" ] || { echo "::error::HTTPS 在 2 分钟内未生效"; exit 1; }
+          echo "✅ HTTPS 已生效"
+          echo "---- 线上证书 ----"
+          echo | openssl s_client -connect "$DOMAIN:443" -servername "$DOMAIN" 2>/dev/null \
+            | openssl x509 -noout -subject -issuer -dates
+
+      - name: 汇总
+        if: always()
         run: |
           {
-            echo "## CDN 证书权限自检"
+            echo "## TLS 证书"
             echo ""
-            echo "上面那一步是**真实 API 调用**，不是模拟。跑通即代表："
-            echo ""
-            echo "- AK/SK 与 Endpoint 正确"
-            echo "- \`ci-uploader\` 已通过用户组拿到 \`deepwhale-cdn-cert\` 策略"
-            echo "- 策略里的操作项足够读取域名证书信息"
-            echo ""
-            echo "下一步：把 mode 改成 \`issue\` 打开签发与续期。"
+            echo "- 域名：\`$DOMAIN\`"
+            echo "- 是否需要续期：\`${{ steps.need.outputs.renew || '未判断' }}\`"
+            echo "- 触发方式：\`${{ github.event_name }}\`"
           } >> "$GITHUB_STEP_SUMMARY"

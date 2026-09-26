@@ -99,6 +99,10 @@ function explain(error) {
 
 async function cmdCheck(args) {
   const domain = args.domain || DEFAULT_DOMAIN;
+  // --renew-within=N：证书缺失、或剩余有效期 <= N 天时返回退出码 2，
+  // 让工作流据此决定"该续期了"，而不是把这种情况当成错误（退出码 1）。
+  // 把「该续期」和「出错了」分开，是无人值守任务能被信任的前提。
+  const renewWithin = Number(args['renew-within'] ?? NaN);
   const client = buildClient();
   console.log(`[cdn] 查询 ${domain} 的证书信息…`);
 
@@ -117,6 +121,10 @@ async function cmdCheck(args) {
   const items = resp.https || resp.Https || [];
   if (items.length === 0) {
     console.log(`[cdn] ⚠️ ${domain} 当前未配置证书`);
+    if (!Number.isNaN(renewWithin)) {
+      console.log('[cdn] → 需要签发');
+      process.exit(2);
+    }
     process.exit(0);
   }
 
@@ -133,10 +141,16 @@ async function cmdCheck(args) {
   }
   if (days !== null) console.log(`\n[cdn] 证书剩余有效期：${days} 天`);
 
-  const threshold = Number(args['fail-if-expiring'] ?? NaN);
-  if (!Number.isNaN(threshold) && days !== null && days <= threshold) {
-    console.log(`[cdn] 剩余 ${days} 天 <= 阈值 ${threshold} 天 → 需要续期`);
-    process.exit(2);
+  if (!Number.isNaN(renewWithin)) {
+    if (days === null) {
+      console.log('[cdn] ⚠️ 返回里没有到期时间字段，无法判断 —— 保守起见按"需要签发"处理');
+      process.exit(2);
+    }
+    if (days <= renewWithin) {
+      console.log(`[cdn] 剩余 ${days} 天 <= 阈值 ${renewWithin} 天 → 需要续期`);
+      process.exit(2);
+    }
+    console.log(`[cdn] 剩余 ${days} 天 > 阈值 ${renewWithin} 天 → 暂不续期`);
   }
   process.exit(0);
 }

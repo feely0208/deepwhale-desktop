@@ -94,13 +94,27 @@ jobs:
             cp -R "$APP" "$OUT/"
             cp "build/首次使用请双击我.command" "$OUT/"
             chmod +x "$OUT/首次使用请双击我.command"
+            # 用 ditto 而不是 zip/python：--sequesterRsrc 会保留符号链接与扩展属性，
+            # 而 .app 的 Frameworks 里大量是符号链接，换成会解引用符号链接的打包器
+            # 打出来的 app 直接是坏的（体积暴涨且签名失效）。
             ditto -c -k --sequesterRsrc --keepParent "$OUT" "$ZIP"
             rm -rf "$OUT"
-            # 断言 zip 里真的装了 app 与助手脚本 —— 空 zip 是最难发现的一类坏包
-            COUNT=$(unzip -l "$ZIP" | grep -c 'Contents/MacOS/' || true)
-            test "$COUNT" -ge 1 || { echo "❌ $ZIP 里没有 app 内容"; exit 1; }
-            echo "---- $ZIP（含 $COUNT 条 app 条目）----"
-            unzip -l "$ZIP" | head -6
+            ls -lh "$ZIP"
+            # 断言 zip 里真的装了 app —— 空 zip 是最难发现的一类坏包。
+            # 用 python3 的 zipfile 直接读中央目录，而不是 `unzip -l`：ditto 打的
+            # zip 不带 UTF-8 标志，中文名交给 unzip 渲染时结果随版本/区域设置而变，
+            # CI 上曾因此把 133MB 的完整包误判成「没有 app 内容」。
+            COUNT=$(python3 -c "import sys,zipfile;print(sum(1 for n in zipfile.ZipFile(sys.argv[1]).namelist() if 'Contents/MacOS/' in n))" "$ZIP")
+            if [ "$COUNT" -lt 1 ]; then
+              echo "❌ $ZIP 里没有 app 内容（Contents/MacOS/ 条目数 = $COUNT）"
+              echo "---- zip 实际条目（解码失败以 ? 显示）----"
+              python3 -c "import sys,zipfile;[print('   ',repr(n)) for n in zipfile.ZipFile(sys.argv[1]).namelist()[:10]]" "$ZIP" || true
+              exit 1
+            fi
+            # 再兜一道体积下限：条目数对但内容被截断（例如中途 OOM）也要拦住
+            SIZE=$(stat -f%z "$ZIP")
+            test "$SIZE" -ge 50000000 || { echo "❌ $ZIP 仅 $SIZE 字节，明显不完整"; exit 1; }
+            echo "✅ ${ZIP##*/} —— $COUNT 条 app 条目，$((SIZE/1048576)) MB"
           done
           rm -f dist/*.blockmap dist/builder-debug.yml
 

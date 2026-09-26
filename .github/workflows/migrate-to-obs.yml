@@ -83,7 +83,7 @@ jobs:
         run: |
           set -e
           START=$(date +%s)
-          node scripts/sync-to-obs.js --dir obs-upload --concurrency 4
+          node scripts/sync-to-obs.js --dir obs-upload
           END=$(date +%s)
           D=$((END-START)); [ "$D" -eq 0 ] && D=1
           SZ=$(du -sm obs-upload | cut -f1)

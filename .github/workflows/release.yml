@@ -272,7 +272,7 @@ jobs:
           done
           echo "待同步 $(find obs-desktop -type f | wc -l) 个文件"
           START=$(date +%s)
-          node scripts/sync-to-obs.js --dir obs-desktop --concurrency 4
+          node scripts/sync-to-obs.js --dir obs-desktop
           END=$(date +%s)
           D=$((END-START)); [ "$D" -eq 0 ] && D=1
           SZ=$(du -sm obs-desktop | cut -f1)

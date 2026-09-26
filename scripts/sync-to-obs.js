@@ -30,7 +30,7 @@ const DEFAULT_EXCLUDE = [
 ];
 
 function parseArgs(argv) {
-  const out = { dir: null, 'key-prefix': '', 'dry-run': false, concurrency: 8, verify: false };
+  const out = { dir: null, 'key-prefix': '', 'dry-run': false, concurrency: 1, verify: false };
   for (let i = 0; i < argv.length; i += 1) {
     const k = argv[i].replace(/^--/, '');
     if (k === 'dry-run' || k === 'verify') { out[k] = true; continue; }
@@ -99,12 +99,18 @@ async function main() {
     // ⚠️ 必须显式设超时：SDK 默认**没有超时**，跨国链路一旦僵死就会永久挂着
     // （实测一个 277MB 文件卡了 22 分钟不动，而同一批其它文件 8–12 MB/s）。
     // 有超时才能失败并重传，而不是无限期地等。
-    timeout: 180,
+    timeout: 90,
   });
 
   const bucket = need('OBS_BUCKET');
   const prefix = args['key-prefix'].replace(/^\/+|\/+$/g, '');
-  const concurrency = Math.max(1, Number(args.concurrency) || 4);
+  // ⚠️ 默认串行（1）。实测并发 4 时反而几乎传不动：
+  //   · 串行（迁移 3.3GB）：14.5 分钟，多数文件 8–12 MB/s
+  //   · 并发 4（1.0.18 同步）：一小时一个新文件都没上去
+  // 原因是每个大文件本身就在分片并发，再叠 4 个文件 = 几十条 TCP 连接
+  // 挤同一条丢包严重的国际链路，互相抢带宽并引发大量重传。
+  // 想调高请先小样本实测，别直接改。
+  const concurrency = Math.max(1, Number(args.concurrency) || 1);
   let failed = 0;
 
   // 并发上传多个文件。

@@ -81,7 +81,7 @@ jobs:
           # .zip 是 electron-updater 在 macOS 上自动更新用的（走 GitHub）。
           # sync-to-obs.js 默认就会排除它，以及 blockmap 与 latest*.yml。
           START=$(date +%s)
-          node scripts/sync-to-obs.js --dir obs-upload --concurrency 4
+          node scripts/sync-to-obs.js --dir obs-upload
           END=$(date +%s)
           D=$((END-START)); [ "$D" -eq 0 ] && D=1
           SZ=$(du -sm obs-upload | cut -f1)

@@ -795,6 +795,17 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
       // 每 2 秒确认一次，发现三行不见了就补回去；连续 10 次（20 秒）都在就撤，
       // 最长看护 60 秒。只读文件 + 幂等重写，代价可忽略，
       // 且 60 秒后一定停止，不会长期干扰用户自己编辑这个文件。
+      //
+      // 📌 待改进（更彻底、但需真机验证后再改）：DSH 有两个用户 patch 层 ——
+      //   ① `<home>/profiles/web/cordis.patch.yml`（profile 级）← 当前注入在这里，
+      //      也正是设置导入会重写的那一个；
+      //   ② `<home>/cordis.patch.yml`（home 级）—— 官方文档明确写它
+      //      "applied over every profile's own layer"，**outranks the per-profile
+      //      layer**，且设置导入完全不碰它。
+      //   把这三行改写到 home 级即可从根上免疫这个竞态，连重试与看护都不需要。
+      //   之所以先不动：已有 1.0.17 用户的 profile 级里已经有三行，直接叠加会
+      //   造成同 id 重复插入，需要一并做"从 profile 级移除旧行"的迁移，
+      //   而这个改动必须真机验证过才算数。
       let guardTicks = 0;
       let steadyTicks = 0;
       const injectGuard = setInterval(() => {

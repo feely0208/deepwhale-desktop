@@ -112,13 +112,22 @@
 
 ## 四、我这边要做的（等你上面 5 步做完）
 
-1. **[我做]** 写 `scripts/sync-to-obs.js`：用 OBS 分片并发上传，替代现在的 `scp` 循环
-2. **[我做]** 改 `release.yml` 与 `sync-downloads.yml`：上传目标从 ECS 换成 OBS
-3. **[我做]** 两个官网的下载链接从 `/downloads/xxx` 换成 `https://dl.deepwhale.org.cn/xxx`
+1. **[已就绪]** `scripts/sync-to-obs.js` —— OBS 分片并发上传，替代现在的 `scp` 循环。
+   它自带的过滤规则与官网约定一致（排除桌面端 `.zip` / `.blockmap` / `latest*.yml`，
+   保留律师端与套装的 `.zip`），AK/SK 只从环境变量读。
+   桶建好后可以直接验证：
+
+   ```bash
+   OBS_AK=... OBS_SK=... OBS_BUCKET=deepwhale-downloads \
+   OBS_ENDPOINT=obs.cn-north-4.myhuaweicloud.com \
+   node scripts/sync-to-obs.js --dir dist-assets --dry-run   # 先看清单
+   ```
+2. **[待做]** 改 `release.yml` 与 `sync-downloads.yml`：上传目标从 ECS 换成 OBS
+3. **[待做]** 两个官网的下载链接从 `/downloads/xxx` 换成 `https://dl.deepwhale.org.cn/xxx`
    - Pages 站（`docs/index.html`）：走的是 GitHub Release，**不动**
    - 主站（`deepwhale.org.cn`）：`download.html` + `assets/site.js`
-4. **[我做]** 首次全量迁移：把现有 `/downloads/` 里的包一次性灌进 OBS
-5. **[我做]** 保留 ECS 上的 downloads 目录作为回退，确认 CDN 稳定后再考虑清掉
+4. **[待做]** 首次全量迁移：把现有 `/downloads/` 里的包一次性灌进 OBS
+5. **[待做]** 保留 ECS 上的 downloads 目录作为回退，确认 CDN 稳定后再考虑清掉
 
 ---
 

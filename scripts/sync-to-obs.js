@@ -96,6 +96,10 @@ async function main() {
     access_key_id: need('OBS_AK'),
     secret_access_key: need('OBS_SK'),
     server: `https://${need('OBS_ENDPOINT')}`,
+    // ⚠️ 必须显式设超时：SDK 默认**没有超时**，跨国链路一旦僵死就会永久挂着
+    // （实测一个 277MB 文件卡了 22 分钟不动，而同一批其它文件 8–12 MB/s）。
+    // 有超时才能失败并重传，而不是无限期地等。
+    timeout: 180,
   });
 
   const bucket = need('OBS_BUCKET');
@@ -114,20 +118,32 @@ async function main() {
       const f = queue.shift();
       if (!f) return;
       const key = prefix ? `${prefix}/${f.rel}` : f.rel;
-      const t0 = Date.now();
-      try {
-        const res = await obs.putObject({ Bucket: bucket, Key: key, SourceFile: f.full });
-        const secs = ((Date.now() - t0) / 1000).toFixed(1);
-        const mbps = (f.size / 1048576 / Math.max(Number(secs), 0.1)).toFixed(2);
-        if (res.CommonMsg.Status < 300) {
-          console.log(`  ✅ ${key}  ${secs}s  ${mbps} MB/s`);
-        } else {
-          failed += 1;
-          console.error(`  ❌ ${key}  HTTP ${res.CommonMsg.Status} ${res.CommonMsg.Message}`);
+      const MAX_TRIES = 3;
+      let ok = false;
+      for (let attempt = 1; attempt <= MAX_TRIES && !ok; attempt += 1) {
+        const t0 = Date.now();
+        try {
+          const res = await obs.putObject({ Bucket: bucket, Key: key, SourceFile: f.full });
+          const secs = ((Date.now() - t0) / 1000).toFixed(1);
+          const mbps = (f.size / 1048576 / Math.max(Number(secs), 0.1)).toFixed(2);
+          if (res.CommonMsg.Status < 300) {
+            console.log(`  ✅ ${key}  ${secs}s  ${mbps} MB/s${attempt > 1 ? `（第 ${attempt} 次尝试）` : ''}`);
+            ok = true;
+          } else {
+            console.error(`  ⚠️ ${key}  第 ${attempt}/${MAX_TRIES} 次 HTTP ${res.CommonMsg.Status} ${res.CommonMsg.Message}`);
+          }
+        } catch (error) {
+          console.error(`  ⚠️ ${key}  第 ${attempt}/${MAX_TRIES} 次失败：${error.message}`);
         }
-      } catch (error) {
+        if (!ok && attempt < MAX_TRIES) {
+          const wait = attempt * 5000;
+          console.log(`     等 ${wait / 1000}s 后重传…`);
+          await new Promise((r) => setTimeout(r, wait));
+        }
+      }
+      if (!ok) {
         failed += 1;
-        console.error(`  ❌ ${key}  ${error.message}`);
+        console.error(`  ❌ ${key}  重传 ${MAX_TRIES} 次仍失败`);
       }
     }
   };

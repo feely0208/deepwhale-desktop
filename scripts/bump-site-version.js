@@ -3,11 +3,12 @@
  * 一条命令把**两个官网**的版本引用全部升到目标版本。
  *
  * 为什么需要：官网的版本号散落在 4 个文件里，而且两站机制不同 ——
- *   · Pages 站 `docs/index.html`          ：一个 `DESKTOP_VERSION` 常量 + 硬编码的律师端/套装路径
+ *   · Pages 站 `docs/index.html`          ：DESKTOP_VERSION / LAWYER_VER / SUITE_TAG / SUITE_VER 四个常量
  *   · 主站 `assets/site.js`               ：一个 `DESKTOP_VERSION` 常量 + 硬编码的律师端/套装路径
  *   · 主站 `download.html`                ：全是硬编码路径
  * 手工改必漏。实测线上就出过不一致：**主站首页(site.js)给的是 v1.0.15，
  * 而下载页(download.html)给的是 1.0.16** —— 从首页点下载的用户拿到的是旧版。
+ * 也出过 Pages 把律师端写死在旧 tag `v1.0.8` 上，新版发出去页面还指向老包。
  *
  * 用法：
  *   node scripts/bump-site-version.js \
@@ -68,6 +69,12 @@ function bumpFile(file, opts) {
     { name: '套装产物名', re: /DeepWhale-Suite-\d+\.\d+\.\d+-/g, to: `DeepWhale-Suite-${suite}-` },
     { name: '套装 tag', re: /\/suite-v\d+\.\d+\.\d+\//g, to: `/suite-v${suite}/` },
     { name: '壳产物名', re: /DeepWhale-Desktop-\d+\.\d+\.\d+-/g, to: `DeepWhale-Desktop-${shell}-` },
+    // Pages 站已改成「变量驱动」：律师端与套装的 tag/版本号各是一个常量，
+    // 产物名由常量拼接而成，不再有字面量可匹配。少了这三条，Pages 会**静默
+    // 跳过**（报「无需改动」却什么都没升），下一版就会带着旧版本号上线。
+    { name: 'LAWYER_VER', re: /LAWYER_VER\s*=\s*'\d+\.\d+\.\d+'/g, to: `LAWYER_VER = '${lawyer}'` },
+    { name: 'SUITE_TAG', re: /SUITE_TAG\s*=\s*'suite-v[\d.]+'/g, to: `SUITE_TAG = 'suite-v${suite}'` },
+    { name: 'SUITE_VER', re: /SUITE_VER\s*=\s*'\d+\.\d+\.\d+'/g, to: `SUITE_VER = '${suite}'` },
   ];
 
   // 版本标签 / 平台数标签：**必须按"这一族原本的版本号"逐一锚定**。
@@ -182,8 +189,9 @@ function main() {
 
   console.log('');
   console.log('提醒：以下两项**不由本脚本处理**，发版前请人工确认：');
-  console.log('  · macOS Intel 的律师端 / 套装入口若尚未加到页面，需要手工新增（本脚本只改版本号）');
   console.log('  · 主站改完要跑 deploy.sh 部署，并按红线五做线上复查');
+  console.log('  · 页面引用的产物必须**已经真实存在**（GitHub release 或官网 /downloads/），');
+  console.log('    否则推上去就是 404 —— 上线前请对每个链接做一次 HEAD 检查');
   if (dryRun) console.log('\n（dry-run 结束，未写盘）');
   else console.log(`\n完成：共 ${totalChanged} 处规则命中`);
 }

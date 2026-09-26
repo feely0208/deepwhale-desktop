@@ -75,6 +75,30 @@ jobs:
         shell: bash
         run: node scripts/build-bundled-plugins.js
 
+      # 出门前把关：electron-builder 对 extraResources 里**不存在**的目录是
+      # 静默跳过的（干净检出上不带这三个目录也能打包「成功」）。也就是说上面
+      # 任何一步将来失效，都会安安静静地打出一个「装完不能用」的安装包 ——
+      # 而用户要的恰恰是装完即用。所以在这里显式断言三个载荷都在且非空。
+      - name: 校验随包载荷齐备（缺一个都不许出门）
+        shell: bash
+        run: |
+          set -e
+          check() { # $1=目录  $2=说明  $3=最低字节数
+            test -d "$1" || { echo "❌ 缺少随包载荷 $1（$2）"; exit 1; }
+            N=$(find "$1" -type f | wc -l | tr -d ' ')
+            S=$(du -sk "$1" | cut -f1)
+            echo "  $1: $N 个文件, ${S} KB — $2"
+            test "$N" -ge 1 || { echo "❌ $1 是空目录"; exit 1; }
+            test "$S" -ge "$3" || { echo "❌ $1 只有 ${S} KB，低于下限 $3 KB"; exit 1; }
+          }
+          echo "---- 随包载荷检查 ----"
+          check dsh-runtime    "随包 DSH 运行时" 50000
+          check legal-mode     "法律模式载荷" 1
+          # office 载荷各平台体积不同（Windows 无 LibreOffice Kit），下限给保守值
+          check office-runtime "office 载荷（CPython + 文档库）" 10000
+          check bundled-plugins "随包插件（合规 + 公文排版）" 10
+          echo "✅ 四个载荷齐备"
+
       - name: Package (构建安装包，不发布)
         run: npm run dist -- --publish never ${{ matrix.args }}
         env:
@@ -143,6 +167,16 @@ jobs:
           - macOS（Apple Silicon / Intel）：`DeepWhale-Desktop-{v}-arm64.dmg` / `DeepWhale-Desktop-{v}-x64.dmg`
           - Windows x64：`DeepWhale-Desktop-{v}-x64-Setup.exe`
           - Linux：`DeepWhale-Desktop-{v}-x86_64.AppImage` / `DeepWhale-Desktop-{v}-x86_64.deb`
+
+          ## 同一版本内的律师端（法律版，需激活）
+          - Windows x64：`DeepWhale-Lawyer-*-x64-Setup.exe`
+          - macOS（Apple Silicon / Intel）：`DeepWhale-Lawyer-*-arm64.zip` / `DeepWhale-Lawyer-*-x64.zip`
+          - Linux：`DeepWhale-Lawyer-*-x86_64.AppImage` / `DeepWhale-Lawyer-*-x86_64.deb`
+          - 三系统合体包（桌面端 + 律师端）：见 `suite-{v}` 发布页
+
+          > 装完务必先打开一次律师端并完成激活：`deepwhale-law` 链接协议是律师端
+          > 首次运行时才向系统登记的，只装不开则不会登记，深鲸桌面里选「法律模式」
+          > 就不会弹出律师端（macOS 拖进「应用程序」时即自动登记，无需额外操作）。
 
           ## 更新内容
           - 把 DeepSeek Harness Web UI 装进原生窗口的跨平台桌面壳：背景皮肤、桌面宠物、用量/额度面板、API Key 安全存储

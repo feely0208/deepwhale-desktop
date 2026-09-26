@@ -1,0 +1,104 @@
+# OBS 上传链路验证（一次性自检工作流）
+#
+# 用途：华为云侧的桶、子账号、自定义策略、GitHub Secrets 都配好后，
+#       用它确认「CI → OBS」这条链路真的通 —— 而不是等到正式发版时才发现不行。
+#
+# 触发：手动（Actions → Verify OBS Upload → Run workflow）。
+#
+# 两段验证，覆盖两种最关键的场景：
+#   ① 小文件：验证 AK/SK、桶名、端点、策略是否都对（快，秒级）
+#   ② 大文件：从 Release 下载一个真实安装包再上传，验证**分片上传**能跑通
+#      —— 我们的安装包 200–300MB，必然走分片，而分片需要的动作
+#      （ListMultipartUploadParts / AbortMultipartUpload）漏了的话只有大文件才会暴露
+#
+# 测试文件统一落在 `_verify/` 前缀下，不污染正式下载目录；
+# 跑完确认无误后可在 OBS 控制台删掉该前缀。
+name: Verify OBS Upload
+
+on:
+  workflow_dispatch:
+    inputs:
+      asset_tag:
+        description: '从哪个 Release 取大文件做分片验证'
+        required: true
+        default: 'v1.0.17'
+      asset_name:
+        description: '取哪个产物（默认 Windows 安装包）'
+        required: true
+        default: 'DeepWhale-Desktop-1.0.17-x64-Setup.exe'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 检查 4 个 Secret 是否齐备
+        env:
+          OBS_AK: ${{ secrets.OBS_AK }}
+          OBS_SK: ${{ secrets.OBS_SK }}
+          OBS_BUCKET: ${{ secrets.OBS_BUCKET }}
+          OBS_ENDPOINT: ${{ secrets.OBS_ENDPOINT }}
+        run: |
+          set -e
+          miss=0
+          for n in OBS_AK OBS_SK OBS_BUCKET OBS_ENDPOINT; do
+            v="${!n}"
+            if [ -z "$v" ]; then echo "❌ 缺少 Secret: $n"; miss=$((miss+1)); else echo "  ✅ $n 已配置（长度 ${#v}）"; fi
+          done
+          test "$miss" -eq 0 || { echo "::error::有 $miss 个 Secret 未配置"; exit 1; }
+
+      # ── ① 小文件：验证鉴权与策略 ─────────────────────────────────
+      - name: ① 上传小文件（验证鉴权 / 桶 / 策略）
+        env:
+          OBS_AK: ${{ secrets.OBS_AK }}
+          OBS_SK: ${{ secrets.OBS_SK }}
+          OBS_BUCKET: ${{ secrets.OBS_BUCKET }}
+          OBS_ENDPOINT: ${{ secrets.OBS_ENDPOINT }}
+        run: |
+          set -e
+          mkdir -p obs-test
+          echo "deepwhale obs verify $(date -u +%FT%TZ) run=$GITHUB_RUN_ID" > obs-test/verify.txt
+          node scripts/sync-to-obs.js --dir obs-test --key-prefix _verify --concurrency 4
+          echo "✅ 小文件上传成功 —— AK/SK、桶名、端点、策略都对"
+
+      # ── ② 大文件：验证分片上传 ───────────────────────────────────
+      - name: ② 下载真实安装包
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          mkdir -p obs-large
+          gh release download "${{ inputs.asset_tag }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir obs-large \
+            --pattern "${{ inputs.asset_name }}" --clobber
+          ls -lh obs-large/
+          test -f "obs-large/${{ inputs.asset_name }}" || { echo "::error::没下到产物"; exit 1; }
+
+      - name: ② 上传大文件（验证分片上传）
+        env:
+          OBS_AK: ${{ secrets.OBS_AK }}
+          OBS_SK: ${{ secrets.OBS_SK }}
+          OBS_BUCKET: ${{ secrets.OBS_BUCKET }}
+          OBS_ENDPOINT: ${{ secrets.OBS_ENDPOINT }}
+        run: |
+          set -e
+          START=$(date +%s)
+          node scripts/sync-to-obs.js --dir obs-large --key-prefix _verify --concurrency 4
+          END=$(date +%s)
+          SZ=$(du -m "obs-large/${{ inputs.asset_name }}" | cut -f1)
+          D=$((END-START)); [ "$D" -eq 0 ] && D=1
+          echo "✅ 大文件上传成功：${SZ} MB / ${D}s / $((SZ/D)) MB/s"
+          echo "### OBS 链路验证通过 :white_check_mark:" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 小文件（鉴权 / 桶 / 策略）：通过" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 大文件（分片上传）：通过 —— ${SZ} MB / ${D}s / $((SZ/D)) MB/s" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 测试文件位于 \`_verify/\` 前缀下，确认无误后可在 OBS 控制台删除" >> "$GITHUB_STEP_SUMMARY"

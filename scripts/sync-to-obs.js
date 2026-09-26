@@ -51,9 +51,12 @@ function ensureSdk() {
     return require('esdk-obs-nodejs');
   } catch {
     console.log('[obs] 未找到 esdk-obs-nodejs，按需安装…');
-    execFileSync('npm', ['install', '--no-save', '--no-audit', '--no-fund', 'esdk-obs-nodejs'], {
-      stdio: 'inherit',
-    });
+    // --no-package-lock：CI 里跑时不要动仓库的锁文件
+    execFileSync(
+      'npm',
+      ['install', '--no-save', '--no-package-lock', '--no-audit', '--no-fund', 'esdk-obs-nodejs'],
+      { stdio: 'inherit' },
+    );
     return require('esdk-obs-nodejs');
   }
 }

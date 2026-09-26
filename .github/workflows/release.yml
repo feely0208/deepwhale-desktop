@@ -23,16 +23,25 @@ jobs:
           # ⚠️ mac 的 arm64 与 x64 必须拆成两个 job：office 载荷里的 CPython 是架构绑定的，
           # 一个 job 只能让 extraResources 指到一份载荷 —— 合在一起会让 Intel 用户拿到
           # arm64 的解释器（装得上、用不了）。矩阵里用 office-target 标明各自要构建哪份。
+          #
+          # ⚠️ 也正因为拆了，产物名**不能**再用 matrix.os 拼：两个 mac job 的 os 都是
+          # macos-latest，会撞成同名 artifact，download-artifact 合并时互相覆盖 ——
+          # 实测 v1.0.17 首次发布就因此丢了整个 macOS arm64（只剩 x64），
+          # 而两个 job 都是绿的，日志里看不出任何异常。用 key 区分。
           - os: macos-latest
+            key: macos-arm64
             args: --mac --arm64
             office-target: darwin-arm64
           - os: macos-latest
+            key: macos-x64
             args: --mac --x64
             office-target: darwin-x64
           - os: windows-latest
+            key: windows-x64
             args: --win
             office-target: win32-x64
           - os: ubuntu-latest
+            key: linux-x64
             args: --linux
             office-target: linux-x64
     runs-on: ${{ matrix.os }}
@@ -129,7 +138,7 @@ jobs:
       - name: Upload artifacts (仅安装包，排除未打包 app 目录)
         uses: actions/upload-artifact@v4
         with:
-          name: deepwhale-desktop-${{ matrix.os }}
+          name: deepwhale-desktop-${{ matrix.key }}
           path: |
             release/*.dmg
             release/*.zip
@@ -152,6 +161,31 @@ jobs:
 
       - name: 列出待上传产物（调试用）
         run: find dist-assets -type f | sort
+
+      # 出门前把关：四个平台缺一不可。曾经因为两个 mac job 的 artifact 撞名，
+      # download-artifact 合并时把 macOS arm64 整个覆盖掉，而所有 job 都是绿的、
+      # 日志里毫无异常 —— 结果发布出去的版本 Mac 用户没得下载。
+      - name: 校验四平台产物齐备（缺一个都不许发布）
+        run: |
+          set -e
+          V="${{ github.ref_name }}"; V="${V#v}"
+          missing=0
+          for f in \
+            "DeepWhale-Desktop-${V}-arm64.dmg" \
+            "DeepWhale-Desktop-${V}-x64.dmg" \
+            "DeepWhale-Desktop-${V}-x64-Setup.exe" \
+            "DeepWhale-Desktop-${V}-x86_64.AppImage" \
+            "DeepWhale-Desktop-${V}-amd64.deb" \
+          ; do
+            if [ -f "dist-assets/$f" ]; then
+              echo "  ✅ $f ($(du -h "dist-assets/$f" | cut -f1))"
+            else
+              echo "  ❌ 缺少 $f"
+              missing=$((missing+1))
+            fi
+          done
+          test "$missing" -eq 0 || { echo "::error::有 $missing 个平台产物缺失，拒绝发布"; exit 1; }
+          echo "✅ 四平台产物齐备"
 
       - name: 创建 Draft Release 并上传全部附件
         run: |

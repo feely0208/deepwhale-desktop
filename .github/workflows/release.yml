@@ -127,7 +127,7 @@ jobs:
 
           ## 更新内容
           - 把 DeepSeek Harness Web UI 装进原生窗口的跨平台桌面壳：背景皮肤、桌面宠物、用量/额度面板、API Key 安全存储
-          - 永久免费 · 开源（MIT）
+          - 免费开源（MIT）
 
           ## 特别感谢
           - [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 与 DeepSeek AI 团队：DSH 本身

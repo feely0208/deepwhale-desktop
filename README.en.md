@@ -6,16 +6,16 @@
 
 > 🏠 [Homepage](https://feely0208.github.io/deepwhale-desktop) · [Releases](https://github.com/feely0208/deepwhale-desktop/releases)
 
-![Free Forever](https://img.shields.io/badge/Free%20Forever-forever-brightgreen)
+![Free & Open Source](https://img.shields.io/badge/Free%20%26%20Open%20Source-MIT-brightgreen)
 ![Open Source](https://img.shields.io/badge/Open%20Source-MIT-4CAF50)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
 ![Electron](https://img.shields.io/badge/Electron-43-green)
 ![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)
 
-## ✨ Free Forever · Open Source · No Tricks
+## ✨ Free & Open Source (MIT) · No Tricks
 
-- 💯 **Free forever** — no in-app purchases, no subscriptions, no ads, no hidden fees, and it will stay that way.
+- 💯 **Free and open source (MIT)** — no in-app purchases, no subscriptions, no ads, no hidden fees.
 - 🌍 **Open source** — the full source is public on GitHub (MIT): auditable, PR-friendly, and free to fork and build upon.
 - 🔒 **Your data stays yours** — API keys are encrypted with the OS keychain and stay on your machine; balances come straight from DeepSeek's official API with no third-party relay.
 - 🚫 **No reselling** — if anyone ever tries to sell you this software, refuse and let us know.
@@ -26,7 +26,7 @@
 - 🎨 **Background skins**: pick any image to fully cover the UI (works in both light and dark mode without changing DSH's base theme), adjustable opacity, extends into the sidebar with a gradient transition
 - 🐾 **Desktop pet**: sprite-sheet animated pet with walking / fast walking / jogging / fast running / working / waving / jumping actions; bring your own SVG/GIF/PNG pets via the pet workshop
 - 💰 **Usage & quota**: a corner panel plus a "Usage" section in the DSH settings page — balance / gift / top-up / today's requests / tokens, with a green progress bar and low-balance alerts
-- 🔑 **API key safety**: `safeStorage` (OS keychain) encryption — never stored in plain text; or enter it inline in the settings page
+- 🔑 **API key safety**: `safeStorage` (OS keychain) encryption — no plain-text storage; or enter it inline in the settings page
 - 📦 **3-platform packages**: macOS `.dmg`, Windows `.nsis`, Linux `.AppImage` / `.deb`, built by GitHub Actions
 
 ## Quick Start
@@ -63,7 +63,7 @@ A default `userData/settings.json` is generated on first run; if a DSH instance 
 
 ### API Key Configuration
 - Two entry points, one store: tray → **Set API Key…** dialog, or the inline input in **Settings → Usage**
-- Encryption: Electron `safeStorage` (OS keychain); falls back to obfuscated storage when the secure store is unavailable (never plain text)
+- Encryption: Electron `safeStorage` (OS keychain); falls back to obfuscated storage when the secure store is unavailable (no plain text)
 - The environment variable `DEEPSEEK_API_KEY` is also supported (highest priority, injected when DSH starts)
 - Balance requests only happen in the main process; the renderer only receives sanitized data
 
@@ -149,13 +149,13 @@ dsh-desktop/
 
 ## FAQ
 
-**Is it paid?** Free forever, open source (MIT). No purchases, subscriptions, ads, or trials.
+**Is it paid?** Free and open source (MIT). No purchases, subscriptions, ads, or trials.
 
 **Do I need to register or log in?** No. The only optional thing is your own DeepSeek API key (to view balance/usage in-app; DSH works fine without it).
 
 **The usage panel shows no balance?** Enter your `sk-...` API key in **Settings → Usage** and click **Save Key** to fetch the balance (an `sk-` key pasted anywhere in the DSH settings page also syncs automatically). Without it the usage panel is unavailable, but DSH works normally.
 
-**Is my API key safe?** It is encrypted with the OS keychain (`safeStorage`) and used only in the main process — never stored in plain text, never uploaded (see [SECURITY.md](SECURITY.md)).
+**Is my API key safe?** It is encrypted with the OS keychain (`safeStorage`) and used only in the main process — no plain-text storage, not uploaded (see [SECURITY.md](SECURITY.md)).
 
 **What is the relationship with DeepSeek Harness?** This is a community desktop shell built on DeepSeek Harness; it is **not an official DeepSeek product** and does not represent DeepSeek's position.
 

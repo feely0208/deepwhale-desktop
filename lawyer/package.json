@@ -16,7 +16,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
-    "electron": "^43.4.0",
+    "electron": "43.4.0",
     "electron-builder": "^26.15.3"
   },
   "build": {
@@ -36,8 +36,14 @@
       "target": [
         "zip"
       ],
+      "artifactName": "DeepWhale-Lawyer-${version}-${arch}.${ext}",
       "category": "public.app-category.business",
       "icon": "build/icon.icns",
+      "identity": "-",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
       "extendInfo": {
         "CFBundleURLTypes": [
           {
@@ -61,6 +67,7 @@
         "AppImage",
         "deb"
       ],
+      "executableName": "deepwhale-lawyer",
       "category": "Office",
       "icon": "build/icon.png",
       "artifactName": "DeepWhale-Lawyer-${version}-x86_64.${ext}"

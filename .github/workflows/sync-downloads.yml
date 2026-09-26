@@ -36,10 +36,23 @@ jobs:
           TAG="${{ github.event.release.tag_name || inputs.tag }}"
           echo "同步 tag: $TAG"
           mkdir -p assets
-          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir assets \
-            --pattern 'DeepWhale-Desktop-*' --clobber
+          # 三类产物都要同步。此前只同步 DeepWhale-Desktop-*，律师端与套装
+          # 一直是手工上传的 —— 这就是「官网与 GitHub 长期不一致」的根因
+          # （壳发到 v1.0.16 时，官网的套装还停在 1.0.15）。
+          # 逐个 pattern 拉取：某个 tag 下没有该类资产时只提示、不失败
+          # （例如套装 release 里不会有桌面端安装包）。
+          for PAT in 'DeepWhale-Desktop-*' 'DeepWhale-Lawyer-*' 'DeepWhale-Suite-*'; do
+            echo "→ 拉取 ${PAT}"
+            gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir assets \
+              --pattern "$PAT" --clobber || echo "  （该 tag 下没有匹配 $PAT 的资产，跳过）"
+          done
           # 去掉 electron-builder 的调试/元数据文件
           rm -f assets/*.blockmap assets/*.yml
+          COUNT=$(find assets -type f | wc -l | tr -d ' ')
+          echo "共取到 $COUNT 个资产"
+          # 一个都没取到说明 tag 填错了 —— 这时静默「成功」最危险，
+          # 会让官网停留在旧版本却以为已经同步过了。
+          [ "$COUNT" -gt 0 ] || { echo "::error::tag $TAG 下没有可同步的安装包，请检查 tag"; exit 1; }
           ls -lh assets
 
       - name: 上传到官网服务器
@@ -58,7 +71,7 @@ jobs:
           ssh-keyscan -H "${HOST#*@}" >> ~/.ssh/known_hosts 2>/dev/null || true
           ssh -i ~/.ssh/dw -o StrictHostKeyChecking=no "$HOST" "mkdir -p $DEST"
           n=0
-          for f in assets/DeepWhale-Desktop-*; do
+          for f in assets/DeepWhale-*; do
             [ -f "$f" ] || continue
             echo "→ $(basename "$f")"
             scp -i ~/.ssh/dw -o StrictHostKeyChecking=no "$f" "$HOST:$DEST/"

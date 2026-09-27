@@ -197,3 +197,71 @@ jobs:
             lawyer/dist/*.AppImage
             lawyer/dist/*.deb
           if-no-files-found: error
+
+  # ── 汇总三平台产物并创建 Draft Release ─────────────────────────────
+  #
+  # 为什么加这一步：原来这个工作流只产出 Actions Artifact，发版要人工
+  # 「下载产物 → gh release upload」，既慢又容易漏平台（历史上就漏过 arm64）。
+  # 这里直接在 CI 内汇总并建 **Draft**：沿用 release.yml 的既有约定 ——
+  # 草稿需要人工确认后才公开，不会自动对外发布。
+  #
+  # 标签用 `lawyer-v<version>`，与壳的 `v<version>` 区分开，互不干扰：
+  # 壳的自动更新读的是 GitHub 的 Latest，律师端不使用该通道。
+  release:
+    name: 汇总并创建 Draft Release
+    needs: [build-mac, build-win, build-linux]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: 校验三平台产物齐备（缺一个都不许出门）
+        run: |
+          set -e
+          fail=0
+          for p in mac win linux; do
+            n=$(find "artifacts/lawyer-$p" -type f 2>/dev/null | wc -l | tr -d ' ')
+            echo "lawyer-$p: $n 个文件"
+            if [ "$n" -eq 0 ]; then echo "❌ lawyer-$p 没有产物"; fail=1; fi
+          done
+          [ "$fail" -eq 0 ] || exit 1
+          echo "--- 全部产物 ---"
+          find artifacts -type f | sort
+
+      - name: 创建或更新 Draft Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          VER=$(node -p "require('./lawyer/package.json').version")
+          TAG="lawyer-v$VER"
+          echo "律师端版本 $VER → 标签 $TAG"
+          mapfile -t FILES < <(find artifacts -type f | sort)
+          echo "待上传 ${#FILES[@]} 个文件"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG 已存在 → 追加/覆盖资产"
+            gh release upload "$TAG" "${FILES[@]}" --clobber
+          else
+            gh release create "$TAG" "${FILES[@]}" \
+              --draft \
+              --title "深鲸·律师端 v$VER" \
+              --notes "深鲸·律师端 v$VER（法律版，需激活）
+
+          ## 下载
+          - macOS（Apple Silicon）：\`DeepWhale-Lawyer-$VER-arm64.zip\`
+          - macOS（Intel）：\`DeepWhale-Lawyer-$VER-x64.zip\`
+          - Windows x64：\`DeepWhale-Lawyer-$VER-x64-Setup.exe\`
+          - Linux：\`DeepWhale-Lawyer-$VER-x86_64.AppImage\` / \`DeepWhale-Lawyer-$VER-x86_64.deb\`
+
+          > 装完务必先打开一次律师端并完成激活：\`deepwhale-law\` 链接协议是律师端
+          > 首次运行时才向系统登记的，只装不开则不会登记，深鲸桌面里选「法律模式」会找不到律师端。
+
+          本 Release 由 CI 自动创建为 **Draft**，确认无误后再公开。"
+          fi
+          echo "✔ 完成：$TAG"

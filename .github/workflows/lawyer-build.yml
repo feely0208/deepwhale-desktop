@@ -260,11 +260,16 @@ jobs:
           mapfile -t FILES < <(find artifacts -type f | sort)
           echo "待上传 ${#FILES[@]} 个文件"
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG 已存在 → 追加/覆盖资产"
+            echo "Release $TAG 已存在 → 追加/覆盖资产，并确保为预发布"
             gh release upload "$TAG" "${FILES[@]}" --clobber
+            # 已存在时也要落到「预发布且非草稿」，否则：
+            #   · 停在草稿 → sync-downloads 不触发，CDN 拿不到新包
+            #   · 变成正式 → 抢占仓库的 Latest，壳的 electron-updater 会去拉这个
+            #     Release，而它没有壳的产物 → 自动更新失败（套装当年踩过同样的坑）
+            gh release edit "$TAG" --draft=false --prerelease=true
           else
             gh release create "$TAG" "${FILES[@]}" \
-              --draft \
+              --prerelease \
               --title "深鲸·律师端 v$VER" \
               --notes "深鲸·律师端 v$VER（法律版，需激活）
 
@@ -277,7 +282,9 @@ jobs:
           > 装完务必先打开一次律师端并完成激活：\`deepwhale-law\` 链接协议是律师端
           > 首次运行时才向系统登记的，只装不开则不会登记，深鲸桌面里选「法律模式」会找不到律师端。
 
-          本 Release 由 CI 自动创建为 **Draft**，确认无误后再公开。"
+          ⚠️ 本 Release 必须是 **Pre-release**：一旦成为正式版，它会抢占仓库的 Latest，
+          壳的 electron-updater 会去拉这个 Release，而这里没有壳的产物 → 自动更新失败。
+          （套装当年踩过同样的坑，见 RELEASING.md。）"
           fi
           echo "✔ 完成：$TAG"
 
@@ -291,17 +298,17 @@ jobs:
           set -e
           VER=$(node -p "require('./lawyer/package.json').version")
           TAG="lawyer-v$VER"
-          gh release view "$TAG" --json tagName,isDraft,assets > /tmp/rel.json
+          gh release view "$TAG" --json tagName,isDraft,isPrerelease,assets > /tmp/rel.json
           echo "--- Release 实际内容 ---"
           cat /tmp/rel.json
           echo ""
           EXPECT_TAG="$TAG" node -e '
             const r = require("/tmp/rel.json");
             const n = (r.assets || []).length;
-            if (r.tagName !== process.env.EXPECT_TAG) {
-              console.error("❌ 标签不符：期望 " + process.env.EXPECT_TAG + "，实际 " + r.tagName);
-              process.exit(1);
-            }
-            if (n === 0) { console.error("❌ Release 建出来了，但一个资产都没有"); process.exit(1); }
-            console.log("✅ " + r.tagName + " 存在，草稿=" + r.isDraft + "，资产 " + n + " 个");
+            const fail = (m) => { console.error("❌ " + m); process.exit(1); };
+            if (r.tagName !== process.env.EXPECT_TAG) fail("标签不符：期望 " + process.env.EXPECT_TAG + "，实际 " + r.tagName);
+            if (n === 0) fail("Release 建出来了，但一个资产都没有");
+            if (r.isDraft) fail("Release 仍是草稿：sync-downloads 不会触发，CDN 拿不到新包");
+            if (!r.isPrerelease) fail("Release 不是预发布：会抢占仓库 Latest，导致壳的自动更新去拉它而失败");
+            console.log("✅ " + r.tagName + " 存在，草稿=" + r.isDraft + "，预发布=" + r.isPrerelease + "，资产 " + n + " 个");
           '

@@ -69,6 +69,37 @@ jobs:
         run: |
           npm install "@deepseek-ai/dsh@0.1.7-rc.2" --prefix dsh-runtime --no-audit --no-fund --loglevel=error
           test -f dsh-runtime/node_modules/@deepseek-ai/dsh/lib/bin.js
+
+          # ── 裁掉运行期用不到的开发产物（实测省约 120MB）────────────────
+          # 本机实测（2026-09-27）：
+          #   *.map     4,375 个  55.8 MB   source map，只影响堆栈的行号映射
+          #   *.d.ts    7,164 个  53.9 MB   TypeScript 声明，只服务编译期
+          #   *.md        947 个  10.1 MB   依赖自带的文档
+          # 合计约 120MB / 12,000+ 个文件，运行期完全不需要。
+          #
+          # 裁完做过实跑验证：dsh --version 返回 0.1.7-rc.2、--help 正常输出，
+          # 运行时功能不受影响。
+          #
+          # 这一步直接减小 app.asar（325MB → 约 245MB），
+          # 从而减小安装包体积与安装后占用的磁盘。
+          before_files=$(find dsh-runtime -type f | wc -l | tr -d ' ')
+          before=$(du -sm dsh-runtime | awk '{print $1}')
+          find dsh-runtime \( -name '*.map' -o -name '*.d.ts' -o -name '*.d.ts.map' -o -name '*.md' \) -type f -delete
+          find dsh-runtime \( -name '.eslintrc*' -o -name '.prettierrc*' -o -name 'tsconfig.json' -o -name '.editorconfig' \) -type f -delete
+          after_files=$(find dsh-runtime -type f | wc -l | tr -d ' ')
+          after=$(du -sm dsh-runtime | awk '{print $1}')
+          echo "裁剪随包运行时：${before} MB / ${before_files} 个 → ${after} MB / ${after_files} 个（省 $((before-after)) MB）"
+
+          # 断言真的裁掉了：依赖结构变化导致裁剪静默失效时，这里必须失败，
+          # 而不是悄悄发一个大了 120MB 的包出去。
+          saved=$((before-after))
+          if [ "$saved" -lt 80 ]; then
+            echo "::error::裁剪只省了 ${saved} MB，低于预期（约 120MB）—— 依赖结构可能变了，请检查"
+            exit 1
+          fi
+
+          # 裁完必须还能跑
+          node dsh-runtime/node_modules/@deepseek-ai/dsh/lib/bin.js --version
           node -e "console.log('bundled DSH runtime ready:', require('./dsh-runtime/node_modules/@deepseek-ai/dsh/package.json').version)"
 
       # office 载荷：精简 CPython 3.12 + 文档库（Word / Excel / PPT 生成）。

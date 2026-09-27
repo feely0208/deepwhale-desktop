@@ -61,18 +61,22 @@ export function buildAppMenuTemplate(a: TrayMenuActions): MenuItemConstructorOpt
       ? ([
           {
             label: app.name,
+            // ⚠️ role 只给行为与快捷键，**标签要自己写** ——
+            // 只写 role 不写 label，Electron 显示它内置的英文标签
+            // （About / Services / Hide / Quit…），于是出现「顶级是中文、
+            // 子项是英文」的割裂。每个 role 都配上中文 label。
             submenu: [
-              { role: 'about' as const },
+              { role: 'about' as const, label: '关于 ' + app.name },
               { type: 'separator' as const },
               { label: '设置…', accelerator: 'CmdOrCtrl+,', click: () => a.onOpenSettings?.() },
               { type: 'separator' as const },
-              { role: 'services' as const },
+              { role: 'services' as const, label: '服务' },
               { type: 'separator' as const },
-              { role: 'hide' as const },
-              { role: 'hideOthers' as const },
-              { role: 'unhide' as const },
+              { role: 'hide' as const, label: '隐藏 ' + app.name },
+              { role: 'hideOthers' as const, label: '隐藏其他' },
+              { role: 'unhide' as const, label: '全部显示' },
               { type: 'separator' as const },
-              { role: 'quit' as const },
+              { role: 'quit' as const, label: '退出 ' + app.name },
             ],
           },
         ] as MenuItemConstructorOptions[])
@@ -82,19 +86,21 @@ export function buildAppMenuTemplate(a: TrayMenuActions): MenuItemConstructorOpt
       submenu: [
         { label: '显示主窗口', click: () => a.showMainWindow() },
         { type: 'separator' },
-        ...(isMac ? ([{ role: 'close' as const }] as MenuItemConstructorOptions[]) : [{ role: 'quit' as const }]),
+        ...(isMac
+          ? ([{ role: 'close' as const, label: '关闭窗口' }] as MenuItemConstructorOptions[])
+          : [{ role: 'quit' as const, label: '退出' }]),
       ],
     },
     {
       label: '编辑',
       submenu: [
-        { role: 'undo' as const },
-        { role: 'redo' as const },
+        { role: 'undo' as const, label: '撤销' },
+        { role: 'redo' as const, label: '重做' },
         { type: 'separator' as const },
-        { role: 'cut' as const },
-        { role: 'copy' as const },
-        { role: 'paste' as const },
-        { role: 'selectAll' as const },
+        { role: 'cut' as const, label: '剪切' },
+        { role: 'copy' as const, label: '复制' },
+        { role: 'paste' as const, label: '粘贴' },
+        { role: 'selectAll' as const, label: '全选' },
       ],
     },
     { label: '皮肤', submenu: a.skinSubmenu },
@@ -115,10 +121,10 @@ export function buildAppMenuTemplate(a: TrayMenuActions): MenuItemConstructorOpt
     {
       label: '窗口',
       submenu: [
-        { role: 'minimize' as const },
-        { role: 'zoom' as const },
+        { role: 'minimize' as const, label: '最小化' },
+        { role: 'zoom' as const, label: '缩放' },
         { type: 'separator' as const },
-        { role: 'front' as const },
+        { role: 'front' as const, label: '前置全部窗口' },
       ],
     },
     {

@@ -64,6 +64,13 @@ function bumpFile(file, opts) {
 
   const rules = [
     { name: 'DESKTOP_VERSION', re: /DESKTOP_VERSION\s*=\s*'v[\d.]+'/g, to: `DESKTOP_VERSION='v${shell}'` },
+    // 主站下载区是 **JS 渲染**的（assets/site.js 里的 DOWNLOADS 数据 + dlxCard() 拼 HTML），
+    // 分组徽章取自数据里的 `ver:` 字段，**不是** download.html 里那份静态 HTML。
+    // 这里原本只维护了 DESKTOP_VERSION，律师端的 ver 是硬编码 ——
+    // 于是文件名被更新成 0.1.2、徽章却一直显示 0.1.0，
+    // 页面上出现「徽章 0.1.0 / 说明文字 0.1.2」的自相矛盾（2026-09-27 实测踩到）。
+    // 所以：律师端徽章必须走 LAWYER_VERSION 常量，并由这里一并维护。
+    { name: 'LAWYER_VERSION', re: /LAWYER_VERSION\s*=\s*'v[\d.]+'/g, to: `LAWYER_VERSION='v${lawyer}'` },
     { name: '律师端产物名', re: /DeepWhale-Lawyer-\d+\.\d+\.\d+-/g, to: `DeepWhale-Lawyer-${lawyer}-` },
     { name: '律师端 tag', re: /\/v\d+\.\d+\.\d+\/DeepWhale-Lawyer-/g, to: `/${lawyerTag}/DeepWhale-Lawyer-` },
     { name: '套装产物名', re: /DeepWhale-Suite-\d+\.\d+\.\d+-/g, to: `DeepWhale-Suite-${suite}-` },
@@ -186,6 +193,37 @@ function main() {
       ? '  ✅ 无旧版本号残留'
       : `  ⚠️ 共 ${stale} 处旧版本引用残留（可能是刻意保留的历史版本，请人工确认）`,
   );
+
+  // ── 断言：主站下载数据里不得有硬编码的 ver 字面量 ──────────────────────
+  //
+  // 主站下载区由 assets/site.js 的 DOWNLOADS 数据渲染，徽章取自 `ver:` 字段。
+  // 这个字段**必须写成常量**（DESKTOP_VERSION / MOBILE_VERSION / LAWYER_VERSION），
+  // 常量由本脚本维护；写成字面量就没人维护 —— 文件名会随版本切换而更新、
+  // 徽章却永远停在旧值，页面上出现「徽章 v0.1.0 / 链接 0.1.2」的自相矛盾。
+  // 2026-09-27 实测踩到，所以在这里 fail-loud 卡住。
+  const mainSiteJs = path.join(mainDir, 'assets', 'site.js');
+  if (fs.existsSync(mainSiteJs)) {
+    const jsText = fs.readFileSync(mainSiteJs, 'utf8');
+    // 只查**下载分组**：它们形如 { titleZh:'…', …, ver:…, …, items:[…] }。
+    // 不查应用列表（形如 { nameZh:'…', ver:'v1.1.0', links:[…] }）——
+    // 那是各鸿蒙应用自己的版本号，与应用自身的发布节奏绑定，本来就该写死，
+    // 跟着壳/律师端的发版周期走反而是错的。
+    const groupVerLiterals = [];
+    const groupRe = /titleZh:\s*'[^']+'[\s\S]{0,400}?ver:\s*'v\d+\.\d+\.\d+'/g;
+    for (const hit of jsText.match(groupRe) ?? []) {
+      groupVerLiterals.push(hit.match(/ver:\s*'v\d+\.\d+\.\d+'/)[0]);
+    }
+    const hardcoded = [...new Set(groupVerLiterals)];
+    if (hardcoded.length > 0) {
+      console.log('');
+      console.log(`  ❌ assets/site.js 里有 ${hardcoded.length} 处**硬编码**的版本徽章：${hardcoded.join('、')}`);
+      console.log('     徽章必须走常量（DESKTOP_VERSION / MOBILE_VERSION / LAWYER_VERSION），');
+      console.log('     否则版本切换时文件名会更新、徽章却不会，页面自相矛盾。');
+      process.exitCode = 1;
+    } else {
+      console.log('  ✅ 主站下载徽章全部走常量（无硬编码版本字面量）');
+    }
+  }
 
   console.log('');
   console.log('提醒：以下两项**不由本脚本处理**，发版前请人工确认：');

@@ -234,6 +234,21 @@ jobs:
           echo "--- 全部产物 ---"
           find artifacts -type f | sort
 
+      - name: 推送标签
+        run: |
+          set -e
+          VER=$(node -p "require('./lawyer/package.json').version")
+          TAG="lawyer-v$VER"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --tags origin "refs/tags/$TAG" | grep -q "$TAG"; then
+            echo "标签 $TAG 已存在，跳过"
+          else
+            git tag -a "$TAG" -m "深鲸·律师端 v$VER"
+            git push origin "$TAG"
+            echo "已推送标签 $TAG"
+          fi
+
       - name: 创建或更新 Draft Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -265,3 +280,28 @@ jobs:
           本 Release 由 CI 自动创建为 **Draft**，确认无误后再公开。"
           fi
           echo "✔ 完成：$TAG"
+
+      # 自检：断言 Release 真的建出来了、资产真的传上去了。
+      # 没有这一步时，作业报 "success" 但其实什么都没建出来也无从发现 ——
+      # 「没有报错」不等于「事情做成了」。
+      - name: 校验 Release 与资产齐备（fail-loud）
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          VER=$(node -p "require('./lawyer/package.json').version")
+          TAG="lawyer-v$VER"
+          gh release view "$TAG" --json tagName,isDraft,assets > /tmp/rel.json
+          echo "--- Release 实际内容 ---"
+          cat /tmp/rel.json
+          echo ""
+          EXPECT_TAG="$TAG" node -e '
+            const r = require("/tmp/rel.json");
+            const n = (r.assets || []).length;
+            if (r.tagName !== process.env.EXPECT_TAG) {
+              console.error("❌ 标签不符：期望 " + process.env.EXPECT_TAG + "，实际 " + r.tagName);
+              process.exit(1);
+            }
+            if (n === 0) { console.error("❌ Release 建出来了，但一个资产都没有"); process.exit(1); }
+            console.log("✅ " + r.tagName + " 存在，草稿=" + r.isDraft + "，资产 " + n + " 个");
+          '

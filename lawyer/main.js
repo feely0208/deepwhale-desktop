@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -663,7 +663,105 @@ async function doSendSms(phone) {
   server.listen(port, '0.0.0.0', () => console.log('[admin-api] 运营后台 API 已监听 0.0.0.0:' + port));
 }
 
+/* ── 应用菜单（中文）───────────────────────────────────────────────────
+ *
+ * 原来**完全没设置菜单**，Electron 于是用内置默认菜单，标签一律英文：
+ * File / Edit / View / Window / Help，子项 Undo / Redo / Cut / Copy …
+ * Windows 顶部菜单栏因此整条是英文（macOS 顶栏同理）。
+ *
+ * ⚠️ 关键点：`role` 只负责**行为与快捷键**，**标签要自己写**。
+ * 只写 role 不写 label，Electron 仍然显示它内置的英文标签 —— 这正是
+ * 深鲸壳那边菜单「顶级是中文、子项是英文」的原因。所以下面每个 role 都配了中文 label。
+ */
+const APP_DISPLAY_NAME = '深鲸·律师端';
+
+function buildAppMenu() {
+  const isMac = process.platform === 'darwin';
+  const openExternal = (url) => {
+    try { require('electron').shell.openExternal(url); } catch (e) { /* 打不开就算了 */ }
+  };
+
+  const template = [
+    // macOS 应用菜单（以应用名为标题）
+    ...(isMac ? [{
+      label: APP_DISPLAY_NAME,
+      submenu: [
+        { role: 'about', label: '关于 ' + APP_DISPLAY_NAME },
+        { type: 'separator' },
+        { role: 'services', label: '服务' },
+        { type: 'separator' },
+        { role: 'hide', label: '隐藏 ' + APP_DISPLAY_NAME },
+        { role: 'hideOthers', label: '隐藏其他' },
+        { role: 'unhide', label: '全部显示' },
+        { type: 'separator' },
+        { role: 'quit', label: '退出 ' + APP_DISPLAY_NAME },
+      ],
+    }] : []),
+    {
+      label: '文件',
+      submenu: [
+        { role: 'reload', label: '重新加载' },
+        { type: 'separator' },
+        isMac ? { role: 'close', label: '关闭窗口' } : { role: 'quit', label: '退出' },
+      ],
+    },
+    {
+      label: '编辑',
+      submenu: [
+        { role: 'undo', label: '撤销' },
+        { role: 'redo', label: '重做' },
+        { type: 'separator' },
+        { role: 'cut', label: '剪切' },
+        { role: 'copy', label: '复制' },
+        { role: 'paste', label: '粘贴' },
+        { role: 'selectAll', label: '全选' },
+      ],
+    },
+    {
+      label: '视图',
+      submenu: [
+        { role: 'forceReload', label: '强制重新加载' },
+        { role: 'toggleDevTools', label: '开发者工具' },
+        { type: 'separator' },
+        { role: 'resetZoom', label: '实际大小' },
+        { role: 'zoomIn', label: '放大' },
+        { role: 'zoomOut', label: '缩小' },
+        { type: 'separator' },
+        { role: 'togglefullscreen', label: '切换全屏' },
+      ],
+    },
+    {
+      label: '窗口',
+      submenu: [
+        { role: 'minimize', label: '最小化' },
+        { role: 'zoom', label: '缩放' },
+        ...(isMac
+          ? [{ type: 'separator' }, { role: 'front', label: '前置全部窗口' }]
+          : [{ role: 'close', label: '关闭窗口' }]),
+      ],
+    },
+    {
+      label: '帮助',
+      submenu: [
+        { label: '深鲸官网', click: () => openExternal('https://deepwhale.org.cn') },
+        { label: '下载与安装说明', click: () => openExternal('https://deepwhale.org.cn/download.html') },
+        ...(isMac
+          ? []
+          : [{ type: 'separator' }, { role: 'about', label: '关于 ' + APP_DISPLAY_NAME }]),
+      ],
+    },
+  ];
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
 app.whenReady().then(() => {
+  buildAppMenu();
+  app.setAboutPanelOptions({
+    applicationName: APP_DISPLAY_NAME,
+    applicationVersion: app.getVersion(),
+    copyright: '© 2026 深鲸 DeepWhale',
+  });
   if (process.env.DSH_ADMIN === '1') { startAdminApiServer(); createAdminWindow(); return; }
   createWindow();
 });

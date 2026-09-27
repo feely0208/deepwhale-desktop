@@ -356,7 +356,50 @@ ipcMain.handle('lawyer:decide', async (_ev, o) => {
   return { ok: writeResStore(d) };
 });
 // 用户端：按机器码查自己的律师实名核验状态（通过后 user 端自动建档进工作台）
+//
+// ⚠️ 这里必须问**服务器**，不能只读本地文件。
+//
+// 原来的实现只读本地留档，而本地那条记录的状态在提交时被写成 'submitted'
+// （见上面的 lawyer:submit），永远不会变成 'approved' —— 因为审核是在运营后台做的，
+// 结论只存在于服务端。于是 workbench 每 8 秒轮询到的永远是 'submitted'，
+// 判定 `r.status === "approved"` 永不成立，boot() 永不执行。
+//
+// 表现就是：运营后台明明显示「已通过」，律师端却一直卡在核验页进不了工作台。
+// 2026-09-27 真实踩到（余欢欢）。
+//
+// 现在：先问服务端（真相在运营后台），拿到结论后同步回本地留档；
+//       服务端不可达时回落到本地留档，保证离线也能看到上次的结果。
 ipcMain.handle('lawyer:check', async (_ev, machine) => {
+  const syncLocal = (status, reason, name) => {
+    try {
+      const d = readResStore();
+      const list = (d.applications || []).filter(x => x.app && x.app.machine === machine);
+      const it = list[list.length - 1];
+      if (it && it.status !== status) {
+        it.status = status;
+        it.reason = reason || '';
+        it.serverSyncedAt = Date.now();
+        if (name) it.app.name = it.app.name || name;
+        writeResStore(d);
+      }
+    } catch (e) { /* 留档失败不影响核验结果 */ }
+  };
+
+  try {
+    const resp = await fetch(SMS_SERVER + '/api/lawyer-check?machine=' + encodeURIComponent(machine || ''));
+    if (resp.ok) {
+      const r = await resp.json();
+      if (r && r.found) {
+        syncLocal(r.status, r.reason, r.name);
+        return { found: true, status: r.status, reason: r.reason || '', name: r.name || '' };
+      }
+      // 服务端明确说"没有这条申请"：以服务端为准，避免本地旧记录造成误判
+      return { found: false };
+    }
+  } catch (e) {
+    // 网络不通：回落到本地留档，不让离线用户看到空白
+  }
+
   const d = readResStore();
   const it = (d.applications || []).filter(x => x.app && x.app.machine === machine).slice().reverse()[0];
   return it ? { found: true, status: it.status, reason: it.reason, name: it.app.name } : { found: false };

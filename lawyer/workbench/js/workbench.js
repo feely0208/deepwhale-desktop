@@ -2587,7 +2587,13 @@
 
     // 首次建档：无档案则先建档，再进入工作台
     const lawyer = loadLawyer();
-    if (!lawyer) { showSetup(); }
+    if (!lawyer) {
+      showSetup();
+      // 已提交过核验、但还没通过的用户：重开律师端时**自动接着等结果**。
+      // 以前轮询只在「点提交」那一刻启动，用户关掉再打开就永远等不到通过，
+      // 而他再去点一次提交又是重复上报。这里补上自动续等。
+      resumeVerification();
+    }
     else { applyLawyer(lawyer); boot(); }
   }
 
@@ -2710,26 +2716,81 @@
     });
   }
 
-  // 轮询律师实名核验结果：通过后建档进工作台
+  // 核验通过 → 建档并进工作台（两个入口共用：轮询拿到、重开时首查拿到）
+  function enterWorkbench(r) {
+    const lawyer = { name: r.name, license: "", firm: "", role: "执业律师", dev: false, date: nowStr() };
+    saveLawyer(lawyer);
+    applyLawyer(lawyer);
+    const setup = document.getElementById("setup");
+    if (setup) setup.classList.add("done");
+    const status = document.getElementById("suStatus");
+    if (status) status.textContent = "核验通过：" + r.name + "（执业律师）";
+    boot();
+  }
+
+  /**
+   * 统一处理一次核验查询结果。
+   * @returns true = 已有确定结论（进了工作台，或被驳回），调用方应停止轮询。
+   */
+  function handleCheckResult(r) {
+    if (!r || !r.found) return false;
+    const status = document.getElementById("suStatus");
+    if (r.status === "approved") { enterWorkbench(r); return true; }
+    if (r.status === "rejected") {
+      if (status) {
+        status.textContent = "核验未通过：" + (r.reason || "执业信息不符，请核实");
+        status.className = "su-status err";
+      }
+      return true;
+    }
+    // pending / submitted：还在审核中
+    if (status && !status.getAttribute("data-waiting")) {
+      status.textContent = "已提交核验，等待运营审核…（通过后自动进入工作台）";
+      status.className = "su-status ok";
+      status.setAttribute("data-waiting", "1");
+    }
+    return false;
+  }
+
+  /**
+   * 轮询律师实名核验结果：后台点「审核通过」后自动建档进工作台。
+   *
+   * 间隔 3 秒（原为 8 秒）—— 后台点完通过，用户端最多 3 秒内跳进工作台。
+   * 定时器只允许存在一个：重复调用不会叠加。
+   */
+  let lawyerPollTimer = null;
   function startLawyerPoll(machine) {
-    setInterval(function () {
-      if (!window.__lawyerCheck) return;
+    if (lawyerPollTimer || !window.__lawyerCheck || !machine) return;
+    lawyerPollTimer = setInterval(function () {
+      const setupEl = document.getElementById("setup");
+      // 已经进工作台了就停掉，别空转
+      if (setupEl && setupEl.classList.contains("done")) {
+        clearInterval(lawyerPollTimer); lawyerPollTimer = null; return;
+      }
       window.__lawyerCheck(machine).then(function (r) {
-        if (r && r.found && r.status === "approved") {
-          const lawyer = { name: r.name, license: "", firm: "", role: "执业律师", dev: false, date: nowStr() };
-          saveLawyer(lawyer);
-          applyLawyer(lawyer);
-          const setup = document.getElementById("setup");
-          if (setup) setup.classList.add("done");
-          const status = document.getElementById("suStatus");
-          if (status) status.textContent = "核验通过：" + r.name + "（执业律师）";
-          boot();
-        } else if (r && r.found && r.status === "rejected") {
-          const status = document.getElementById("suStatus");
-          if (status) status.textContent = "核验未通过：" + (r.reason || "执业信息不符，请核实");
-        }
+        if (handleCheckResult(r)) { clearInterval(lawyerPollTimer); lawyerPollTimer = null; }
       }).catch(function () {});
-    }, 8000);
+    }, 3000);
+  }
+
+  /**
+   * 重开律师端时的续等：本机若已提交过核验，自动接着等结果，
+   * 不需要用户再点一次「提交」（重复提交会重复上报）。
+   */
+  function resumeVerification() {
+    if (!window.__lawyerCheck || !window.__licenseGetMachine) return;
+    const machine = window.__licenseGetMachine() || "";
+    if (!machine) return;
+    window.__lawyerCheck(machine).then(function (r) {
+      if (handleCheckResult(r)) return;        // 已通过 → 直接进工作台
+      if (r && r.found) { startLawyerPoll(machine); return; }   // 审核中 → 继续轮询
+      // 服务端明确没有记录：看本地留档，提交过就继续等
+      if (!window.__lawyerList) return;
+      return window.__lawyerList().then(function (list) {
+        const mine = (list || []).filter(function (x) { return x && x.app && x.app.machine === machine; });
+        if (mine.length) startLawyerPoll(machine);
+      });
+    }).catch(function () {});
   }
 
   window.Workbench = { switchTo: switchTo, back: back, active: function(){ return active; }, toast: toast, mock: mock, openNewCase: openNewCaseModal };

@@ -208,12 +208,14 @@ jobs:
   # 标签用 `lawyer-v<version>`，与壳的 `v<version>` 区分开，互不干扰：
   # 壳的自动更新读的是 GitHub 的 Latest，律师端不使用该通道。
   release:
-    name: 汇总并创建 Draft Release
+    name: 汇总三平台产物并发布（预发布）
     needs: [build-mac, build-win, build-linux]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     permissions:
       contents: write
+      # 需要显式触发 sync-downloads（见文件末尾那一步）
+      actions: write
     steps:
       - uses: actions/checkout@v4
 
@@ -312,3 +314,23 @@ jobs:
             if (!r.isPrerelease) fail("Release 不是预发布：会抢占仓库 Latest，导致壳的自动更新去拉它而失败");
             console.log("✅ " + r.tagName + " 存在，草稿=" + r.isDraft + "，预发布=" + r.isPrerelease + "，资产 " + n + " 个");
           '
+
+      # 🔴 必须显式触发 CDN 同步 —— 不能指望 `release: published` 自动生效。
+      #
+      # GitHub 的机制：**用 GITHUB_TOKEN 触发的事件不会再触发其它工作流**
+      # （防止递归调用）。所以上面用 secrets.GITHUB_TOKEN 发布 Release 时，
+      # sync-downloads.yml 的 `on: release: types: [published]` 是个哑炮 ——
+      # Release 建出来了，CDN 却永远拿不到文件，而两边都报成功。
+      # 2026-09-27 实测踩到：lawyer-v0.1.2 已发布，但 dl.deepwhale.org.cn 全部 403。
+      #
+      # workflow_dispatch 是这个限制的例外，可以显式调用，所以在这里补一刀。
+      - name: 触发 CDN 同步（sync-downloads）
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          VER=$(node -p "require('./lawyer/package.json').version")
+          TAG="lawyer-v$VER"
+          gh workflow run sync-downloads.yml --repo "$GITHUB_REPOSITORY" -f tag="$TAG"
+          echo "已触发 sync-downloads：$TAG"
+          echo "（该工作流会把 DeepWhale-Lawyer-* 同步到 OBS，随后经 CDN 对外）"

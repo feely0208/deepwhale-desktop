@@ -754,6 +754,19 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
       let afterOffice: { changed: boolean; profilePending: boolean } = { changed: false, profilePending: false };
       let afterPlugins: { changed: boolean; profilePending: boolean } = { changed: false, profilePending: false };
       let stableRounds = 0;
+      // ⚠️ 累计标记：**有没有任何一轮写过盘**。
+      //
+      // 不能拿循环结束后 `after.changed` 来判断「要不要重载窗口」——
+      // 那是**最后一轮**的结果，而循环必然停在「连续两轮都没改动」的那一轮
+      // （stableRounds >= 2 才 break），所以它几乎永远是 false。
+      //
+      // 后果（实测，2026-09-27）：
+      //   首次启动时注入确实写进了磁盘，但重载没发生 —— 窗口里的 DSH 界面
+      //   是**注入之前**加载的，不认识 ui-legal-mode 插件、花名册里也没有
+      //   「法律模式」。用户看到的就是「装完没有法律模式」。
+      //   这个缺陷是 v1.0.18 引入「连续两轮稳定」时带进来的：
+      //   加之前最后一轮可能是 changed，加了之后必然不是。
+      let anyChanged = false;
       for (let attempt = 1; attempt <= INJECT_ATTEMPTS; attempt += 1) {
         try {
           after = ensureLegalModeSetup(legalHome, payloadDir, legalRuntimeDir);
@@ -770,6 +783,8 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
         } catch (error) {
           logInjectionFailure('plugins', 'profile 注入', error);
         }
+        anyChanged =
+          anyChanged || after.changed || afterOffice.changed || afterPlugins.changed;
         const ready =
           !after.profilePending && !afterOffice.profilePending && !afterPlugins.profilePending;
         const rows = patchHasAllRows();
@@ -828,10 +843,16 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
         }
       }, 2000);
 
-      // 任一注入写了盘且 profile 已就位，就重载一次让新入口图生效。
+      // 任一轮注入写过盘且 profile 已就位，就重载一次让新入口图生效。
+      //
+      // ⚠️ 这里必须用累计的 `anyChanged`，不能用最后一轮的 `after.*.changed`：
+      //    循环停在「连续两轮无改动」的那一轮，最后一轮必然什么都没改，
+      //    用它判断会导致**首次启动永远不重载** —— 注入写进了磁盘，
+      //    窗口里的界面却还是注入前那份，「法律模式」不出现。
+      //    这是 2026-09-27 实测出来的根因，v1.0.18 引入「连续两轮稳定」时带进来的。
       const profileReady =
         !after.profilePending && !afterOffice.profilePending && !afterPlugins.profilePending;
-      if ((after.changed || afterOffice.changed || afterPlugins.changed) && profileReady && mainWin !== null) {
+      if (anyChanged && profileReady && mainWin !== null) {
         // 等带 token 的那次导航落定再重载：两次并发导航会互相 abort
         // （表现为一条 ERR_ABORTED 告警），这里让重载晚一步。
         const win = mainWin;

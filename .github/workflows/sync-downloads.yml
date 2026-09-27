@@ -103,6 +103,11 @@ jobs:
             else
               echo "  ❌ $code  $f"; fail=$((fail+1))
             fi
-          done < <(cd obs-upload && ls -1)
+          # ⚠️ 只能验证**实际上传了**的文件。sync-to-obs.js 会刻意排除
+          # 桌面端 .zip / .blockmap / latest*.yml（官网不提供这些），
+          # 若拿整个下载目录去 CDN 上找，会对着本就不该存在的文件报 403 —— 
+          # 于是出现"上传全部成功、验证却失败"的假失败（实测踩过：
+          # 5 个文件全部 ✅ 上传，却因为两个桌面端 .zip 不在 CDN 上而报错）。
+          done < <(cd obs-upload && ls -1 | grep -vE '\.blockmap$|^latest.*\.yml$|^DeepWhale-Desktop-.*\.zip$')
           test "$fail" -eq 0 || { echo "::error::有 $fail 个文件经 CDN 取不到"; exit 1; }
           echo "✅ 全部可经 CDN 下载"

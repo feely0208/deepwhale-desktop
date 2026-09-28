@@ -232,6 +232,16 @@ def extract_exe(path, work):
         want = [n for n in names if n.endswith("app.asar")]
         if not want:
             raise RuntimeError("7z 里没有 app.asar")
+        # ⚠️ 壳载荷（legal-mode / bundled-plugins / office-runtime）在 app.asar **之外**，
+        #    只解 app.asar 的话它们不在磁盘上，扫描会报「缺 5 个壳载荷」——
+        #    那是**假缺失**（第一版就这么误报过）。这里按需把这几项也解出来：
+        #    只取小的（legal-mode 132K + bundled-plugins 152K + runtime.json），
+        #    不整包倒 100MB 的 office-runtime。
+        for n in names:
+            if (n.startswith("resources/legal-mode")
+                    or n.startswith("resources/bundled-plugins")
+                    or n == "resources/office-runtime/runtime.json"):
+                want.append(n)
         z.extract(path=work, targets=want)
     asar = os.path.join(work, "resources", "app.asar")
     if not os.path.exists(asar):

@@ -80,6 +80,12 @@ function bumpFile(file, opts) {
     // 产物名由常量拼接而成，不再有字面量可匹配。少了这三条，Pages 会**静默
     // 跳过**（报「无需改动」却什么都没升），下一版就会带着旧版本号上线。
     { name: 'LAWYER_VER', re: /LAWYER_VER\s*=\s*'\d+\.\d+\.\d+'/g, to: `LAWYER_VER = '${lawyer}'` },
+    // 律师端的 release tag。**必须独立于壳的 tag** ——
+    // 律师端产物过去挂在壳的 release 上（v1.0.17/v1.0.18），后来改成独立 release
+    // （lawyer-v0.1.3），但落地页仍在用 DESKTOP_VERSION 当 tag 拼地址，
+    // 于是 .../download/v1.0.20/DeepWhale-Lawyer-0.1.3-x64-Setup.exe 实测 404。
+    // 2026-09-28 实测踩到：用户在落地页点「下载律师端」直接下不到。
+    { name: 'LAWYER_TAG', re: /LAWYER_TAG\s*=\s*'[^']*'/g, to: `LAWYER_TAG = '${lawyerTag}'` },
     // 套装的徽章常量。**必须独立于 DESKTOP_VERSION** ——
     // 借用桌面端常量的后果（2026-09-28 实测）：壳发 1.0.19 而套装的包还在传 CDN、
     // 链接只能留 1.0.18 时，套装徽章会跟着桌面端显示 1.0.19，

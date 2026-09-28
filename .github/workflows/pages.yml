@@ -24,6 +24,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # 落地页里的下载链接必须指向**真实存在**的 Release 附件，失效就不许发布。
+      #
+      # 为什么单独卡在发布前：2026-09-28 实测踩到 —— 律师端早有自己独立的 release
+      # （lawyer-v0.1.3），落地页却仍拿壳的 tag 去拼律师端地址，
+      # 用户在落地页点「下载律师端」直接 404。
+      # 而仓库里那个 check-homepage-links.js 当时**一次都没跑过**
+      #（没有任何工作流调用它），而且它只会抓 HTML 里的字面量 URL，
+      # 抓不到这种「常量拼出来的」地址 —— 等于双重失效。
+      # 现在它会把常量解析出来、按页面自己的拼接规则算出真实 URL 再逐个 HEAD。
+      - name: 校验落地页下载链接（有 404 就拒绝发布）
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/check-homepage-links.js
+
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

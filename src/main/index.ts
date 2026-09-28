@@ -943,9 +943,34 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
                 const usageNav = document.getElementById('dsh-ext-nav-usage');
                 if (usageNav) { usageNav.click(); await new Promise(r => setTimeout(r, 400)); usageRows = document.querySelectorAll('#dsh-ext-usage-body .row').length || document.querySelectorAll('#dsh-ext-panel .dsh-ext-grid .row').length; }
               }
-              return JSON.stringify({ navPet: has('dsh-ext-nav-pet'), navUsage: has('dsh-ext-nav-usage'), navSkin: has('dsh-ext-nav-skin'), panel: has('dsh-ext-panel'), activated, petNavOn, petItems, themeItems, usageRows });
+              // 「当前版本」那行旁边应当有壳的版本号（用户在通用设置里就能看到）
+              const verEl = document.getElementById('dsh-ext-shell-version');
+              const verText = verEl ? verEl.textContent.trim() : '';
+              // 直接读我们贴上去那个节点的父元素 —— 别再遍历找"叶子节点"：
+              // 那行被我们加了子元素之后就不再是叶子，遍历会把它跳过（第一版就踩了这个）。
+              const verRow = verEl && verEl.parentElement ? verEl.parentElement.textContent.trim() : '';
+              return JSON.stringify({ navPet: has('dsh-ext-nav-pet'), navUsage: has('dsh-ext-nav-usage'), navSkin: has('dsh-ext-nav-skin'), panel: has('dsh-ext-panel'), activated, petNavOn, petItems, themeItems, usageRows, verText, verRow });
             })()`);
             console.log('[smoke] settings-ext:', r);
+            // ★ 断言落在用户看得见的地方：通用设置里「当前版本」旁边必须有壳版本号。
+            //   只断言"注入脚本没报错"是不够的 —— 找错节点、DSH 改了结构，
+            //   都会静默变成"界面上什么都没有"。
+            try {
+              const parsed = JSON.parse(r);
+              const want = app.getVersion();
+              if (!parsed.verText) {
+                console.error('[smoke] 壳版本号未出现在设置页（verRow=' + parsed.verRow + '）');
+                process.exitCode = 1;
+              } else if (!parsed.verText.includes(want)) {
+                console.error('[smoke] 壳版本号不对：界面显示 "' + parsed.verText + '"，期望含 ' + want);
+                process.exitCode = 1;
+              } else {
+                console.log('[smoke] 设置页已显示壳版本：' + parsed.verRow);
+              }
+            } catch (e) {
+              console.error('[smoke] 壳版本号断言无法解析结果:', e);
+              process.exitCode = 1;
+            }
           } catch (e) {
             console.error('[smoke] settings-ext 检查失败:', e);
           }

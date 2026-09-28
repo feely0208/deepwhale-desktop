@@ -366,8 +366,37 @@
     }
   }
 
+  /* ---------- 在「当前版本」旁边补上深鲸壳的版本号 ----------
+   * 通用设置里原本只显示 DSH 运行时的版本（如 0.1.7-rc.2），
+   * 用户想确认壳是哪个版本得翻安装包或关于窗口，很别扭。
+   * 版本号由主进程注入为 window.__dshShellVersion（settings-inject.ts）。
+   * 按文本前缀找节点：DSH 的类名带哈希，靠结构定位不可靠。
+   * 只认**叶子节点**，否则会匹配到包住整页的外层容器，把版本号贴到离谱的位置。 */
+  function maybeInjectShellVersion() {
+    var v = window.__dshShellVersion;
+    if (!v) return;
+    if (document.getElementById('dsh-ext-shell-version')) return; // 已贴过
+    var els = document.querySelectorAll('div, span, p, li, td');
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i];
+      if (el.children.length > 0) continue;
+      var t = (el.textContent || '').trim();
+      if (t.indexOf('当前版本') !== 0) continue;
+      var sep = document.createElement('span');
+      sep.textContent = '　·　';
+      sep.style.opacity = '.5';
+      var tag = document.createElement('span');
+      tag.id = 'dsh-ext-shell-version';
+      tag.textContent = '深鲸壳 ' + v;
+      el.appendChild(sep);
+      el.appendChild(tag);
+      return;
+    }
+  }
+
   /* ---------- 观察设置页挂载 ---------- */
   function maybeInject() {
+    maybeInjectShellVersion();
     if (document.getElementById(NAV_PREFIX + 'pet')) return; // 本挂载周期已注入
     var navList = findNavList();
     if (navList) inject(navList);

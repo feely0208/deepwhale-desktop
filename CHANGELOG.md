@@ -4,6 +4,55 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [SemVer](https://semver.org/lang/zh-CN/)。
 
+## [1.0.21] - 2026-09-28
+
+修掉「法律模式」不出现在 Agent 预设选择器里的问题（三平台都受影响），
+并把 1.0.20 的 office 修复一并带出（1.0.20 已作废、release 与 tag 均已删除）。
+
+### 修复
+- **「法律模式」预设改用 bundle 声明（本轮核心）**
+
+  用户反馈：装完壳之后，Agent 预设里**找不到「法律模式」**。
+
+  根因：随包运行时（0.1.7-rc.2）起，预设**不再是目录**。它自带的技能文档写得很直白：
+
+  > a user preset was a directory `$DSH_HOME/.agent-presets/<id>/` …
+  > **Nothing reads that directory any more.**
+
+  预设改由 bundle 的 patch 携带 `@deepseek-ai/dsh-agent-preset` 声明提供
+  （随包预设的真实形态就是 `dsh-web-app/presets/*.patch.yml`）。
+  而壳写的还是那个老目录，于是**三平台的选择器里都没有「法律模式」**。
+
+  实测坐实：`dsh --profile web --dump-config` 组合出的树里只有 4 个随包预设
+  （`preset-standard` / `ptc` / `minimal` / `cordis`），没有 `preset-legal`。
+
+  修复：新增 `scripts/build-legal-preset-bundle.js`，从 `legal-mode/preset/`
+  生成一个 bundle（`package.json` 带 `dsh.bundle.patch` + `cordis.patch.yml`，
+  内含 `preset-legal` 声明），并列为第三个随包 bundle，复用壳已有的
+  `dsh.profile.bundles` 机制（与中文合规、公文排版同一套）。
+  persona 字段在**构建时**就写成 `prefix`（随包运行时形态）。
+
+  旧的 `.agent-presets` 拷贝保留，作为用户自备旧 DSH 的兜底。
+
+- **办公能力（1.0.20 的修复一并带出）**
+
+  1.0.19 的打包裁剪规则 `-name '*.md'` 把运行时按路径读取的
+  `assets/<子目录>/SKILL.md` 当成"依赖文档"删了，导致 `dsh-skill-office`
+  激活失败 —— 表现是「装了但办公功能没有」。1.0.20 已验证修复，
+  本轮一并发布。
+
+### 新增
+- **设置页显示深鲸壳版本号**：通用设置里「当前版本」原本只有 DSH 运行时版本，
+  现在旁边补上壳的版本（如 `深鲸壳 1.0.21`）。
+
+### 加固
+- `scripts/check-legal-preset-roster.js`：造临时 home → 注入 →
+  跑 `dsh --dump-config` → 断言花名册含 `preset-legal` 且 `config.name=法律模式`。
+  接进发布流程的离线守卫。
+  这条断言是补课：此前冒烟只断言客户端插件在不在（`COUNT=58 含 ui-legal-mode`）、
+  成品包自检只断言载荷文件在不在 —— **没有任何一条断言过"用户能在选择器里选到它"**，
+  所以全部是绿的而界面里什么都没有。
+
 ## [1.0.20] - 2026-09-28
 
 **只做一件事：把 1.0.19 里被我误删的随包运行时资产加回去。**

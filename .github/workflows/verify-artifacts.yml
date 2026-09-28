@@ -1,0 +1,72 @@
+# 成品安装包自检：在三个平台的 runner 上，把**用户实际下载到的那个文件**拆开检查。
+#
+# 为什么要有这个工作流（2026-09-28 事故）：
+#   1.0.19 发出去的包里，dsh-skill-office 激活失败 ——
+#   打包裁剪把运行时按路径读的 `assets/<子目录>/SKILL.md` 当成"依赖文档"删了。
+#   而包能装、能启动、法律模式也正常，从外面**看不出问题**；
+#   当时的自检只跑 `dsh --version` / `dsh --help`，证明不了插件能激活，给了假通过。
+#
+#   本机（开发者的 Mac）只能验 macOS 的包，Linux/Windows 的包拆不开；
+#   而 runner 天然就有三个系统，且访问 Release 很快 —— 所以把拆包验证放这里。
+#
+# 触发：手动。给一个 tag（如 v1.0.20）。
+name: Verify artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '要检查的 release tag（如 v1.0.20）'
+        required: true
+      version:
+        description: '包内应含的版本号（如 1.0.20，不带 v）'
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            kind: dmg
+          - os: ubuntu-latest
+            kind: deb
+          - os: windows-latest
+            kind: exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # 拆 .exe（NSIS 尾部挂着 app-64.7z）需要 py7zr；dmg 用 macOS 自带 hdiutil，
+      # deb 用自带 ar/tar，都不需要额外装东西。
+      - name: 安装拆包依赖（仅 exe 需要）
+        if: matrix.kind == 'exe'
+        run: pip install py7zr
+
+      - name: 下载对应的安装包
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          V="${{ inputs.version }}"
+          case "${{ matrix.kind }}" in
+            dmg) FILE="DeepWhale-Desktop-${V}-arm64.dmg" ;;
+            deb) FILE="DeepWhale-Desktop-${V}-amd64.deb" ;;
+            exe) FILE="DeepWhale-Desktop-${V}-x64-Setup.exe" ;;
+          esac
+          mkdir -p artifacts
+          gh release download "${{ inputs.tag }}" --repo "$GITHUB_REPOSITORY" \
+            --pattern "$FILE" --dir artifacts
+          ls -l artifacts
+
+      - name: 拆包并断言运行时资产齐备
+        run: python scripts/verify-artifacts.py --version "${{ inputs.version }}" --dir artifacts --only ${{ matrix.kind }}

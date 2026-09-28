@@ -54,6 +54,18 @@ REQUIRED = [
     "dsh-runtime/node_modules/@deepseek-ai/dsh-agent-preset/skills/cordis-composition-reference/SKILL.md",
 ]
 
+# 壳自己的随包载荷 —— 少任何一个，对应的功能在用户那里就是"没有"。
+# 2026-09-28：用户在 Windows 上反馈「里面没有法律模式」，所以把这些也纳入断言，
+# 先排除"包本身就缺载荷"这一层。
+SHELL_ASSETS = [
+    "/legal-mode/plugin/lib/client.js",          # 法律模式的客户端插件
+    "/legal-mode/plugin/package.json",
+    "/office-runtime/runtime.json",               # office 载荷
+    "/bundled-plugins/dsh-cn-compliance",         # 随包插件（合规）
+    "/bundled-plugins/dsh-cn-doc-formatter",      # 随包插件（公文排版）
+    "/dist/main/legal-mode.js",                   # 注入逻辑本身（在 app.asar 内）
+]
+
 TARGETS = {
     "dmg": "DeepWhale-Desktop-{v}-arm64.dmg",
     "deb": "DeepWhale-Desktop-{v}-amd64.deb",
@@ -108,6 +120,24 @@ def asar_paths(asar_file):
     return out
 
 
+def scan_shell_assets(root):
+    """在解包树里按后缀实搜壳载荷。
+
+    不要猜路径（`<root>/resources/...`）—— 各平台布局不同：
+    deb 解出来是 `<root>/opt/Deep Whale/resources/...`，exe 是 `<root>/resources/...`，
+    dmg 是挂载点里的 `<App>.app/Contents/Resources/...`。
+    第一版就是猜的，于是对 deb 报了一堆假缺失。
+    """
+    found = set()
+    for base, dirs, files in os.walk(root):
+        for name in list(dirs) + list(files):
+            rel = os.path.join(base, name).replace(os.sep, "/")
+            for a in SHELL_ASSETS:
+                if rel.endswith(a):
+                    found.add(a)
+    return found
+
+
 def find_asar(root):
     hits = []
     for base, _dirs, files in os.walk(root):
@@ -146,7 +176,9 @@ def extract_dmg(path, work):
         #    手工验证时是"先解析再卸载"所以没暴露）。
         asar = os.path.join(work, "app.asar")
         shutil.copy2(src, asar)
-        return ver, asar, app
+        # ⚠️ 必须在 detach 之前扫载荷 —— 卸载后这个目录就没了
+        found = scan_shell_assets(app)
+        return ver, asar, app, found
     finally:
         run(["hdiutil", "detach", mnt, "-quiet"])
 
@@ -180,8 +212,7 @@ def extract_deb(path, work):
     if not asars:
         raise RuntimeError("deb 里没找到 app.asar")
     asar = asars[0]
-    # 版本从 resources/app-update.yml 或 package.json 里读不靠谱，用 productName 目录名兜底
-    return "?", asar, root
+    return "?", asar, root, scan_shell_assets(root)
 
 
 def extract_exe(path, work):
@@ -208,7 +239,7 @@ def extract_exe(path, work):
         if not hits:
             raise RuntimeError("解出来的 app.asar 找不到")
         asar = hits[0]
-    return "?", asar, work
+    return "?", asar, work, scan_shell_assets(work)
 
 
 EXTRACTORS = {"dmg": extract_dmg, "deb": extract_deb, "exe": extract_exe}
@@ -235,9 +266,15 @@ def main():
                 results.append((name, "取不到文件", "-", "-"))
                 failures.append(f"{name}: 取不到安装包")
                 continue
-            ver, asar, _root = EXTRACTORS[name](path, work)
+            ver, asar, _root, disk_found = EXTRACTORS[name](path, work)
             paths = asar_paths(asar)
             missing = [r for r in REQUIRED if not any(p.endswith("/" + r) for p in paths)]
+            # 壳自己的载荷可能在 app.asar 内，也可能在 app.asar 外的 Resources 下
+            shell_missing = []
+            for a in SHELL_ASSETS:
+                in_asar = any(p.endswith(a) for p in paths)
+                if not (in_asar or a in disk_found):
+                    shell_missing.append(a)
             skills = [p for p in paths if p.endswith("SKILL.md")]
             print(f"    app.asar 内文件数 {len(paths)}；SKILL.md {len(skills)} 个；包内版本 {ver}")
             if ver not in ("?", args.version):
@@ -250,6 +287,13 @@ def main():
                     print(f"         {m}")
             else:
                 print("    ✅ 6 个运行时资产齐备（office 三项 + agent-preset 三项）")
+            if shell_missing:
+                failures.append(f"{name}: 缺 {len(shell_missing)} 个壳载荷")
+                print(f"    ❌ 缺 {len(shell_missing)} 个壳载荷（法律模式/office/随包插件）：")
+                for m in shell_missing:
+                    print(f"         {m}")
+            else:
+                print("    ✅ 壳载荷齐备（法律模式客户端插件 + office + 随包插件 + 注入逻辑）")
             results.append((name, ver, len(paths), len(skills)))
         except Exception as e:  # noqa: BLE001 - 自检脚本，任何异常都要变成明确的失败
             print(f"    ❌ 拆包失败：{e}")

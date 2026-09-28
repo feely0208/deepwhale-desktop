@@ -64,8 +64,23 @@ jobs:
             exe) FILE="DeepWhale-Desktop-${V}-x64-Setup.exe" ;;
           esac
           mkdir -p artifacts
-          gh release download "${{ inputs.tag }}" --repo "$GITHUB_REPOSITORY" \
-            --pattern "$FILE" --dir artifacts
+          # ⚠️ 不能用 `gh release download <tag>`：**draft release 取不到** ——
+          #    drafts 不由 `/releases/tags/{tag}` 返回（实测报 "release not found"），
+          #    而我们要的正是"发布前就验"。所以按 release id → asset id 取。
+          RID=$(gh api "repos/$GITHUB_REPOSITORY/releases" --paginate \
+            -q ".[] | select(.tag_name == \"${{ inputs.tag }}\") | .id" | head -1)
+          if [ -z "$RID" ]; then
+            echo "::error::找不到 tag ${{ inputs.tag }} 的 release（含 draft）"
+            exit 1
+          fi
+          AID=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RID/assets" \
+            -q ".[] | select(.name == \"$FILE\") | .id")
+          if [ -z "$AID" ]; then
+            echo "::error::release ${{ inputs.tag }} 里没有附件 $FILE"
+            exit 1
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/releases/assets/$AID" \
+            -H "Accept: application/octet-stream" > "artifacts/$FILE"
           ls -l artifacts
 
       - name: 拆包并断言运行时资产齐备

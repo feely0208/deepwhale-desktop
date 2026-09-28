@@ -80,6 +80,11 @@ function bumpFile(file, opts) {
     // 产物名由常量拼接而成，不再有字面量可匹配。少了这三条，Pages 会**静默
     // 跳过**（报「无需改动」却什么都没升），下一版就会带着旧版本号上线。
     { name: 'LAWYER_VER', re: /LAWYER_VER\s*=\s*'\d+\.\d+\.\d+'/g, to: `LAWYER_VER = '${lawyer}'` },
+    // 套装的徽章常量。**必须独立于 DESKTOP_VERSION** ——
+    // 借用桌面端常量的后果（2026-09-28 实测）：壳发 1.0.19 而套装的包还在传 CDN、
+    // 链接只能留 1.0.18 时，套装徽章会跟着桌面端显示 1.0.19，
+    // 用户在浏览器里看到的就是「v1.0.19 / 下到 1.0.18」。
+    { name: 'SUITE_VERSION', re: /SUITE_VERSION\s*=\s*'v[\d.]+'/g, to: `SUITE_VERSION='v${suite}'` },
     { name: 'SUITE_TAG', re: /SUITE_TAG\s*=\s*'suite-v[\d.]+'/g, to: `SUITE_TAG = 'suite-v${suite}'` },
     { name: 'SUITE_VER', re: /SUITE_VER\s*=\s*'\d+\.\d+\.\d+'/g, to: `SUITE_VER = '${suite}'` },
   ];
@@ -88,36 +93,96 @@ function bumpFile(file, opts) {
   // 用 `class="cnt">v[\d.]+ · N 个平台` 这种通用模式会**误伤别的分组** ——
   // 下载页上除了壳/套装，还有律师端与移动端两组，通用模式会把它们的版本号一并改掉。
   const esc = (v) => v.replace(/\./g, '\\.');
+  // ⚠️ 徽标替换必须**按分组限定**，不能全局匹配。
+  //
+  // 反例（2026-09-28 真实踩到）：壳与套装的当前版本恰好都是 1.0.18，
+  // 而"壳版本徽标"的匹配模式是全局的 `class="dlx-chip ver">v1.0.18<` ——
+  // 于是**套装那几张卡的徽标也被改成了 1.0.19**，而它们的下载链接仍是 1.0.18，
+  // 页面上出现「徽章 1.0.19 / 链接 1.0.18」。部署自检当场报了出来。
+  //
+  // 所以：把页面按 `dlx-group` 切块，每个分组只应用**属于它自己**的那族规则。
   const families = [
-    { key: '壳', oldV: oldShell, newV: shell, platforms: null },
-    { key: '套装', oldV: oldSuite, newV: suite, platforms: suitePlatforms },
-    { key: '律师端', oldV: oldLawyer, newV: lawyer, platforms: lawyerPlatforms },
+    { key: '壳', title: '深鲸桌面', oldV: oldShell, newV: shell, platforms: null },
+    { key: '律师端', title: '深鲸律师端', oldV: oldLawyer, newV: lawyer, platforms: lawyerPlatforms },
+    { key: '套装', title: '深鲸套装', oldV: oldSuite, newV: suite, platforms: suitePlatforms },
   ];
+  const applied = [];
+  const groupHits = {};
+  text = text.replace(
+    /(<div class="dlx-group">)([\s\S]*?)(?=<div class="dlx-group">|<\/div><\/div>\s*$|$)/g,
+    (whole, open, body) => {
+      // 归属只看分组标题（`<h3>`）。**绝不能**用「正文里出现过某族名」来判断：
+      // 套装组的标题就是「深鲸套装（桌面 + 律师端）」，正文里桌面端、律师端都提，
+      // 那样判断会让壳族/律师端规则二次命中套装组，把刚修好的 bug 原样带回来。
+      const title = (body.match(/<h3>([^<]*)<\/h3>/) ?? [])[1] ?? '';
+      const fam = families.find((f) => f.oldV && title.includes(f.title));
+      if (!fam) return whole; // 移动端等分组：不归任何一族，原样放行
+      let out = body;
+      let hits = 0;
+      // 平台卡片上的版本徽标
+      // 只有**真的改了字**才计入 hits —— 目标版本与旧版本相同时（比如套装这一版
+      // 故意留在旧版，等 CDN 传完再切），替换是空操作，不能报成"改了 N 处"。
+      out = out.replace(
+        new RegExp(`(class="dlx-chip ver">)v${esc(fam.oldV)}(<)`, 'g'),
+        (_m, a, b) => {
+          if (fam.oldV !== fam.newV) hits += 1;
+          return `${a}v${fam.newV}${b}`;
+        },
+      );
+      // 分组标题里的「vX · N 个平台」（N 只在显式传了 platforms 时才改）
+      out = out.replace(
+        new RegExp(`(class="cnt">)v${esc(fam.oldV)}( · )(\\d+)( 个平台)`, 'g'),
+        (_m, a, sep, n, tail) => {
+          if (fam.oldV !== fam.newV || (fam.platforms && fam.platforms !== n)) hits += 1;
+          return fam.platforms ? `${a}v${fam.newV}${sep}${fam.platforms}${tail}` : `${a}v${fam.newV}${sep}${n}${tail}`;
+        },
+      );
+      if (hits > 0) groupHits[fam.key] = (groupHits[fam.key] || 0) + hits;
+      return open + out;
+    },
+  );
   for (const fam of families) {
-    if (!fam.oldV) continue;
-    // 平台卡片上的版本徽标
-    rules.push({
-      name: `${fam.key}版本徽标`,
-      re: new RegExp(`(class="dlx-chip ver">)v${esc(fam.oldV)}(<)`, 'g'),
-      to: `$1v${fam.newV}$2`,
-    });
-    // 分组标题里的「vX · N 个平台」（N 只在传了 platforms 时才改）
-    rules.push({
-      name: `${fam.key}平台数标签`,
-      re: new RegExp(`(class="cnt">)v${esc(fam.oldV)}( · )(\\d+)( 个平台)`, 'g'),
-      to: fam.platforms
-        ? `$1v${fam.newV}$2${fam.platforms}$4`
-        : `$1v${fam.newV}$2$3$4`,
-    });
+    const n = groupHits[fam.key];
+    if (n) applied.push(`${fam.key}分组徽标/平台数×${n}`);
   }
 
-  const applied = [];
   for (const rule of rules) {
     const hits = (text.match(rule.re) ?? []).length;
     if (hits === 0) continue;
     text = text.replace(rule.re, rule.to);
     applied.push(`${rule.name}×${hits}`);
   }
+  // ── 自愈：卡片徽标必须等于链接文件名里的版本 ────────────────────────────
+  //
+  // 链接指向的是**真实存在的产物**（deploy.sh 会逐个 HEAD 校验 200），
+  // 所以链接是唯一可信来源，徽标只是它的显示副本。两者一旦脱节，页面就在骗用户：
+  // 显示 v1.0.19、点下去下到 1.0.18。
+  //
+  // 这是 2026-09-28 那个 bug 的**根因兜底**：壳族徽标替换是全局匹配，
+  // 而套装的包当时还没传上 CDN（版本刻意留在旧版），于是套装卡片被一并升了号，
+  // 页面上出现「徽章 1.0.19 / 链接 1.0.18」。上面按分组限定是"别改错"，
+  // 这里以链接为准是"改了也兜得住" —— 两道都要有。
+  //
+  // 用 split 而不是正则切卡片：卡片内部 `<div class="dlx-top">` 里就嵌套着
+  // `</div></div>`，懒惰匹配 `([\s\S]*?<\/div><\/div>)` 会在 dlx-meta/dlx-act
+  // **之前**就收尾，链接根本取不到。
+  const chunks = text.split(/(?=<div class="dlx-card)/);
+  for (let i = 1; i < chunks.length; i += 1) {
+    const href = chunks[i].match(/dl\.deepwhale\.org\.cn\/([^"']+)["']/);
+    if (!href) continue;
+    const fileVer = (href[1].match(/(\d+\.\d+\.\d+)/) ?? [])[1];
+    if (!fileVer) continue;
+    chunks[i] = chunks[i].replace(
+      /(class="dlx-chip ver">)v([0-9][0-9.]*)(<)/,
+      (m, a, shown, b) => {
+        if (shown === fileVer) return m;
+        applied.push(`徽标按链接纠正：${href[1].split('/').pop()} v${shown}→v${fileVer}`);
+        return `${a}v${fileVer}${b}`;
+      },
+    );
+  }
+  text = chunks.join('');
+
   return { file, text, applied, old: { shell: oldShell, lawyer: oldLawyer, suite: oldSuite } };
 }
 

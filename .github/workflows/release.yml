@@ -70,31 +70,66 @@ jobs:
           npm install "@deepseek-ai/dsh@0.1.7-rc.2" --prefix dsh-runtime --no-audit --no-fund --loglevel=error
           test -f dsh-runtime/node_modules/@deepseek-ai/dsh/lib/bin.js
 
-          # ── 裁掉运行期用不到的开发产物（实测省约 120MB）────────────────
+          # ── 裁掉运行期用不到的开发产物（实测省约 110MB）────────────────
           # 本机实测（2026-09-27）：
           #   *.map     4,375 个  55.8 MB   source map，只影响堆栈的行号映射
           #   *.d.ts    7,164 个  53.9 MB   TypeScript 声明，只服务编译期
-          #   *.md        947 个  10.1 MB   依赖自带的文档
-          # 合计约 120MB / 12,000+ 个文件，运行期完全不需要。
+          # 合计约 110MB / 11,000+ 个文件。
           #
-          # 裁完做过实跑验证：dsh --version 返回 0.1.7-rc.2、--help 正常输出，
-          # 运行时功能不受影响。
-          #
-          # 这一步直接减小 app.asar（325MB → 约 245MB），
-          # 从而减小安装包体积与安装后占用的磁盘。
+          # ⛔ 这里**绝不能裁 `*.md`**（2026-09-28 血的教训）：
+          #   当初以为 "947 个 .md 都是依赖自带的文档，运行期不需要"，于是连它一起删。
+          #   实际上 dsh-runtime 下有 6 个 SKILL.md 是**运行时按路径读进来的资产**：
+          #     · @deepseek-ai/dsh-skill-office/assets/office-{docx,xlsx,pptx}/SKILL.md
+          #     · @deepseek-ai/dsh-agent-preset/skills/*/SKILL.md
+          #   后果：1.0.19 发出去的包里 dsh-skill-office **激活失败**
+          #     「Error: ENOENT … assets/office-docx/SKILL.md not found in app.asar」
+          #   —— 办公能力（Word/Excel/PPT）在正式包里直接是坏的，
+          #   而安装包本身能启动、法律模式也正常，所以**看起来一切正常**。
+          #   教训：`dsh --version` / `--help` 跑通**证明不了**插件能激活。
+          #   真正的守门是后面的「随包运行时启动自检」：真起一次、断言没有条目激活失败。
+          # .md 总共才 10MB，为了它冒这个险不值得。
           before_files=$(find dsh-runtime -type f | wc -l | tr -d ' ')
           before=$(du -sm dsh-runtime | awk '{print $1}')
-          find dsh-runtime \( -name '*.map' -o -name '*.d.ts' -o -name '*.d.ts.map' -o -name '*.md' \) -type f -delete
+          # 裁剪前先记下完整文件清单 —— 事后拿它做"到底删了什么"的断言。
+          find dsh-runtime -type f | sort > /tmp/rt-before.txt
+          find dsh-runtime \( -name '*.map' -o -name '*.d.ts' -o -name '*.d.ts.map' \) -type f -delete
           find dsh-runtime \( -name '.eslintrc*' -o -name '.prettierrc*' -o -name 'tsconfig.json' -o -name '.editorconfig' \) -type f -delete
+          find dsh-runtime -type f | sort > /tmp/rt-after.txt
+
+          # ── 断言：删掉的每一个文件都必须是"预期可删"的那几类 ────────────
+          #
+          # 为什么是"逐文件核对"而不是"数几个 SKILL.md"：
+          # 2026-09-28 出的事故是 `-name '*.md'` 把
+          #   @deepseek-ai/dsh-skill-office/assets/office-docx/SKILL.md
+          # 这类**运行时按路径读的资产**当"依赖文档"删了，office 技能激活失败，
+          # 1.0.19 的正式包里办公能力直接是坏的 —— 而包装得上、启动得了、
+          # 法律模式也在，从外面看一切正常。
+          # 这条断言把"裁剪"约束成白名单行为：想删新的一类，就必须显式改这里。
+          comm -23 /tmp/rt-before.txt /tmp/rt-after.txt > /tmp/rt-deleted.txt
+          UNEXPECTED=$(grep -vcE '\.(map|d\.ts|d\.ts\.map)$|/(\.eslintrc[^/]*|\.prettierrc[^/]*|tsconfig\.json|\.editorconfig)$' /tmp/rt-deleted.txt || true)
+          if [ "$UNEXPECTED" -ne 0 ]; then
+            echo "::error::裁剪删掉了 ${UNEXPECTED} 个预期之外的文件 —— 运行时资产可能被误删，包会变成「能启动但功能坏」"
+            grep -vE '\.(map|d\.ts|d\.ts\.map)$|/(\.eslintrc[^/]*|\.prettierrc[^/]*|tsconfig\.json|\.editorconfig)$' /tmp/rt-deleted.txt | head -20
+            exit 1
+          fi
+          echo "裁剪删除 $(wc -l < /tmp/rt-deleted.txt | tr -d ' ') 个文件，全部属于预期类别"
+
+          # 再点名兜一道：这几个是已知的运行时资产，缺一个插件就激活失败。
+          for f in \
+            dsh-runtime/node_modules/@deepseek-ai/dsh-skill-office/assets/office-docx/SKILL.md \
+            dsh-runtime/node_modules/@deepseek-ai/dsh-skill-office/assets/office-xlsx/SKILL.md \
+            dsh-runtime/node_modules/@deepseek-ai/dsh-skill-office/assets/office-pptx/SKILL.md ; do
+            test -f "$f" || { echo "::error::运行时资产缺失：$f"; exit 1; }
+          done
           after_files=$(find dsh-runtime -type f | wc -l | tr -d ' ')
           after=$(du -sm dsh-runtime | awk '{print $1}')
           echo "裁剪随包运行时：${before} MB / ${before_files} 个 → ${after} MB / ${after_files} 个（省 $((before-after)) MB）"
 
           # 断言真的裁掉了：依赖结构变化导致裁剪静默失效时，这里必须失败，
-          # 而不是悄悄发一个大了 120MB 的包出去。
+          # 而不是悄悄发一个大了 110MB 的包出去。
           saved=$((before-after))
-          if [ "$saved" -lt 80 ]; then
-            echo "::error::裁剪只省了 ${saved} MB，低于预期（约 120MB）—— 依赖结构可能变了，请检查"
+          if [ "$saved" -lt 70 ]; then
+            echo "::error::裁剪只省了 ${saved} MB，低于预期（约 110MB）—— 依赖结构可能变了，请检查"
             exit 1
           fi
 

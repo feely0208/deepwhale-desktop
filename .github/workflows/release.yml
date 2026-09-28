@@ -180,10 +180,14 @@ jobs:
       #   · test-inject-race.js  —— home/profile 两层注入、只读载荷、幂等、老用户升级
       #   · check-menu-i18n.js   —— 每个 role 都必须显式写中文 label
       #     （Electron 的 role 只给行为不给文案，漏写就会冒出英文默认项）
-      - name: 离线守卫（注入竞态 / 菜单中文）
+      - name: 离线守卫（注入竞态 / 菜单中文 / 法律模式花名册）
         run: |
           node scripts/test-inject-race.js
           node scripts/check-menu-i18n.js
+          # 法律模式必须真的进 Agent 预设花名册 —— 只验客户端插件在不在是不够的：
+          # 曾经客户端插件好好的，而预设写进了运行时已不读的目录，
+          # 三平台的选择器里都没有「法律模式」，所有检查却都是绿的。
+          node scripts/check-legal-preset-roster.js
 
       - name: Package (构建安装包，不发布)
         run: npm run dist -- --publish never ${{ matrix.args }}

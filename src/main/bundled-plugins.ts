@@ -25,6 +25,13 @@ interface BundledPlugin {
 const BUNDLED_PLUGINS: BundledPlugin[] = [
   { name: '@deepwhale-cn/dsh-cn-compliance', dir: 'dsh-cn-compliance' },
   { name: '@deepwhale-cn/dsh-cn-doc-formatter', dir: 'dsh-cn-doc-formatter' },
+  // 「法律模式」预设。**必须走 bundle**：0.1.7-rc.2 起预设不再是
+  // `<home>/.agent-presets/<id>/` 目录（运行时文档原话：Nothing reads that
+  // directory any more），而是 `@deepseek-ai/dsh-agent-preset` 的声明，由 bundle
+  // 的 patch 携带。壳原来只写那个目录，于是「法律模式」从来不进花名册 ——
+  // 用户在选择器里根本找不到它（2026-09-28 实测：--dump-config 只有 4 个随包预设）。
+  // 产物由 scripts/build-legal-preset-bundle.js 从 legal-mode/preset/ 生成。
+  { name: '@deepwhale-cn/dsh-legal-preset', dir: 'dsh-legal-preset' },
 ];
 
 /** 注入结果。 */

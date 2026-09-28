@@ -129,6 +129,13 @@ async function main() {
     console.log(`[bundled-plugins]   → ${path.relative(process.cwd(), dest)}`);
   }
 
+  // 第三个是个**本地生成**的 bundle（不是 npm 包）：法律模式预设。
+  // 它必须和上面两个一样躺在这个载荷目录里，壳的 ensureBundledPlugins 才会装它。
+  // 详见 scripts/build-legal-preset-bundle.js 开头的原因说明。
+  execFileSync(process.execPath, [path.join(__dirname, 'build-legal-preset-bundle.js'), '--out', outDir], {
+    stdio: 'inherit',
+  });
+
   console.log(`[bundled-plugins] done → ${outDir}`);
 }
 

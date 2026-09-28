@@ -369,7 +369,10 @@ function adaptPresetToRuntime(content: string, needsPrefix: boolean | null): str
  * - `<home>/profiles/web/node_modules/<name>` 指向上面的软链（profile 的解析点）
  * - `<home>/profiles/web/package.json` 声明 `link:` 依赖
  * - `<home>/profiles/web/cordis.patch.yml` 插入 `ui-legal-mode` 行
- * - `<home>/.agent-presets/legal-mode/` 出厂预设（DSH 花名册据此提供「法律模式」）
+ * - `<home>/.agent-presets/legal-mode/` 出厂预设 —— **只对 0.1.7-rc.2 之前的老运行时有效**。
+ *   新运行时不读这个目录（它自带文档写着 "Nothing reads that directory any more."），
+ *   预设改由 bundle 声明提供，见 bundled-plugins.ts 里的 `dsh-legal-preset`。
+ *   保留这份拷贝是为了兜住用户自备的旧 DSH；新路径才是「法律模式」真正生效的地方。
  *
  * profile 目录由 DSH 首次启动创建，因此首次调用会返回 `profilePending`：
  * 调用方在 DSH 就绪后再调用一次即可补齐，并让窗口重载。

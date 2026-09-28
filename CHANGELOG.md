@@ -4,6 +4,44 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [SemVer](https://semver.org/lang/zh-CN/)。
 
+## [1.0.20] - 2026-09-28
+
+**只做一件事：把 1.0.19 里被我误删的随包运行时资产加回去。**
+
+### 修复
+- **办公能力在 1.0.19 里是坏的（本次唯一改动）**
+
+  1.0.19 为了让安装包小 120MB，加了一条打包裁剪规则 `-name '*.md'`，
+  当时的前提是"`.md` 都是依赖自带的文档，运行期用不到"——**这个前提是错的**。
+
+  实测（从 CDN 下载正式 1.0.19 安装包、装上、启动随包运行时）：
+
+  ```
+  dsh: warning: 1 entry did not activate
+  skill-office: Error: ENOENT,
+    dsh-runtime/node_modules/@deepseek-ai/dsh-skill-office/assets/office-docx/SKILL.md
+    not found in .../Resources/app.asar
+  ```
+
+  核对包内清单：`dsh-skill-office/assets/` 下只剩 `scripts/check_office.py`，
+  三个 `SKILL.md` 全被删；`dsh-agent-preset/skills/` 下 3 个也一起没了。
+  macOS 与 Linux 包都实测确认，共 6 个文件。
+
+  表现是**"装了但功能没有"**：包装得上、启动得了、法律模式也正常，从外面看不出问题。
+
+  修复：裁剪规则去掉 `*.md`（共约 10MB，不值得冒这个险）。
+  **运行时代码零改动** —— `git diff v1.0.19 HEAD -- src/` 只有 `if (SMOKE)` 里的一行冒烟日志。
+
+### 加固
+- 新增「裁剪白名单断言」：裁剪前记录完整文件清单，事后逐文件核对，
+  任何一个被删文件不属于预期类别（`*.map` / `*.d.ts` / `*.d.ts.map` /
+  `.eslintrc*` / `.prettierrc*` / `tsconfig.json` / `.editorconfig`）即失败。
+  想删新的一类必须显式改这条断言。
+- 再点名断言三个 office `SKILL.md` 必须存在。
+
+  这条断言的意义在于：原先的自检只跑 `dsh --version` / `--help`，
+  它们**证明不了插件能激活**，所以 1.0.19 给了一个假通过。
+
 ## [1.0.19] - 2026-09-28
 
 修掉 1.0.18 引入的回归，并解决「从 dmg 直接运行装不上 office」的问题。

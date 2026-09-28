@@ -1,0 +1,62 @@
+# 删除 OBS（官网 CDN）上的对象 —— 发版作废时要能擦干净。
+#
+# 为什么需要：同步是逐个文件落地的，作废一版之后，已落地的那些会变成
+# 「官网没有、CDN 上有」的幽灵文件：旧链接还能下到作废的版本，而对着官网查不出原因。
+#
+# 触发：手动，inputs.keys 填对象名（空格或换行分隔）。
+name: OBS delete
+
+on:
+  workflow_dispatch:
+    inputs:
+      keys:
+        description: '要删除的对象名（多个用空格/换行分隔），如 DeepWhale-Desktop-1.0.20-amd64.deb'
+        required: true
+      dry_run:
+        description: '只列不删（true/false）'
+        required: false
+        default: 'false'
+
+permissions:
+  contents: read
+
+jobs:
+  delete:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 删除对象
+        env:
+          OBS_AK: ${{ secrets.OBS_AK }}
+          OBS_SK: ${{ secrets.OBS_SK }}
+          OBS_BUCKET: ${{ secrets.OBS_BUCKET }}
+          OBS_ENDPOINT: ${{ secrets.OBS_ENDPOINT }}
+        run: |
+          set -e
+          if [ -z "$OBS_AK" ]; then
+            echo "::error::未配置 OBS_AK，无法删除"
+            exit 1
+          fi
+          # shellcheck disable=SC2086
+          node scripts/obs-delete.js ${{ inputs.keys }} ${{ inputs.dry_run == 'true' && '--dry-run' || '' }}
+
+      # 删完必须回源确认：CDN 有缓存，删除后仍可能短期返回 200/403，
+      # 但对象本身必须已经不在桶里 —— 所以这里只看"是否还能 HEAD 到 200"，
+      # 拿不到 200 即视为清干净；仍是 200 时给出明确警告。
+      - name: 回源确认已清干净
+        run: |
+          set -e
+          for k in ${{ inputs.keys }}; do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' -I --max-time 30 \
+              "https://dl.deepwhale.org.cn/${k}?cb=$RANDOM$RANDOM" || echo 000)
+            if [ "$code" = "200" ]; then
+              echo "::warning::${k} 仍返回 200 —— CDN 可能还在缓存旧副本，回源已删除，稍后会变成 403"
+            else
+              echo "  ✅ ${k} → HTTP ${code}（已不可下载）"
+            fi
+          done

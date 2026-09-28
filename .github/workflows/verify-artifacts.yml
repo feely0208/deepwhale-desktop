@@ -69,4 +69,8 @@ jobs:
           ls -l artifacts
 
       - name: 拆包并断言运行时资产齐备
+        env:
+          # Windows runner 控制台是 cp1252，脚本要打中文；不设这个会 UnicodeEncodeError
+          PYTHONIOENCODING: utf-8
+          PYTHONUTF8: '1'
         run: python scripts/verify-artifacts.py --version "${{ inputs.version }}" --dir artifacts --only ${{ matrix.kind }}

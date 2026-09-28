@@ -33,6 +33,14 @@ import subprocess
 import sys
 import tempfile
 
+# Windows runner 的控制台默认是 cp1252，本脚本要打中文，
+# 不强制 UTF-8 会直接 UnicodeEncodeError（2026-09-28 在 windows-latest 上实测踩到）。
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
 CDN = "https://dl.deepwhale.org.cn/"
 
 # 运行时按路径读取的资产 —— 少一个，对应插件就激活失败。
@@ -122,7 +130,22 @@ def extract_dmg(path, work):
         app = os.path.join(mnt, apps[0])
         plist = os.path.join(app, "Contents", "Info.plist")
         ver = run(["plutil", "-extract", "CFBundleShortVersionString", "raw", plist]).stdout.strip()
-        asar = os.path.join(app, "Contents", "Resources", "app.asar")
+        src = os.path.join(app, "Contents", "Resources", "app.asar")
+        if not os.path.exists(src):
+            # 别只丢一句 ENOENT —— 把实际结构打出来，否则根本猜不出是脚本错了还是包错了
+            print(f"    [诊断] {app} 下没有 Contents/Resources/app.asar，实际结构：")
+            for sub in ("Contents", "Contents/Resources"):
+                d = os.path.join(app, sub)
+                if os.path.isdir(d):
+                    print(f"      {sub}/: {sorted(os.listdir(d))[:20]}")
+            raise RuntimeError("dmg 里的 .app 没有 Contents/Resources/app.asar")
+        # ⚠️ **必须先把 asar 拷出挂载点，再卸载**。
+        #    原来这里直接返回挂载点里的路径，而 finally 会立刻 hdiutil detach ——
+        #    调用方拿到的是一个已经失效的路径，报 ENOENT，
+        #    看起来像"包里没有 app.asar"，实际上是自己把盘卸了（2026-09-28 实测踩到，
+        #    手工验证时是"先解析再卸载"所以没暴露）。
+        asar = os.path.join(work, "app.asar")
+        shutil.copy2(src, asar)
         return ver, asar, app
     finally:
         run(["hdiutil", "detach", mnt, "-quiet"])

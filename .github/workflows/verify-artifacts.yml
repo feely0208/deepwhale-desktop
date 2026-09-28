@@ -22,8 +22,11 @@ on:
         description: '包内应含的版本号（如 1.0.20，不带 v）'
         required: true
 
+# ⚠️ 必须 write：**draft release 只对具备 push 权限的 token 可见**。
+#   用 read 时 `gh api .../releases` 列表里根本没有那条 draft，于是报"找不到 release"
+#   —— 而"发布前就验"正是本工作流存在的理由（实测踩过）。
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   verify:

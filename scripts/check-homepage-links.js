@@ -4,7 +4,6 @@
  *
  * 用法：
  *   node scripts/check-homepage-links.js
- *   GH_TOKEN=... node scripts/check-homepage-links.js   # 检查 Draft release 时需要
  *
  * ── 为什么重写（2026-09-28）─────────────────────────────────────────
  * 老版本有两个问题，合起来等于"一次都没真正检查过"：
@@ -32,7 +31,11 @@ const path = require('path');
 
 const FILE = path.join(__dirname, '..', 'docs', 'index.html');
 const html = fs.readFileSync(FILE, 'utf-8');
-const TOKEN = process.env.GH_TOKEN || process.env.GITHUB_TOKEN || '';
+// ⚠️ **刻意不带 token**：用户在落地页点下载是**匿名**访问，
+//    所以这里也必须用匿名身份去 HEAD —— 带了 token 反而验不出真实情况。
+//    （实测 2026-09-28：CI 里传了 GITHUB_TOKEN，GitHub 的下载地址一律回 401，
+//      13 条链接全报失败，而本地匿名跑是全绿的 —— 差异全在这个头上。）
+const TOKEN = '';
 
 // ── 解析页面里的常量 ─────────────────────────────────────────────
 const consts = {};
@@ -92,8 +95,7 @@ console.log(`解析出 ${list.length} 个下载地址，逐个检查：\n`);
 function head(url) {
   return new Promise((resolve) => {
     const headers = { 'User-Agent': 'deepwhale-link-check' };
-    // Draft release 的附件对公开 URL 是 404，必须带 token 才查得准
-    if (TOKEN) headers.Authorization = `Bearer ${TOKEN}`;
+    if (TOKEN) headers.Authorization = `token ${TOKEN}`;
     const req = https.request(url, { method: 'HEAD', headers, timeout: 30000 }, (res) => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
         res.resume();

@@ -37,9 +37,9 @@ jobs:
       #（没有任何工作流调用它），而且它只会抓 HTML 里的字面量 URL，
       # 抓不到这种「常量拼出来的」地址 —— 等于双重失效。
       # 现在它会把常量解析出来、按页面自己的拼接规则算出真实 URL 再逐个 HEAD。
+      # 注意：**不要**给它传 token —— 这里要验的就是"匿名用户点下去能不能下到"。
+      # 传了 GITHUB_TOKEN 反而会让 GitHub 的下载地址一律回 401（实测）。
       - name: 校验落地页下载链接（有 404 就拒绝发布）
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node scripts/check-homepage-links.js
 
       - uses: actions/configure-pages@v5

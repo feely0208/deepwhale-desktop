@@ -71,8 +71,57 @@ echo "── 构建 ──"
 npm run build 2>&1 | grep -E "error TS|copy-assets\] done" | head -5
 
 echo "── 跑冒烟（端口 $PORT，隔离 home）──"
-DSH_DESKTOP_SMOKE=1 ./node_modules/.bin/electron dist/main/index.js --no-sandbox > "$LOG" 2>&1
+# 壳放后台跑，同时并发轮询 DSH 界面查插件清单 ——
+# 必须断言**用户实际能看到的结果**（界面里有没有法律模式），
+# 而不是"注入写了盘"。本轮踩的坑恰恰是"写盘了但界面看不到"：
+# DSH 的客户端插件清单在服务启动那一刻定型，事后重载页面也不变。
+PLUGIN_OUT="/tmp/dsh-smoke-plugins-$$.txt"
+UI_JAR="/tmp/dsh-smoke-jar-$$.txt"
+UI_HTML="/tmp/dsh-smoke-ui-$$.html"
+: > "$PLUGIN_OUT"
+
+DSH_DESKTOP_SMOKE=1 ./node_modules/.bin/electron dist/main/index.js --no-sandbox > "$LOG" 2>&1 &
+APP_PID=$!
+
+(
+  TURL=""
+  for _ in $(seq 1 40); do
+    sleep 3
+    TURL=$(grep -oE '\[smoke\] dsh token url: \S+' "$LOG" 2>/dev/null | head -1 | sed 's/.*url: //')
+    [ -n "$TURL" ] && break
+  done
+  if [ -z "$TURL" ]; then echo "NO_TOKEN" > "$PLUGIN_OUT"; exit 0; fi
+  curl -sSL -c "$UI_JAR" -b "$UI_JAR" -o "$UI_HTML" --max-time 20 "$TURL" 2>/dev/null
+  python3 - "$UI_HTML" > "$PLUGIN_OUT" 2>/dev/null <<'PY'
+import re, sys
+try:
+    html = open(sys.argv[1], encoding='utf-8').read()
+except Exception:
+    print("NO_UI"); raise SystemExit
+m = re.search(r'plugins/\?\?([^"]+)"', html)
+if not m:
+    print("NO_MANIFEST"); raise SystemExit
+items = [x.split('/client.js')[0] for x in m.group(1).split(',') if x]
+print("COUNT=%d" % len(items))
+print("LEGAL=%s" % ("YES" if any('legal' in i for i in items) else "NO"))
+PY
+) &
+POLLER=$!
+
+wait $APP_PID
 CODE=$?
+wait $POLLER 2>/dev/null
+
+echo
+echo "── 界面插件清单断言（首次启动，未经重启）──"
+if grep -q "^LEGAL=YES" "$PLUGIN_OUT" 2>/dev/null; then
+  echo "  ✅ $(grep '^COUNT=' "$PLUGIN_OUT")，含 @deepseek-ai/dsh-client-ui-legal-mode"
+  LEGAL_OK=1
+else
+  echo "  ❌ 界面上【看不到】法律模式插件：$(head -1 "$PLUGIN_OUT" 2>/dev/null)"
+  LEGAL_OK=0
+fi
+rm -f "$UI_JAR" "$UI_HTML"
 
 echo
 echo "── 结果（已滤 GPU 噪音）──"
@@ -82,15 +131,29 @@ grep -vE "SharedImageManager|Invalid mailbox|shared_image_manager|skia_output_de
 echo
 if grep -q "\[smoke\] DSH ready" "$LOG" && grep -q "\[smoke\] page ready" "$LOG"; then
   SPAWNED=$(grep -c "\[service\] 启动随包 DSH 运行时" "$LOG" 2>/dev/null || echo 0)
-  if [ "$SPAWNED" -ge 1 ]; then
-    echo "  ✅ 冒烟通过（真实拉起了随包运行时，exit=$CODE）"
-  else
+  if [ "$SPAWNED" -lt 1 ]; then
     echo "  ❌ 冒烟**无效**：没有拉起随包运行时（复用了已有实例）—— 结果不可信，请检查端口是否被占"
+    rm -f "$PLUGIN_OUT"
     exit 2
+  fi
+
+  # ★ 关键断言：首次启动（未经重启）界面里就能看到法律模式。
+  #   这条断言是本轮事故的产物：v1.0.18 注入写盘成功、冒烟也报通过，
+  #   但用户在界面上看不到法律模式 —— 因为 DSH 的插件清单是服务启动时定型的。
+  #   只断言"注入成功"会给出假通过，必须断言"界面能看到"。
+  if [ "${LEGAL_OK:-0}" = "1" ]; then
+    echo "  ✅ 冒烟通过（真实拉起了随包运行时，exit=$CODE；法律模式首次启动即可见）"
+  else
+    echo "  ❌ 冒烟未通过：法律模式在首次启动的界面上不可见 —— 完整日志：$LOG"
+    rm -f "$PLUGIN_OUT"
+    exit 1
   fi
 else
   echo "  ❌ 冒烟未通过（exit=$CODE）—— 完整日志：$LOG"
+  rm -f "$PLUGIN_OUT"
+  exit 1
 fi
+rm -f "$PLUGIN_OUT"
 
 echo
 echo "── 测后回收 ──"

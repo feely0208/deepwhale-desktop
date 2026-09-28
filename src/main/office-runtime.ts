@@ -83,11 +83,23 @@ export function officePayloadDir(
  * @returns 包装脚本的绝对路径，以及本次是否真的写了盘。
  */
 export function ensureWrapperNode(
-  payloadDir: string,
+  outDir: string,
   electronPath: string,
 ): { file: string; changed: boolean } {
   const windows = process.platform === 'win32';
-  const file = path.join(payloadDir, 'bin', windows ? 'node.cmd' : 'node');
+  // ⚠️ outDir 必须是【可写目录】，不能是 App 包内的载荷目录。
+  //
+  // 原来这里传的是 payloadDir（`<App>/Contents/Resources/office-runtime`），
+  // 于是壳会**往自己的 App 包里写文件**。这在只读位置必然失败：
+  //   · 直接运行挂载好的 dmg —— 挂载点是只读的
+  //   · macOS 的 App Translocation（Gatekeeper 路径随机化）—— 从 dmg / 下载目录
+  //     直接双击运行时，系统把 App 复制到一个**随机的只读目录**再运行
+  // 实测报错：ENOENT: mkdir '.../Resources/office-runtime/bin'，整个 office 注入被跳过，
+  // 用户表现为「office 功能装不上」（2026-09-27）。
+  //
+  // 更根本的问题是设计：**程序不该修改自己的安装目录**。App 包是程序文件，
+  // 运行时产物属于用户数据，应当写到 `<home>/office-runtime/`（调用方保证可写）。
+  const file = path.join(outDir, 'bin', windows ? 'node.cmd' : 'node');
   // 路径可能含空格（macOS 的 .app 就是），必须整体加引号。
   const body = windows
     ? `@echo off\r\nset ELECTRON_RUN_AS_NODE=1\r\n"${electronPath}" %*\r\n`
@@ -115,9 +127,20 @@ function ensureOfficePatchRows(
   cliPath: string,
   payloadDir: string,
 ): boolean {
-  const current = readText(file);
-  if (current === null) return false;
-  if (current.includes(OFFICE_ROW_ID)) return false;
+  // 文件不存在时按空文件处理并创建 —— home 级 patch 是壳自己创建的，
+  // 不存在是常态（详见 legal-mode.ts 里同处说明）。
+  const current = readText(file) ?? '';
+  if (current.includes(OFFICE_ROW_ID)) {
+    // 行已存在 —— 但 `node:` 可能指向**旧位置**：老版本把包装脚本写在 App 包内
+    // （`<App>/Contents/Resources/office-runtime/bin/node`），而只读位置下那个文件
+    // 根本写不出来。路径变了就原地替换，否则老用户会一直踩这个坑。
+    const m = current.match(/^(\s*node:\s*)"([^"]*)"/m);
+    if (m && m[2] !== nodePath) {
+      const next = current.replace(/^(\s*node:\s*)"[^"]*"/m, `$1${JSON.stringify(nodePath)}`);
+      return writeIfChanged(file, next);
+    }
+    return false;
+  }
 
   const block = [
     '',
@@ -173,12 +196,32 @@ export function ensureOfficeSetup(
   }
 
   let changed = false;
-  const wrapper = ensureWrapperNode(payloadDir, electronPath);
+  // 包装脚本写到【用户数据目录】，不写 App 包内（理由见 ensureWrapperNode 注释）
+  const wrapperDir = path.join(home, 'office-runtime');
+  let wrapper: { file: string; changed: boolean };
+  try {
+    wrapper = ensureWrapperNode(wrapperDir, electronPath);
+  } catch (error) {
+    // home 也不可写就只能放弃（极端情况），但不能让整个启动失败
+    console.error('[office] 包装脚本写入失败:', error);
+    return { changed: false, profilePending: false };
+  }
   changed = wrapper.changed || changed;
 
+  // 【home 级】patch —— 与 legal-mode 同理：`<home>` 是壳自己建的，可以在拉起 DSH
+  // **之前**写好；而 `<home>/profiles/web/` 是 DSH 首次启动才建的，写在那儿必然太晚。
+  // DSH 的插件清单在服务启动那一刻定型，事后重载页面也不变（实测），
+  // 所以 office 两行也必须落在 home 级，首次启动才装得上。
+  changed = ensureOfficePatchRows(
+    path.join(home, 'cordis.patch.yml'),
+    wrapper.file,
+    cliPath,
+    payloadDir,
+  ) || changed;
+
+  // profile 级：保留原有注入，兼容只读 profile 级 patch 的 DSH 版本与既有用户。
+  // ⚠️ 与 home 级重复是安全的（实测只挂载一次）。
   const profileDir = path.join(home, 'profiles', 'web');
-  // 与 legal-mode 同一套时序约定：目录先于文件落盘，文件还没就位要算 pending，
-  // 否则会静默放弃写入（详见 legal-mode.ts 里同处的说明）。
   const profilePending =
     !fs.existsSync(profileDir) ||
     !fs.existsSync(path.join(profileDir, 'cordis.patch.yml'));

@@ -213,8 +213,12 @@ function copyTreeIfChanged(srcDir: string, destDir: string): boolean {
  * （含注释）的前提下追加一个 `- insert:` 块。
  */
 function ensurePatchRow(file: string): boolean {
-  const current = readText(file);
-  if (current === null) return false;
+  // 文件不存在时**按空文件处理并创建**。
+  //
+  // 原来这里是 `if (current === null) return false;` —— 对 profile 级够用（那个文件
+  // 由 DSH 创建），但 home 级 patch 是**壳自己创建**的，不存在是常态。
+  // 首次启动必须能在这里落盘，否则 home 级注入永远无效。
+  const current = readText(file) ?? '';
   if (current.includes(PLUGIN_ROW_ID)) return false;
 
   const block = [
@@ -423,14 +427,34 @@ export function ensureLegalModeSetup(
     changed = true;
   }
 
-  // 2. profile 侧：DSH 首次启动后才会创建 profiles/web
+  // 2. 【home 级】patch + 解析点 —— 这是**首次启动就能生效的关键**
+  //
+  // ── 为什么必须有这一段（2026-09-27 实测确认）──────────────────────────
+  // DSH 的客户端插件清单是 **服务启动那一刻** 建好的，之后**重新加载页面也不会变**
+  // （实测：注入后重拉界面，插件数仍是 58、不含法律模式；重启 DSH 才变成 59）。
+  // 而 `<home>/profiles/web/` 是 **DSH 首次启动才创建** 的 —— 所以写在 profile 级的
+  // 注入，天生就晚于 DSH 启动，首次启动**必然**看不到法律模式。
+  //
+  // `<home>` 是壳自己创建的，可以在拉起 DSH **之前**就写好。
+  // 官方文档也写明 home 级 patch  "applied over every profile's own layer"、
+  // outranks the per-profile layer，且 DSH 的设置导入完全不碰它。
+  // 实测：启动前写好 home 级 patch + `<home>/node_modules` 解析点，
+  // DSH 首次启动的插件清单里就**已经包含** ui-legal-mode（零报错）。
+  //
+  // ⚠️ 与 profile 级那几行**重复是安全的**：实测 home 级与 profile 级同时存在时，
+  //    插件仍然只挂载一次（清单里 legal 条目数 = 1），DSH 启动无任何告警。
+  //    所以老用户无需做"删除 profile 级旧行"的迁移。
+  changed = ensurePluginEntry(
+    path.join(home, 'node_modules', ...PLUGIN_NAME.split('/')),
+    pluginDir,
+  ) || changed;
+  changed = ensurePatchRow(path.join(home, 'cordis.patch.yml')) || changed;
+
+  // 3. profile 侧：保留原有注入，兼容只读 profile 级 patch 的 DSH 版本与既有用户。
   //
   // ⚠️ 目录**先于文件**落盘：DSH 把 profiles/web 建出来后，cordis.patch.yml 与
   // package.json 还要过一会儿才写。早先这里只在"目录不存在"时算 pending，于是
-  // 文件那一瞬间不在，下面就静默 `return false` 放弃写入 —— 注入丢失，用户首次
-  // 启动选「法律模式」弹不出，重启一次才好。实测同一个包两次全新启动：
-  // 一次 3/3 注入成功，一次 0/3。所以把"要写的文件还没就位"也算作 pending，
-  // 交给调用方重试。
+  // 文件那一瞬间不在，下面就静默 `return false` 放弃写入。
   const profileDir = path.join(home, 'profiles', 'web');
   const profilePending =
     !fs.existsSync(profileDir) ||

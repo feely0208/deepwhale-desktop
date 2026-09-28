@@ -694,6 +694,10 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
         const m = line.match(/dsh web:\s*(http:\/\/127\.0\.0\.1:\d+\/\?token=\S+)/);
         if (m) {
           dshTokenUrl = m[1];
+          // 冒烟专用：把带 token 的地址打出来，测试才能去查 DSH 界面。
+          // 没有这一行，冒烟就只能断言"注入写了盘"，而本轮踩的坑恰恰是
+          // "写盘了但界面看不到" —— 断言必须落在用户实际能看到的那个结果上。
+          if (SMOKE) console.log(`[smoke] dsh token url: ${m[1]}`);
           // 服务就绪后窗口可能已按裸地址加载（拿到 401 鉴权页），拿到 token 立即补载
           if (mainWin && !mainWin.isDestroyed() && !mainWin.webContents.getURL().includes('token=')) {
             void mainWin.loadURL(dshTokenUrl).catch(() => {});

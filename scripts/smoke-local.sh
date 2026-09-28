@@ -129,6 +129,11 @@ grep -vE "SharedImageManager|Invalid mailbox|shared_image_manager|skia_output_de
   | grep -E "smoke|service|legal-mode|office|plugins|Error" | head -20
 
 echo
+echo "── 「重载必须发生」断言 ──"
+# 逻辑抽到 scripts/check-reload-happened.sh，好让这条断言本身也能被否定测试。
+bash "$(dirname "$0")/check-reload-happened.sh" "$LOG" || { rm -f "$PLUGIN_OUT"; exit 1; }
+
+echo
 if grep -q "\[smoke\] DSH ready" "$LOG" && grep -q "\[smoke\] page ready" "$LOG"; then
   SPAWNED=$(grep -c "\[service\] 启动随包 DSH 运行时" "$LOG" 2>/dev/null || echo 0)
   if [ "$SPAWNED" -lt 1 ]; then

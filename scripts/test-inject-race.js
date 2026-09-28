@@ -105,30 +105,54 @@ function check(name, ok, detail) {
   if (!ok) failures += 1;
 }
 
-// ── 场景 1：注入后被设置导入覆盖（复现线上症状）─────────────────────
+// ── 场景 1：home 级注入必须**扛得住**设置导入（本轮修复的核心）──────────
+//
+// 旧判据是"设置导入后三行消失"——那描述的是**修复前**的症状。
+// 修好之后这个期望本身就该失败：现在三行写在 home 级，
+// 而设置导入只重写 profile 级，所以它们必须活下来。
 console.log('\n场景 1：注入 → DSH 设置导入整段重写 profile patch');
 {
   const home = makeHome();
   try {
     const r = inject(home);
-    const before = rowsWhere(home);
-    check('注入后三行齐备', before.length === 3, `实际 ${before.length}/3`);
+    const homePatch = path.join(home, 'cordis.patch.yml');
+    check('注入后三行齐备', rowsWhere(home).length === 3, `实际 ${rowsWhere(home).length}/3`);
     check('注入报告 profile 已就位', !r.legal.profilePending && !r.office.profilePending, '');
 
+    // "首启即可见"的载体就是 home 级这个文件：DSH 的客户端插件清单在
+    // **服务启动那一刻定型**，而 profile 目录要到 DSH 首次启动才被创建 ——
+    // 只写 profile 级在结构上就来不及。home 级由壳自己创建，先于服务启动。
+    check('home 级 patch 文件已创建（首启可见的载体）', fs.existsSync(homePatch), homePatch);
+    const homeText = fs.existsSync(homePatch) ? fs.readFileSync(homePatch, 'utf8') : '';
+    const inHome = ROW_IDS.filter((id) => homeText.includes(id));
+    check('三行都写进了 home 级', inHome.length === 3, `实际 ${inHome.join('、') || '无'}`);
+
     simulateSettingsImport(home);
-    const after = rowsWhere(home);
+    // 关键前提：profile 层**确实**被整段重写了。少了这条，本用例就是空转 ——
+    // 三行还在也可能只是因为压根没被覆盖过。
+    const profileText = fs.readFileSync(
+      path.join(home, 'profiles', 'web', 'cordis.patch.yml'),
+      'utf8',
+    );
     check(
-      '设置导入后三行消失（复现线上「弹不出」）',
-      after.length === 0,
-      `实际 ${after.length}/3 —— 若这里不再是 0，说明覆盖机制变了，需重新确认判据`,
+      '设置导入确实清空了 profile 层（否则本用例空转）',
+      !ROW_IDS.some((id) => profileText.includes(id)),
+      `profile 层剩余注入行: ${ROW_IDS.filter((id) => profileText.includes(id)).length}`,
     );
 
-    // 场景 1b：再次注入应能把三行补回来 —— 这正是 index.ts 的重试与 60 秒看护
-    // 所做的事（两者都是"再调一次这三个函数"），所以这一条验证的就是线上修复的
-    // 核心机制。
+    check(
+      '设置导入后三行仍然生效（home 级 outranks profile 级）',
+      rowsWhere(home).length === 3,
+      `实际 ${rowsWhere(home).length}/3 —— 退回 0 就是线上「弹不出律师端」复发`,
+    );
+
+    // 场景 1b：重试/看护仍是兜底 —— 把 home 级也清掉后，再注入要能补回。
+    fs.rmSync(homePatch, { force: true });
+    check('清掉 home 级后三行失效（证明上一条不是假通过）', rowsWhere(home).length === 0,
+      `实际 ${rowsWhere(home).length}/3`);
     inject(home);
-    const restored = rowsWhere(home);
-    check('再次注入后三行恢复（即重试/看护机制的判据）', restored.length === 3, `实际 ${restored.length}/3`);
+    check('再次注入后三行恢复（重试/看护的判据）', rowsWhere(home).length === 3,
+      `实际 ${rowsWhere(home).length}/3`);
   } finally {
     rm(home);
   }
@@ -176,15 +200,64 @@ console.log('\n场景 3：模拟 1.0.17 用户升级（profile 级已存在同 i
       path.join(home, 'profiles', 'web', 'cordis.patch.yml'),
       'utf8',
     );
-    // 同一个 id 出现在两层会导致加载器插入两次，必须只剩一处
-    const dup = ROW_IDS.filter((id) => profileText.includes(id) && rowsWhere(home).includes(id));
     check('三行仍然生效', rowsWhere(home).length === 3, `实际 ${rowsWhere(home).length}/3`);
+    // 同 id 在 home/profile 两层各一份是**预期内**的：老用户 profile 级里本来就有，
+    // 我们不去删（删了要动用户的文件），实测插件只挂载一次、无告警。
+    // 所以真正要守的不变量不是"层里不能重复"，而是"**生效的 id 恰好 3 个**"。
+    // 原来这条写成 `!some(...) || rowsWhere===3`，右边恒真 —— 恒真的断言等于没有断言。
+    const homeText = fs.readFileSync(path.join(home, 'cordis.patch.yml'), 'utf8');
     check(
-      '未在 profile 级留下重复插入',
-      !ROW_IDS.some((id) => profileText.includes(`id: ${id}`)) || rowsWhere(home).length === 3,
-      `重复项: ${dup.join(', ') || '无'}`,
+      '生效的 id 恰好 3 个（两层重复不影响挂载次数）',
+      rowsWhere(home).length === ROW_IDS.length && new Set(rowsWhere(home)).size === ROW_IDS.length,
+      `home 级 ${ROW_IDS.filter((i) => homeText.includes(i)).length} 行 / profile 级 ${ROW_IDS.filter((i) => profileText.includes(i)).length} 行 / 生效 ${rowsWhere(home).length} 个`,
     );
   } finally {
+    rm(home);
+  }
+}
+
+// ── 场景 4：载荷目录只读（从 dmg 直接运行 / App Translocation）──────────
+//
+// 线上症状：直接跑挂载好的 dmg 时 office 装不上。
+// 根因是壳往**自己的 App 包**里写 `Resources/office-runtime/bin/node`，
+// 而挂载点是只读的（App Translocation 还会把 App 复制到随机只读目录再运行）。
+// 实测报错：ENOENT: mkdir '.../Resources/office-runtime/bin'。
+// 修法是包装脚本写到 `<home>/office-runtime/bin/node`。
+console.log('\n场景 4：office 载荷目录只读时，注入不得往载荷里写东西');
+{
+  const home = makeHome();
+  const payload = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-ro-payload-'));
+  try {
+    fs.writeFileSync(path.join(payload, 'runtime.json'), `${JSON.stringify({ version: 'test' })}\n`);
+    const before = fs.readdirSync(payload).sort().join(',');
+    fs.chmodSync(payload, 0o555); // 只读，模拟 dmg 挂载点
+
+    let threw = null;
+    try {
+      ensureOfficeSetup(home, payload, RUNTIME_NODE_MODULES, process.execPath);
+    } catch (error) {
+      threw = error;
+    }
+
+    check(
+      '只读载荷下注入不抛错（旧代码会 ENOENT: mkdir …/Resources/office-runtime/bin）',
+      threw === null,
+      threw ? String(threw.message) : '',
+    );
+    check(
+      '载荷目录一个文件都没多',
+      fs.readdirSync(payload).sort().join(',') === before,
+      `现在: ${fs.readdirSync(payload).sort().join(',')}`,
+    );
+    const wrapper = path.join(home, 'office-runtime', 'bin', 'node');
+    check('包装脚本写在可写的 home 下', fs.existsSync(wrapper), wrapper);
+  } finally {
+    try {
+      fs.chmodSync(payload, 0o755);
+    } catch {
+      /* ignore */
+    }
+    rm(payload);
     rm(home);
   }
 }

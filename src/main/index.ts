@@ -815,16 +815,14 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
       // 最长看护 60 秒。只读文件 + 幂等重写，代价可忽略，
       // 且 60 秒后一定停止，不会长期干扰用户自己编辑这个文件。
       //
-      // 📌 待改进（更彻底、但需真机验证后再改）：DSH 有两个用户 patch 层 ——
-      //   ① `<home>/profiles/web/cordis.patch.yml`（profile 级）← 当前注入在这里，
-      //      也正是设置导入会重写的那一个；
-      //   ② `<home>/cordis.patch.yml`（home 级）—— 官方文档明确写它
-      //      "applied over every profile's own layer"，**outranks the per-profile
-      //      layer**，且设置导入完全不碰它。
-      //   把这三行改写到 home 级即可从根上免疫这个竞态，连重试与看护都不需要。
-      //   之所以先不动：已有 1.0.17 用户的 profile 级里已经有三行，直接叠加会
-      //   造成同 id 重复插入，需要一并做"从 profile 级移除旧行"的迁移，
-      //   而这个改动必须真机验证过才算数。
+      // ✅ 已处理（2026-09-28）：这三行现在**优先写在 home 级** `<home>/cordis.patch.yml`。
+      //   DSH 的客户端插件清单在**服务启动那一刻定型**，事后连页面重载都不变；
+      //   而 profile 目录是 DSH 首次启动时才创建的 —— 所以只写 profile 级
+      //   在结构上就"来不及"，这正是「首启看不到法律模式」的根因。
+      //   home 级由 shell 自己创建、设置在导入时也不碰它，因此首启即可见。
+      //   实测：首次启动的插件清单里直接含 @deepseek-ai/dsh-client-ui-legal-mode。
+      //   profile 级仍然照写，是为了兼容已经装过 1.0.17/1.0.18 的用户；
+      //   两边同时存在会插两行同 id 的条目，实测插件只挂载一次、无告警，故不做数据迁移。
       let guardTicks = 0;
       let steadyTicks = 0;
       const injectGuard = setInterval(() => {
@@ -861,9 +859,19 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
         // （表现为一条 ERR_ABORTED 告警），这里让重载晚一步。
         const win = mainWin;
         setTimeout(() => {
-          if (win.isDestroyed()) return;
+          if (win.isDestroyed()) {
+            if (SMOKE) console.log('[smoke] reload skipped (window destroyed)');
+            return;
+          }
           const url = dshTokenUrl || `http://127.0.0.1:${store.get('port')}/`;
-          void win.loadURL(url).catch(() => {});
+          // 「重载必须发生」在冒烟里是要断言的：只打印"已安排重载"没有意义 ——
+          // 真正决定用户看到什么的是这次 loadURL 有没有跑完。
+          void win
+            .loadURL(url)
+            .catch(() => {})
+            .finally(() => {
+              if (SMOKE) console.log('[smoke] reload done');
+            });
         }, 800);
         if (SMOKE) console.log('[smoke] legal-mode profile injection applied; reload scheduled');
       }

@@ -139,6 +139,17 @@ jobs:
           check bundled-plugins "随包插件（合规 + 公文排版）" 10
           echo "✅ 四个载荷齐备"
 
+      # 离线守卫：不进 CI 的守卫等于没有守卫 —— 这些缺陷当年都是"打出了包才发现"，
+      # 而打出包之后再发现，代价就是让用户下到一个装完不能用的版本。
+      # 两个都是纯 Node、不开窗口、秒级完成：
+      #   · test-inject-race.js  —— home/profile 两层注入、只读载荷、幂等、老用户升级
+      #   · check-menu-i18n.js   —— 每个 role 都必须显式写中文 label
+      #     （Electron 的 role 只给行为不给文案，漏写就会冒出英文默认项）
+      - name: 离线守卫（注入竞态 / 菜单中文）
+        run: |
+          node scripts/test-inject-race.js
+          node scripts/check-menu-i18n.js
+
       - name: Package (构建安装包，不发布)
         run: npm run dist -- --publish never ${{ matrix.args }}
         env:

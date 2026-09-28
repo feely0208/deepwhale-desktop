@@ -31,6 +31,25 @@ const PAYLOAD = {
 /** office 需要它来定位 LibreOffice Kit 的 CLI（指向随包运行时的 node_modules） */
 const RUNTIME_NODE_MODULES = path.join(REPO, 'dsh-runtime', 'node_modules');
 
+// 载荷缺失时**必须直接失败**，不能静默跑成"全绿"：
+// 注入函数在载荷不存在时会走"早退"分支（例如 office 找不到 runtime.json 就直接 return），
+// 那时三行照样可能被写对、断言个个通过 —— 但什么都没验证到。
+const PAYLOAD_FILES = [
+  [path.join(PAYLOAD.legal, 'plugin'), 'legal-mode/plugin'],
+  [path.join(PAYLOAD.office, 'runtime.json'), 'office-runtime/runtime.json'],
+  [path.join(PAYLOAD.plugins, 'dsh-cn-compliance'), 'bundled-plugins/dsh-cn-compliance'],
+];
+{
+  const missing = PAYLOAD_FILES.filter(([p]) => !fs.existsSync(p)).map(([, label]) => label);
+  if (missing.length > 0) {
+    console.error(
+      `\n❌ 随包载荷不齐，测试会跑成假通过：缺 ${missing.join('、')}\n` +
+        '   先跑 npm run build 与 scripts/build-*.js 生成载荷，再执行本测试。\n',
+    );
+    process.exit(1);
+  }
+}
+
 const ROW_IDS = ['ui-legal-mode', 'skill-office', 'tool-workspace-dependencies'];
 
 const PROFILE_HEADER = `# Your patch layer for this dsh profile, applied after every bundle layer:

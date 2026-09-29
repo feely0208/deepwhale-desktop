@@ -39,6 +39,7 @@ contextBridge.exposeInMainWorld('dsh', {
   skinPickImage: () => ipcRenderer.send('skin:pick-image'),
   skinClearImage: () => ipcRenderer.send('skin:clear-image'),
   skinSetOpacity: (value: number) => ipcRenderer.send('skin:set-opacity', value),
+  skinSetPreset: (preset: string) => ipcRenderer.send('skin:set-preset', preset),
   skinOpenCss: () => ipcRenderer.send('skin:open-css'),
   skinToggleCustomCss: (enabled: boolean) => ipcRenderer.send('skin:toggle-custom-css', enabled),
 

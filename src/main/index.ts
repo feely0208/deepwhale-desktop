@@ -23,7 +23,8 @@ import { SkinManager } from './skin-manager';
 import { PetWindow } from './pet';
 import { createTray, applyMenu, buildAppMenuTemplate, TrayMenuActions } from './tray';
 import { UsageManager, UsageSnapshot } from './usage-manager';
-import { injectSettingsExtension, expectedVersionRow } from './settings-inject';
+import { injectSettingsExtension, expectedVersionRow, resolveShellVersion } from './settings-inject';
+import { ensureFeedbackEntry } from './feedback';
 import { UpdateManager } from './update-manager';
 import { installCrashGuard, crashLogDir, appendCrashLog } from './crash-guard';
 
@@ -398,6 +399,7 @@ function registerIpc(): void {
   // ---- 主题 / 背景皮肤（设置页/菜单共用） ----
   ipcMain.handle('theme:state', () => ({
     skinImage: store.get('skinImage'),
+    skinPreset: store.get('skinPreset'),
     skinOpacity: store.get('skinOpacity'),
     customCssEnabled: store.get('customCssEnabled'),
     previewDataUri: skin.backgroundPreviewDataUri(),
@@ -405,6 +407,12 @@ function registerIpc(): void {
   ipcMain.on('skin:pick-image', () => void pickBackgroundImage());
   ipcMain.on('skin:clear-image', () => {
     if (mainWin) void skin.clearBackground(mainWin);
+    rebuildMenus();
+  });
+  ipcMain.on('skin:set-preset', (_e, preset: string) => {
+    // 只接受已知预设名 —— 这个值会被拼进注入的 CSS，不能让界面塞任意串进来
+    const safe = preset === 'deepseek-blue' ? 'deepseek-blue' : 'none';
+    if (mainWin) void skin.setPreset(mainWin, safe);
     rebuildMenus();
   });
   ipcMain.on('skin:set-opacity', (_e, value: number) => {
@@ -680,6 +688,15 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
     }
     if (SMOKE) {
       console.log(`[smoke] bundled plugins: changed=${String(pluginsSetup.changed)} pending=${String(pluginsSetup.profilePending)} payload=${pluginsPayload}`);
+    }
+
+    // 把「意见反馈」指到我们自己的反馈页 —— 不做的话它指向 DeepSeek 官方的飞书表单，
+    // 我们用户的反馈我们一条都收不到（详见 src/main/feedback.ts）。
+    try {
+      const feedbackChanged = ensureFeedbackEntry(legalHome, resolveShellVersion());
+      if (SMOKE) console.log(`[smoke] feedback entry: changed=${String(feedbackChanged)}`);
+    } catch (error) {
+      logInjectionFailure('feedback', '意见反馈入口注入', error);
     }
 
     service = new ServiceManager(store.get('command'), {

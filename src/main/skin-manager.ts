@@ -2,6 +2,7 @@ import { BrowserWindow, app, nativeImage, nativeTheme, shell } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Store } from './store';
+import { presetBackgroundCss } from './skin-presets';
 
 /**
  * 皮肤系统（按用户需求重构）：
@@ -140,8 +141,13 @@ export class SkinManager {
   }
 
   private async applyBackground(win: BrowserWindow): Promise<void> {
+    // 自定义背景图优先；没设图时才用内置预设。
+    // 这样"用户自己选过图"永远赢，不会被我们换默认背景时覆盖掉。
     const file = this.backgroundPath();
-    if (!file) return;
+    if (!file) {
+      await this.applyPreset(win);
+      return;
+    }
 
     const alpha = Math.min(1, Math.max(0.3, this.store.get('skinOpacity')));
     const dataUri = this.buildDataUri(file, 2560);
@@ -210,6 +216,27 @@ export class SkinManager {
     } catch (e) {
       console.error('[skin] 背景皮肤应用失败:', e);
     }
+  }
+
+  /**
+   * 应用内置背景预设（纯 CSS，见 skin-presets.ts）。
+   * 用户没设自己的背景图时，这就是"默认长什么样"。
+   */
+  private async applyPreset(win: BrowserWindow): Promise<void> {
+    const css = presetBackgroundCss(this.store.get('skinPreset'));
+    if (!css) return;
+    try {
+      const key = await win.webContents.insertCSS(css, { cssOrigin: 'author' });
+      this.insertedKeys.push(key);
+    } catch (e) {
+      console.error('[skin] 内置背景预设应用失败:', e);
+    }
+  }
+
+  /** 切换内置背景预设 */
+  async setPreset(win: BrowserWindow, preset: 'none' | 'deepseek-blue'): Promise<void> {
+    this.store.set('skinPreset', preset);
+    await this.apply(win);
   }
 
   private async applyCustomCss(win: BrowserWindow): Promise<void> {

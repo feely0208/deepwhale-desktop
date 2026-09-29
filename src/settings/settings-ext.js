@@ -91,8 +91,13 @@
       '    <button class="dsh-ext-btn" id="dsh-ext-u-refresh">立即刷新</button>' +
       '  </section>' +
       '  <section class="dsh-ext-section" id="' + SEC_PREFIX + 'skin">' +
-      '    <h3>皮肤（背景图片）</h3>' +
-      '    <div class="dsh-ext-row">背景图片（完全覆盖原界面；主题外观请在 DSH 通用设置里调整）</div>' +
+      '    <h3>皮肤（背景）</h3>' +
+      '    <div class="dsh-ext-row">内置背景（默认，纯 CSS 绘制；照官方 harness 官网那套深蓝辉光做的）</div>' +
+      '    <div class="dsh-ext-btns">' +
+      '      <button class="dsh-ext-btn" id="dsh-ext-skin-preset-blue">深蓝辉光</button>' +
+      '      <button class="dsh-ext-btn" id="dsh-ext-skin-preset-none">纯色</button>' +
+      '    </div>' +
+      '    <div class="dsh-ext-row">自定义背景图片（选了图就盖过内置背景；主题外观请在 DSH 通用设置里调整）</div>' +
       '    <div class="dsh-ext-preview dsh-ext-preview-bg" id="dsh-ext-skin-preview"><span class="ph">未设置</span></div>' +
       '    <div class="dsh-ext-btns">' +
       '      <button class="dsh-ext-btn" id="dsh-ext-skin-pick">选择图片…</button>' +
@@ -308,6 +313,8 @@
     });
     document.getElementById('dsh-ext-skin-pick').addEventListener('click', function () { window.dsh.skinPickImage(); });
     document.getElementById('dsh-ext-skin-clear').addEventListener('click', function () { window.dsh.skinClearImage(); });
+    document.getElementById('dsh-ext-skin-preset-blue').addEventListener('click', function () { window.dsh.skinSetPreset('deepseek-blue'); });
+    document.getElementById('dsh-ext-skin-preset-none').addEventListener('click', function () { window.dsh.skinSetPreset('none'); });
     opacityEl.addEventListener('input', function () {
       var v = parseFloat(opacityEl.value);
       opacityValEl.textContent = Math.round(v * 100) + '%';

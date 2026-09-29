@@ -17,6 +17,16 @@ export interface Settings {
   theme: 'system' | 'light' | 'dark';
   /** 背景皮肤图片文件名（userData/skins/ 下），null 表示无背景皮肤 */
   skinImage: string | null;
+  /**
+   * 内置背景预设（纯 CSS 画的，不需要图片文件）。
+   * 设了它、又没设 skinImage 时用它；设了图片则以图片为准。
+   *
+   * 为什么要有：用户看了官方 harness 官网（deepseek.com/harness）的深蓝辉光背景，
+   * 明确说"我很喜欢，能做成新版深鲸壳的默认背景吗"。那个背景不是图片，
+   * 是三层带模糊的径向渐变（#1A3870 / #2D5F9E / #4A8AC4）——
+   * 用 CSS 复刻的好处是**任意分辨率都清晰、零字节、不用下载**。
+   */
+  skinPreset: 'none' | 'deepseek-blue';
   /** 背景皮肤可见度（0.3~1，界面层透明度；越小图越透出） */
   skinOpacity: number;
   /** 是否启用 userData/custom.css 自定义样式 */
@@ -59,6 +69,7 @@ const DEFAULTS: Settings = {
   port: 3095,
   theme: 'system',
   skinImage: null,
+  skinPreset: 'deepseek-blue',
   skinOpacity: 0.55,
   customCssEnabled: false,
   petVisible: true,

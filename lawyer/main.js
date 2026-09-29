@@ -420,19 +420,99 @@ ipcMain.handle('shell:openExternal', async (_ev, url) => {
   return { ok: false, msg: '非法链接' };
 });
 
-// —— 唤回深鲸桌面端（DeepWhale Desktop）窗口到前台（macOS osascript；Win/Linux 预留）——
+// —— 唤回深鲸桌面端（DeepWhale Desktop）窗口到前台 ——
+//
+// macOS：osascript 让应用 activate。
+// Windows：**再启动一次深鲸桌面端的 exe**。它自己实现了单实例
+//   （`app.requestSingleInstanceLock()` + `second-instance` → showMainWindow()），
+//   第二个实例会立刻退出、由第一个实例 show()+focus() 把窗口（含"最小化到托盘"的隐藏窗口）
+//   拉到前台；若它没在运行，这一下就把壳启动了 —— 两种情况都符合用户对「拉起深鲸AI」的预期。
+//   为什么不直接对着窗口句柄调 SetForegroundWindow：Windows 有前台锁，
+//   跨进程抢前台常被拒（只会闪任务栏），而复用壳自己的单实例逻辑最稳。
+//   ⚠️ 2026-09-29 之前这里是 `return { ok:false, msg:'当前平台暂不支持唤回' }` 的占位 ——
+//      Windows 用户点「深鲸AI」只会看到那句提示，功能等于没有。
+// Linux：AppImage 路径不固定，先试 wmctrl / xdotool 激活已有窗口，失败给出明确提示。
+const DSH_APP_NAME = 'DeepWhale Desktop';
+
+/** Windows 上找壳的 exe 并重新启动它（见上面的说明）。 */
+function focusDSHOnWindows() {
+  const { execFile } = require('child_process');
+  // 编码成 UTF-16LE base64 走 -EncodedCommand：绕开引号/转义/执行策略三类坑，
+  // 也不需要在磁盘上落一个 .ps1。
+  const script = `
+$ErrorActionPreference = 'SilentlyContinue'
+$exe = ''
+$ap = (Get-ItemProperty 'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\${DSH_APP_NAME}.exe' -ErrorAction SilentlyContinue).'(default)'
+if ($ap -and (Test-Path $ap)) { $exe = $ap }
+if (-not $exe) {
+  $p = Join-Path $env:LOCALAPPDATA 'Programs\\${DSH_APP_NAME}\\${DSH_APP_NAME}.exe'
+  if (Test-Path $p) { $exe = $p }
+}
+if (-not $exe) {
+  $shell = New-Object -ComObject WScript.Shell
+  foreach ($lnk in @(
+    (Join-Path $env:APPDATA 'Microsoft\\Windows\\Start Menu\\Programs\\${DSH_APP_NAME}.lnk'),
+    (Join-Path $env:USERPROFILE 'Desktop\\${DSH_APP_NAME}.lnk'),
+    (Join-Path $env:PUBLIC 'Desktop\\${DSH_APP_NAME}.lnk')
+  )) {
+    if (Test-Path $lnk) {
+      $t = $shell.CreateShortcut($lnk).TargetPath
+      if ($t -and (Test-Path $t)) { $exe = $t; break }
+    }
+  }
+}
+if (-not $exe) {
+  $p = Join-Path $env:ProgramFiles '${DSH_APP_NAME}\\${DSH_APP_NAME}.exe'
+  if (Test-Path $p) { $exe = $p }
+}
+if ($exe -and (Test-Path $exe)) { Start-Process -FilePath $exe; Write-Output 'LAUNCHED' }
+else { Write-Output 'NOTFOUND' }
+`;
+  const encoded = Buffer.from(script, 'utf16le').toString('base64');
+  const ps = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+  return new Promise((resolve) => {
+    execFile(ps, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded],
+      { timeout: 12000, windowsHide: true }, (err, stdout) => {
+        const out = String(stdout || '');
+        if (out.includes('LAUNCHED')) return resolve({ ok: true });
+        if (err) return resolve({ ok: false, msg: '唤回失败：' + String(err.message || err).slice(0, 120) });
+        return resolve({ ok: false, msg: '没找到深鲸桌面端，请从「开始菜单」打开它（打开后最小化即可）' });
+      });
+  });
+}
+
+/** Linux 上让已有的壳窗口到前台（wmctrl / xdotool，装了哪个用哪个）。 */
+function focusDSHOnLinux() {
+  const { execFile } = require('child_process');
+  const tries = [
+    ['wmctrl', ['-a', DSH_APP_NAME]],
+    ['xdotool', ['search', '--name', DSH_APP_NAME, 'windowactivate']],
+  ];
+  return tries.reduce(
+    (chain, [cmd, args]) => chain.then((done) => {
+      if (done.ok) return done;
+      return new Promise((resolve) => {
+        execFile(cmd, args, { timeout: 8000 }, (err) =>
+          resolve(err ? done : { ok: true }));
+      });
+    }),
+    Promise.resolve({ ok: false, msg: '没能把深鲸桌面端唤到前台，请手动切换窗口（需要 wmctrl 或 xdotool）' }),
+  );
+}
+
 ipcMain.handle('dsh:focus', async () => {
   try {
     if (process.platform === 'darwin') {
       // 把 DeepWhale Desktop 应用带到前台并还原窗口
       const { execFile } = require('child_process');
       await new Promise((resolve, reject) => {
-        execFile('osascript', ['-e', 'tell application "DeepWhale Desktop" to activate'], { timeout: 8000 },
+        execFile('osascript', ['-e', `tell application "${DSH_APP_NAME}" to activate`], { timeout: 8000 },
           (err, so, se) => err ? reject(new Error(se || err.message)) : resolve());
       });
       return { ok: true };
     }
-    // Win/Linux 占位：后续用对应系统命令
+    if (process.platform === 'win32') return await focusDSHOnWindows();
+    if (process.platform === 'linux') return await focusDSHOnLinux();
     return { ok: false, msg: '当前平台暂不支持唤回，请手动切换窗口' };
   } catch (e) {
     return { ok: false, msg: '唤回失败：' + (e && e.message || String(e)) };

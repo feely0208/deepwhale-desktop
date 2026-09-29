@@ -366,7 +366,7 @@
     }
   }
 
-  /* ---------- 在「当前版本」旁边补上深鲸壳的版本号 ----------
+  /* ---------- 在「当前版本」旁边补上 DeepWhale Desktop 的版本号 ----------
    * 通用设置里原本只显示 DSH 运行时的版本（如 0.1.7-rc.2），
    * 用户想确认壳是哪个版本得翻安装包或关于窗口，很别扭。
    * 版本号由主进程注入为 window.__dshShellVersion（settings-inject.ts）。
@@ -387,7 +387,7 @@
       sep.style.opacity = '.5';
       var tag = document.createElement('span');
       tag.id = 'dsh-ext-shell-version';
-      tag.textContent = '深鲸壳 ' + v;
+      tag.textContent = 'DeepWhale Desktop ' + v;
       el.appendChild(sep);
       el.appendChild(tag);
       return;

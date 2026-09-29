@@ -4,6 +4,34 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [SemVer](https://semver.org/lang/zh-CN/)。
 
+## [1.0.22] - 2026-09-29
+
+修掉「法律模式」预设显示**加载失败**的问题，并按你的要求改掉版本号文案。
+
+### 修复
+- **「法律模式」预设加载失败（本轮核心）**
+
+  1.0.21 让「法律模式」出现在了 Agent 预设列表里（上一版三平台都找不到它），
+  但卡片上标着**加载失败**。
+
+  根因：预设引用的 `@deepseek-ai/dsh-workflow-worker-thread` **在这个运行时里已经被改名**
+  成 `@deepseek-ai/dsh-workflow-ptc`。DSH 的花名册对"引用了解析不到的包"的预设
+  会标成 broken —— 用户看到的就是「加载失败」。
+
+  运行时自带的技能文档早就警告过这一点（"check each plugin name … because packages
+  renamed since the preset was written fail at activation"），而我当时只验了
+  "声明出现在组合树里"，**没验"里面每个包都能解析"** —— 又是一次断言没落在终点上。
+
+  修复：把该行改成 `@deepseek-ai/dsh-workflow-ptc`（与随包 standard 预设同位置同配置）。
+
+- **版本号文案**：设置页「当前版本」旁边原本显示「深鲸壳 1.0.21」，
+  改为 **`DeepWhale Desktop 1.0.22`**（与产品名一致）。
+
+### 加固
+- `build-legal-preset-bundle.js` 新增断言：预设里**每一个插件名**都必须能在随包运行时
+  解析到，否则构建直接失败并列出缺失的包名。
+  否定测试：把包名改回已废弃的 `dsh-workflow-worker-thread` → 退出码 1 并点名。
+
 ## [1.0.21] - 2026-09-28
 
 修掉「法律模式」不出现在 Agent 预设选择器里的问题（三平台都受影响），

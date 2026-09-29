@@ -126,12 +126,59 @@ ${plugins}
   fs.mkdirSync(dest, { recursive: true });
   fs.writeFileSync(path.join(dest, 'package.json'), `${JSON.stringify(pkg, null, 2)}\n`);
   fs.writeFileSync(path.join(dest, 'cordis.patch.yml'), patch);
-  return { dest, meta, bytes: Buffer.byteLength(patch) };
+  return { dest, meta, bytes: Buffer.byteLength(patch), patch };
+}
+
+/**
+ * 校验预设里每一个插件名都能在随包运行时里解析到。
+ *
+ * ⚠️ 这一条是补课：1.0.21 里的「法律模式」出现在了预设列表中，却标着**加载失败** ——
+ * 因为老预设引用的 `@deepseek-ai/dsh-workflow-worker-thread` 在这个运行时里
+ * 已经被改名成 `dsh-workflow-ptc` 了。DSH 的花名册对"引用了解析不到的包"的预设
+ * 会标成 broken，用户看到的就是"加载失败"。
+ *
+ * 运行时自带的技能文档早就警告过这一点
+ *（"check each plugin name … because packages renamed since the preset was written
+ *   fail at activation"），而我当时只验了"声明出现在组合树里"，没验"每个包都能解析"。
+ *
+ * @param patch - 生成的 patch 文本。
+ * @returns 解析不到的包名（空数组表示全部可解析）。
+ */
+function unresolvedPlugins(patch) {
+  const names = [...patch.matchAll(/^\s*-?\s*name:\s*'([^']+)'$/gm)].map((m) => m[1]);
+  const missing = new Set();
+  for (const name of names) {
+    if (name.startsWith('cordis:')) continue;
+    if (name.startsWith('.') || name.startsWith('/') || name.startsWith('file:')) continue;
+    const pkg = name.startsWith('@') ? name.split('/').slice(0, 2).join('/') : name.split('/')[0];
+    // 与 DSH 自己的解析根一致：从随包 dsh 包向上找 node_modules
+    let dir = path.join(REPO, 'dsh-runtime', 'node_modules', '@deepseek-ai', 'dsh', 'lib');
+    let found = false;
+    for (;;) {
+      if (fs.existsSync(path.join(dir, 'node_modules', pkg, 'package.json'))) {
+        found = true;
+        break;
+      }
+      const parent = path.dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+    if (!found) missing.add(name);
+  }
+  return [...missing];
 }
 
 const args = parseArgs(process.argv.slice(2));
 const outRoot = args.out ? path.resolve(args.out) : OUT_DIR;
-const { dest, meta, bytes } = build(outRoot);
+const { dest, meta, bytes, patch } = build(outRoot);
+const missing = unresolvedPlugins(patch);
+if (missing.length > 0) {
+  console.error(`\n❌ 预设引用了 ${missing.length} 个随包运行时里不存在的包，装到用户机器上会标成「加载失败」：`);
+  for (const name of missing) console.error(`   ${name}`);
+  console.error('\n   包被改名了就要跟着改。对照 dsh-runtime/node_modules 里实际存在的包名，');
+  console.error('   或参考随包预设 dsh-web-app/presets/standard.patch.yml 的写法。\n');
+  process.exit(1);
+}
 console.log(`[legal-preset] 已生成 ${path.relative(REPO, dest)}`);
 console.log(`  name=${meta.name} id=${PRESET_ID} order=${meta.order}`);
 console.log(`  cordis.patch.yml ${bytes} 字节`);

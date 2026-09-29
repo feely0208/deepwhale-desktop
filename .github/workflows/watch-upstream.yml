@@ -1,0 +1,69 @@
+# 上游 DSH 版本监测 —— 官方一发布就自动开 Issue 通知。
+#
+# 为什么需要（2026-09-29，用户的原话）：
+#   「为什么每次官方升级都是我告诉你的呢，你为什么没有第一时间抓到这个信息来告诉我呢？」
+#   紧接着他又说清了分量：
+#   「因为我们宣传的就是让 deepseek 触手可及，如果节奏都跟不上还玩个鸡毛啊」
+#
+#   实情是没有在做任何监测。官方 0.2.0-rc.2 发布当天（09-29 17:56），
+#   是用户从公众号看到告诉我，我才去查 npm —— 而我们随包还停在 0.1.7-rc.2。
+#   更该被批评的是：本轮已经被上游版本变更坑过一次
+#   （0.1.7 废弃 .agent-presets，法律模式预设因此从来没进过花名册），
+#   那次之后就该把"上游版本"当成一级风险来盯。
+#
+# 做法：每天 09:00 / 21:00（UTC+8）各查一次 npm 上 @deepseek-ai/dsh 的 latest，
+#       与 release.yml 里钉住的版本比对（比对逻辑在 scripts/check-upstream-dsh.py），
+#       不一致就开 Issue（已存在则追加评论，不刷屏）。
+#       数据源是公共 npm registry，不需要任何凭据。
+name: Watch upstream DSH
+
+on:
+  schedule:
+    - cron: '0 1 * * *'
+    - cron: '0 13 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 比对上游最新版与我们随包的版本
+        id: cmp
+        run: python3 scripts/check-upstream-dsh.py --github-output
+
+      # 正文放在 .github/upstream-issue-template.md 里，用占位符替换 ——
+      # 不把多行 markdown 塞进 YAML 的 run 块：那样一有续行缩进不对就会
+      # 把块标量截断，YAML 直接解析失败（本文件第一版就是这么挂的）。
+      - name: 有新版本就开 Issue（已存在则追加评论）
+        if: steps.cmp.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PINNED: ${{ steps.cmp.outputs.pinned }}
+          LATEST: ${{ steps.cmp.outputs.latest }}
+          PUBLISHED: ${{ steps.cmp.outputs.published }}
+          RECENT: ${{ steps.cmp.outputs.recent }}
+        run: |
+          set -e
+          python3 - <<'PY'
+          import os
+          tpl = open('.github/upstream-issue-template.md', encoding='utf-8').read()
+          for key in ('LATEST', 'PINNED', 'PUBLISHED', 'RECENT'):
+              tpl = tpl.replace('{{%s}}' % key, os.environ.get(key, '?'))
+          open('/tmp/upstream-issue.md', 'w', encoding='utf-8').write(tpl)
+          PY
+          TITLE="上游 DSH 有新版本：$LATEST（我们随包 $PINNED）"
+          EXIST=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --search "上游 DSH 有新版本 in:title" --json number --jq '.[0].number')
+          if [ -n "$EXIST" ] && [ "$EXIST" != "null" ]; then
+            gh issue comment "$EXIST" --repo "$GITHUB_REPOSITORY" --body-file /tmp/upstream-issue.md
+            echo "  已追加到既有 Issue #$EXIST"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body-file /tmp/upstream-issue.md
+            echo "  已新建 Issue"
+          fi

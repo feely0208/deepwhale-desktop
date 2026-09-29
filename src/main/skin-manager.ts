@@ -2,7 +2,7 @@ import { BrowserWindow, app, nativeImage, nativeTheme, shell } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Store } from './store';
-import { presetBackgroundCss } from './skin-presets';
+import { presetBackgroundCss, glowInjectionScript, glowRemovalScript } from './skin-presets';
 
 /**
  * 皮肤系统（按用户需求重构）：
@@ -148,6 +148,8 @@ export class SkinManager {
       await this.applyPreset(win);
       return;
     }
+    // 用户自己选了图 —— 内置光斑层必须撤掉，否则会和图叠在一起
+    await this.removeGlow(win);
 
     const alpha = Math.min(1, Math.max(0.3, this.store.get('skinOpacity')));
     const dataUri = this.buildDataUri(file, 2560);
@@ -223,13 +225,32 @@ export class SkinManager {
    * 用户没设自己的背景图时，这就是"默认长什么样"。
    */
   private async applyPreset(win: BrowserWindow): Promise<void> {
-    const css = presetBackgroundCss(this.store.get('skinPreset'));
-    if (!css) return;
+    const preset = this.store.get('skinPreset');
+    const css = presetBackgroundCss(preset);
+    if (!css) {
+      await this.removeGlow(win);
+      return;
+    }
     try {
       const key = await win.webContents.insertCSS(css, { cssOrigin: 'author' });
       this.insertedKeys.push(key);
     } catch (e) {
       console.error('[skin] 内置背景预设应用失败:', e);
+    }
+    // 光斑层用真 DOM 建（三层模糊半径不同，一个伪元素塞不下），见 skin-presets.ts
+    try {
+      await win.webContents.executeJavaScript(glowInjectionScript('bottom'));
+    } catch (e) {
+      console.error('[skin] 内置背景光斑注入失败:', e);
+    }
+  }
+
+  /** 移除光斑层（切"纯色"、或用户改用自己的背景图时）。 */
+  private async removeGlow(win: BrowserWindow): Promise<void> {
+    try {
+      await win.webContents.executeJavaScript(glowRemovalScript());
+    } catch {
+      // 页面已导航，忽略
     }
   }
 

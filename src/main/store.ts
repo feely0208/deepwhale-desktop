@@ -1,6 +1,7 @@
 import { app } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
+import { DSH_RUNTIME_VERSION } from './dsh-version.generated';
 
 /**
  * 应用设置（极简 JSON store）。
@@ -51,8 +52,10 @@ export interface Settings {
 }
 
 const DEFAULTS: Settings = {
-  // 钉住 harness 版本：法律模式联动的插件按该版本的客户端 API 实测通过，不随上游漂移
-  command: 'npx @deepseek-ai/dsh@0.1.7-rc.2 web --port 3095 --no-open',
+  // 钉住 harness 版本：法律模式联动的插件按该版本的客户端 API 实测通过，不随上游漂移。
+  // 版本号唯一的出处是仓库根目录的 dsh-runtime.version（见 scripts/dsh-runtime-version.js），
+  // 别在这里手写 —— 手写就会出现「CI 装的是 A 版、开发机兜底命令是 B 版」的分裂。
+  command: `npx @deepseek-ai/dsh@${DSH_RUNTIME_VERSION} web --port 3095 --no-open`,
   port: 3095,
   theme: 'system',
   skinImage: null,

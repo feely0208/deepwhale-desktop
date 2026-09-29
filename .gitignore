@@ -29,3 +29,6 @@ Thumbs.db
 
 # 随包插件载荷：由 scripts/build-bundled-plugins.js 从 npm 拉取已发布正式包生成，不入库
 /bundled-plugins/
+
+# 随包运行时版本号的生成物（唯一出处是 dsh-runtime.version，见 scripts/dsh-runtime-version.js）
+/src/main/dsh-version.generated.ts

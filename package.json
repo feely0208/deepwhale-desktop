@@ -14,7 +14,7 @@
     "dsh"
   ],
   "scripts": {
-    "build": "tsc && node scripts/copy-assets.js",
+    "build": "node scripts/dsh-runtime-version.js --generate && tsc && node scripts/copy-assets.js",
     "dev": "npm run build && electron .",
     "smoke": "npm run build && DSH_DESKTOP_SMOKE=1 electron .",
     "smoke:win": "npm run build && set DSH_DESKTOP_SMOKE=1&& electron .",
@@ -26,7 +26,8 @@
     "dist:linux": "npm run build && electron-builder --linux",
     "preflight:mac": "node scripts/release-preflight.js",
     "release:mac": "node scripts/release-mac.js",
-    "check:links": "node scripts/check-homepage-links.js"
+    "check:links": "node scripts/check-homepage-links.js",
+    "check:runtime": "node scripts/dsh-runtime-version.js --check"
   },
   "dependencies": {
     "electron-updater": "^6.8.9",

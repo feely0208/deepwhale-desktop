@@ -26,23 +26,42 @@ import sys
 import urllib.request
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-RELEASE_YML = os.path.join(REPO, '.github', 'workflows', 'release.yml')
+VERSION_FILE = os.path.join(REPO, 'dsh-runtime.version')
 PKG = '@deepseek-ai/dsh'
+
+# 数据源候选：官方 registry 优先（CI 在境外，最权威也最快），
+# 失败再退到 npmmirror —— 本机实测 registry.npmjs.org 在这个网络下 TLS 握手直接超时，
+# 不退一步的话「本地手动跑一次监测」永远是失败的，那这个脚本在本地就等于没有。
+REGISTRIES = [
+    'https://registry.npmjs.org/',
+    'https://registry.npmmirror.com/',
+]
 
 
 def pinned_version():
-    """我们钉住的版本 —— 从 release.yml 里 `npm install "@deepseek-ai/dsh@x.y.z"` 那行取。"""
-    text = open(RELEASE_YML, encoding='utf-8').read()
-    m = re.search(r'@deepseek-ai/dsh@([0-9][^\s"]*)', text)
-    if not m:
-        raise SystemExit('❌ 没能在 release.yml 里找到钉住的 DSH 版本')
-    return m.group(1)
+    """我们钉住的版本 —— 从仓库根目录的 dsh-runtime.version 读。
+
+    2026-09-29 之前是从 release.yml 里正则抓 `@deepseek-ai/dsh@x.y.z`；
+    现在版本号已经收口到 dsh-runtime.version（见 scripts/dsh-runtime-version.js），
+    release.yml 里那行变成了 `@deepseek-ai/dsh@$DSH_VERSION`，再抓就抓不到了。
+    """
+    version = open(VERSION_FILE, encoding='utf-8').read().strip()
+    if not re.match(r'^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$', version):
+        raise SystemExit(f'❌ dsh-runtime.version 里的 {version!r} 不像版本号')
+    return version
 
 
 def npm_meta():
-    url = 'https://registry.npmjs.org/' + PKG.replace('/', '%2F')
-    with urllib.request.urlopen(url, timeout=30) as resp:
-        return json.loads(resp.read().decode('utf-8'))
+    last_error = None
+    for base in REGISTRIES:
+        url = base + PKG.replace('/', '%2F')
+        try:
+            with urllib.request.urlopen(url, timeout=30) as resp:
+                return json.loads(resp.read().decode('utf-8'))
+        except Exception as e:  # noqa: BLE001 —— 换源重试，最后统一报错
+            last_error = f'{base} → {e}'
+            print(f'  （{base} 查不到，换下一个源）')
+    raise SystemExit(f'❌ 所有 registry 都查不到 {PKG}：{last_error}')
 
 
 def main():

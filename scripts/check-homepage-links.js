@@ -111,8 +111,28 @@ function head(url) {
   });
 }
 
+/**
+ * HEAD 一次，失败重试。
+ *
+ * 为什么必须重试（2026-09-29 实测）：本机网络下 github.com 会**间歇性**连不上 ——
+ * 同一个 `DeepWhale-Desktop-1.0.24-x64.dmg`（附件确实存在、API 里 state=uploaded）
+ * 第一次跑返回 0（连接层失败），紧接着重试就 200。
+ * 不重试的话，这条断言会在 Pages 部署前随机地把**好版本拦下来**，
+ * 而"随机失败的检查"最后一定会被人加 `|| true` 绕过 —— 那就等于没有检查。
+ * 所以：连接层失败（0）和 5xx 视为可重试；4xx 是确定性失败，立即返回。
+ */
+async function headWithRetry(url, attempts = 3) {
+  let last = 0;
+  for (let i = 0; i < attempts; i += 1) {
+    last = await head(url);
+    if (last !== 0 && last < 500) return last;
+    if (i < attempts - 1) await new Promise((r) => setTimeout(r, 1500 * (i + 1)));
+  }
+  return last;
+}
+
 (async () => {
-  const results = await Promise.all(list.map(async (b) => ({ ...b, status: await head(b.url) })));
+  const results = await Promise.all(list.map(async (b) => ({ ...b, status: await headWithRetry(b.url) })));
   let fail = 0;
   for (const r of results) {
     const ok = r.status === 200;

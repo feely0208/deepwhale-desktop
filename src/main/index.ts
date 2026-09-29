@@ -23,7 +23,7 @@ import { SkinManager } from './skin-manager';
 import { PetWindow } from './pet';
 import { createTray, applyMenu, buildAppMenuTemplate, TrayMenuActions } from './tray';
 import { UsageManager, UsageSnapshot } from './usage-manager';
-import { injectSettingsExtension } from './settings-inject';
+import { injectSettingsExtension, expectedVersionRow } from './settings-inject';
 import { UpdateManager } from './update-manager';
 import { installCrashGuard, crashLogDir, appendCrashLog } from './crash-guard';
 
@@ -952,17 +952,28 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
               return JSON.stringify({ navPet: has('dsh-ext-nav-pet'), navUsage: has('dsh-ext-nav-usage'), navSkin: has('dsh-ext-nav-skin'), panel: has('dsh-ext-panel'), activated, petNavOn, petItems, themeItems, usageRows, verText, verRow });
             })()`);
             console.log('[smoke] settings-ext:', r);
-            // ★ 断言落在用户看得见的地方：通用设置里「当前版本」旁边必须有壳版本号。
+            // ★ 断言落在用户看得见的地方：通用设置里「当前版本」旁边必须有壳版本号，
+            //   而且**随包 DSH 运行时的版本也必须在这行里**。
             //   只断言"注入脚本没报错"是不够的 —— 找错节点、DSH 改了结构，
             //   都会静默变成"界面上什么都没有"。
+            //   加 DSH 版本这一条是 2026-09-29 升级 0.2.0-rc.2 时加的：
+            //   换随包运行时是壳里最容易"装着新的其实跑着旧的"的地方
+            //   （asar 里那份没更新、兜底 npx 命令指向旧版，从外面都看不出来），
+            //   而这行显示的正是**当前真正在跑的那个运行时**的版本。
             try {
               const parsed = JSON.parse(r);
-              const want = app.getVersion();
+              const want = expectedVersionRow();
               if (!parsed.verText) {
                 console.error('[smoke] 壳版本号未出现在设置页（verRow=' + parsed.verRow + '）');
                 process.exitCode = 1;
-              } else if (!parsed.verText.includes(want)) {
-                console.error('[smoke] 壳版本号不对：界面显示 "' + parsed.verText + '"，期望含 ' + want);
+              } else if (!parsed.verText.includes(want.shell)) {
+                console.error('[smoke] 壳版本号不对：界面显示 "' + parsed.verText + '"，期望含 ' + want.shell);
+                process.exitCode = 1;
+              } else if (!parsed.verRow.includes(want.dsh)) {
+                console.error(
+                  '[smoke] 设置页显示的 DSH 版本不对：那行是 "' + parsed.verRow +
+                  '"，期望含随包运行时版本 ' + want.dsh + '（说明真正在跑的不是随包那份）',
+                );
                 process.exitCode = 1;
               } else {
                 console.log('[smoke] 设置页已显示壳版本：' + parsed.verRow);

@@ -1,0 +1,1 @@
+{"version":3,"file":"legal-preset.js","sourceRoot":"","sources":["../../../src/client/legal-preset.ts"],"names":[],"mappings":"AAAA;;;;;;;;;;;;;GAaG;AACH,MAAM,CAAC,MAAM,gBAAgB,GAAG,CAAC,OAAO,EAAE,YAAY,CAAU,CAAA;AAEhE;;;;GAIG;AACH,MAAM,UAAU,aAAa,CAAC,EAAW;IACvC,OAAO,OAAO,EAAE,KAAK,QAAQ,IAAI,gBAAgB,CAAC,IAAI,CAAC,CAAC,KAAK,EAAE,EAAE,CAAC,KAAK,KAAK,EAAE,CAAC,CAAA;AACjF,CAAC"}

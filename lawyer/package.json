@@ -1,7 +1,7 @@
 {
   "name": "lvjing-lawyer",
   "productName": "深鲸·律师端",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "面向律师的 AI 法律工作台桌面端",
   "main": "main.js",
   "homepage": "https://deepwhale.org",

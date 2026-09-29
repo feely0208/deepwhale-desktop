@@ -2607,19 +2607,15 @@
   // ⚠ 此处原有 3 人硬编码名单（张冬宝/李慧敏/王建国），是测试阶段产物，已删除。
   //   它的返回值除 dev 分支外从未被使用，属死代码；留着会让人误以为
   //   「本地有名册可比对」，反而掩盖真实核验通道。
-  // 开发者特权：name=(feely|张冬宝) 且相关证号为任意 17 位数字  直接登录（免律所）
-  function isDevAuth(name, mode, d) {
-    if (name !== "feely" && name !== "张冬宝") return false;
-    const fields = mode === "lawyer" ? [d.license] : [d.ilicense, d.authLicense];
-    return fields.some(function (f) { return /^\d{17}$/.test((f || "").trim()); });
-  }
-  // 授权律师是否为开发者（张冬宝/feely，且授权证号为 17 位） 开发者可授权实习律师
-  function isDevAuthorizer(mode, d) {
-    if (mode !== "intern") return false;
-    const an = (d.authName || "").trim();
-    if (an !== "feely" && an !== "张冬宝") return false;
-    return /^\d{17}$/.test((d.authLicense || "").trim());
-  }
+  // ⛔ 这里原有「开发者特权」后门：姓名是 feely / 张冬宝 且证号是任意 17 位数字就
+  //    **直接登录、跳过运营后台核验**（isDevAuth / isDevAuthorizer）。
+  //    注释当时写着"release 构建由开关关闭"，但**仓库里根本没有那个开关** ——
+  //    构建流程不做任何替换，后门就这么进了正式包（已实测确认在 0.1.3 成品包里）。
+  //    后果有两个，都很糟：
+  //      ① 任何人在姓名栏填「feely」或「张冬宝」+ 任意 17 位数字，就能免核验进工作台；
+  //      ② 正常测试路径被废掉 —— 提交按钮根本没走后台，运营侧收不到申请
+  //         （实测：服务器上一条记录都没有，而客户端"直接进了工作台"）。
+  //    已整段删除。要免核验测试，请走运营后台正常审核，那才是用户走的路。
   function verifyLawyerIdentity(mode, d) {
     const name = (d.name || "").trim();
     if (name.length < 2) return { ok: false, msg: "请输入真实姓名（至少 2 个字）" };
@@ -2627,8 +2623,6 @@
     if (mode === "lawyer") {
       const license = (d.license || "").trim(), firm = (d.firm || "").trim();
       if (!license) return { ok: false, msg: "请输入执业证号" };
-      // 开发者特权：仅 feely / 张冬宝，且证号格式合法（release 构建由开关关闭）
-      if (isDevAuth(name, mode, d)) return { ok: true, dev: true };
       const licErr = (window.License && window.License.checkLawyerLicense)
         ? window.License.checkLawyerLicense(license) : '';
       if (licErr) return { ok: false, msg: licErr };
@@ -2641,8 +2635,6 @@
     const il = (d.ilicense || "").trim(), firm = (d.firm || "").trim();
     const an = (d.authName || "").trim(), al = (d.authLicense || "").trim();
     if (!il) return { ok: false, msg: "请输入实习证号" };
-    if (isDevAuth(name, mode, d)) return { ok: true, dev: true };
-    if (isDevAuthorizer(mode, d)) return { ok: true, dev: true };
     if (firm.length < 4) return { ok: false, msg: "请输入所属律所全称（至少 4 个字）" };
     if (an.length < 2) return { ok: false, msg: "请输入授权执业律师姓名" };
     const alErr = (window.License && window.License.checkLawyerLicense)
@@ -2676,23 +2668,10 @@
       const data = mode === "lawyer"
         ? { name: val("suName"), license: val("suLicense"), firm: val("suFirm") }
         : { name: val("suIName"), ilicense: val("suILicense"), firm: val("suIFirm"), authName: val("suAuthName"), authLicense: val("suAuthLicense") };
-      // 开发者特权：张冬宝/feely + 17 位证号 → 直接登录（免律所、免核验），方便测试
       const dv = verifyLawyerIdentity(mode, data);
       // 格式不合格：直接拦下并说明是哪一位不对
       // （此前这里的返回值除 dev 分支外从未被使用，等于没有本地校验）
       if (!dv.ok) { setStatus(dv.msg || "信息格式不正确", "err"); return; }
-      if (dv.ok && dv.dev) {
-        const lawyer = mode === "lawyer"
-          ? { name: data.name.trim(), license: data.license.trim(), firm: data.firm.trim() || "（开发者）", role: "执业律师", dev: true, date: nowStr() }
-          : { name: data.name.trim(), license: data.ilicense.trim(), firm: data.firm.trim() || "（开发者）", role: "实习律师", authName: data.authName.trim(), authLicense: data.authLicense.trim(), dev: true, date: nowStr() };
-        saveLawyer(lawyer); applyLawyer(lawyer);
-        const setup = document.getElementById("setup");
-        if (setup) setup.classList.add("done");
-        setStatus("开发者特权登录 · " + lawyer.name + "（" + lawyer.role + "）", "ok");
-        toast("开发者特权登录 · " + lawyer.name + " 律师（" + lawyer.role + "）工作台已就绪", "success");
-        boot();
-        return;
-      }
       // 基本必填校验
       if (!data.name || (!data.license && !data.ilicense)) { setStatus("请填写姓名与证件号", "err"); toast("请填写姓名与证件号", "error"); return; }
       if (!data.firm) { setStatus("请填写所属律所", "err"); toast("请填写所属律所", "error"); return; }

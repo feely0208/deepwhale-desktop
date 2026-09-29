@@ -120,6 +120,51 @@ def asar_paths(asar_file):
     return out
 
 
+def asar_entry(asar_file, wanted_suffix):
+    """按路径后缀读 app.asar 内某个文件的字节；不存在返回 None。
+
+    为什么要读内容而不是只看清单：**"包里有这个路径"不等于"包里是这一版"**。
+    随包运行时是壳里最容易"装着新的其实跑着旧的"的地方 —— asar 里那份没更新、
+    store.ts 的兜底 npx 命令指向旧版、CI 装了 A 版而本地是 B 版，从安装包外面全都看不出来。
+    所以下面直接把你装到的那个 `@deepseek-ai/dsh/package.json` 读出来对版本号。
+    """
+    with open(asar_file, "rb") as f:
+        head = f.read(8)
+        size = struct.unpack("<I", head[4:8])[0]
+        hdr = f.read(size)
+        js = struct.unpack("<I", hdr[4:8])[0]
+        idx = json.loads(hdr[8 : 8 + js].decode("utf-8"))
+        data_start = 8 + size
+
+        hits = []
+
+        def walk(node, prefix):
+            for key, meta in node.get("files", {}).items():
+                p = prefix + "/" + key
+                if "files" in meta:
+                    walk(meta, p)
+                elif p.endswith(wanted_suffix):
+                    hits.append((p, meta))
+
+        walk(idx, "")
+        if not hits:
+            return None
+        # 取最短的那个：asar 里可能出现同名嵌套副本，最短路径的就是正规那一份
+        path, meta = sorted(hits, key=lambda h: len(h[0]))[0]
+        f.seek(data_start + int(meta["offset"]))
+        return f.read(int(meta["size"]))
+
+
+def expected_runtime_version():
+    """我们钉住的随包运行时版本（仓库根的 dsh-runtime.version）。"""
+    p = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "dsh-runtime.version")
+    try:
+        return open(p, encoding="utf-8").read().strip()
+    except OSError:
+        return None
+
+
+
 def scan_shell_assets(root):
     """在解包树里按后缀实搜壳载荷。
 
@@ -276,7 +321,7 @@ def main():
                 results.append((name, "取不到文件", "-", "-"))
                 failures.append(f"{name}: 取不到安装包")
                 continue
-            ver, asar, _root, disk_found = EXTRACTORS[name](path, work)
+            ver, asar, root, disk_found = EXTRACTORS[name](path, work)
             paths = asar_paths(asar)
             missing = [r for r in REQUIRED if not any(p.endswith("/" + r) for p in paths)]
             # 壳自己的载荷可能在 app.asar 内，也可能在 app.asar 外的 Resources 下
@@ -287,6 +332,39 @@ def main():
                     shell_missing.append(a)
             skills = [p for p in paths if p.endswith("SKILL.md")]
             print(f"    app.asar 内文件数 {len(paths)}；SKILL.md {len(skills)} 个；包内版本 {ver}")
+
+            # ★ 包里那份随包运行时到底是哪一版 —— 读它的 package.json 内容来对。
+            #   只看"路径在不在"是查不出这个的，而这里恰恰最容易出
+            #   "包里装着旧的、外面全都写着新的"这种情况。
+            want_runtime = expected_runtime_version()
+            raw = asar_entry(asar, "/@deepseek-ai/dsh/package.json")
+            if raw is None:
+                unpacked = None
+                for base, _dirs, files in os.walk(root):
+                    if base.endswith(os.path.join("@deepseek-ai", "dsh")) and "package.json" in files:
+                        unpacked = os.path.join(base, "package.json")
+                        break
+                if unpacked:
+                    raw = open(unpacked, "rb").read()
+            got_runtime = None
+            if raw is not None:
+                try:
+                    got_runtime = json.loads(raw.decode("utf-8")).get("version")
+                except Exception:  # noqa: BLE001 - 读不出来就是没通过，下面统一报
+                    got_runtime = None
+            if got_runtime is None:
+                failures.append(f"{name}: 包内读不到随包 DSH 运行时的版本")
+                print("    ❌ 包内读不到随包 DSH 运行时的版本（@deepseek-ai/dsh/package.json）")
+            elif want_runtime and got_runtime != want_runtime:
+                failures.append(
+                    f"{name}: 包内随包运行时是 {got_runtime}，仓库钉的是 {want_runtime}"
+                )
+                print(
+                    f"    ❌ 包内随包运行时 {got_runtime} ≠ 仓库钉的 {want_runtime}"
+                    f" —— 这个包装的不是我们以为的运行时"
+                )
+            else:
+                print(f"    ✅ 包内随包 DSH 运行时 = {got_runtime}（与 dsh-runtime.version 一致）")
             if ver not in ("?", args.version):
                 failures.append(f"{name}: 包内版本是 {ver}，期望 {args.version}")
                 print(f"    ❌ 版本不符：{ver} ≠ {args.version}")

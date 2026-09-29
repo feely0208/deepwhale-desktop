@@ -681,6 +681,25 @@ function buildAppMenu() {
     try { require('electron').shell.openExternal(url); } catch (e) { /* 打不开就算了 */ }
   };
 
+  // ⛔ 生产构建里**不能有**「强制重新加载」和「开发者工具」：
+
+  //   实测（2026-09-29）：在律师端窗口按 Ctrl+Shift+I 就能打开开发者工具面板，
+
+  //   直接看到 DOM 并改 localStorage["legal-mode.lawyer"] ——
+
+  //   也就是绕过实名核验直接进工作台。生产客户端绝不该有这个入口。
+
+  //   开发态（未打包，或显式设了 DSH_ALLOW_DEVTOOLS=1）才保留，方便调试。
+
+  const DEV_MENU_ITEMS = (!app.isPackaged || process.env.DSH_ALLOW_DEVTOOLS === '1')
+
+    ? [{ role: 'forceReload', label: '强制重新加载' },
+
+       { role: 'toggleDevTools', label: '开发者工具' }]
+
+    : [];
+
+
   const template = [
     // macOS 应用菜单（以应用名为标题）
     ...(isMac ? [{
@@ -720,8 +739,7 @@ function buildAppMenu() {
     {
       label: '视图',
       submenu: [
-        { role: 'forceReload', label: '强制重新加载' },
-        { role: 'toggleDevTools', label: '开发者工具' },
+        ...DEV_MENU_ITEMS,
         { type: 'separator' },
         { role: 'resetZoom', label: '实际大小' },
         { role: 'zoomIn', label: '放大' },

@@ -54,6 +54,13 @@ jobs:
         working-directory: .
         run: node scripts/check-lawyer-verify-gate.js
 
+      # ⛔ 生产包不得出现开发者工具入口。
+      #    实测（2026-09-29）：用户在律师端按 Ctrl+Shift+I 直接打开了开发者工具，
+      #    能改 localStorage 里的核验记录 —— 等于绕过实名核验。
+      - name: 开发者工具入口检查（命中即拒绝出包）
+        working-directory: .
+        run: node scripts/check-no-devtools-in-prod.js
+
       # 两个架构都要出：Intel Mac 用户同样需要律师端。
       # electron-builder 的默认输出目录是 dist/mac（x64）与 dist/mac-arm64（arm64）。
       - name: 构建 macOS zip（arm64 + x64）
@@ -164,6 +171,13 @@ jobs:
         working-directory: .
         run: node scripts/check-lawyer-verify-gate.js
 
+      # ⛔ 生产包不得出现开发者工具入口。
+      #    实测（2026-09-29）：用户在律师端按 Ctrl+Shift+I 直接打开了开发者工具，
+      #    能改 localStorage 里的核验记录 —— 等于绕过实名核验。
+      - name: 开发者工具入口检查（命中即拒绝出包）
+        working-directory: .
+        run: node scripts/check-no-devtools-in-prod.js
+
       - name: 短信说明（短信由华为云服务器发送，App 不含密钥）
         shell: bash
         run: echo "短信由服务器发送，App 不打包 sms-config.json（无密钥）"
@@ -209,6 +223,13 @@ jobs:
       - name: 实名核验后门检查（命中即拒绝出包）
         working-directory: .
         run: node scripts/check-lawyer-verify-gate.js
+
+      # ⛔ 生产包不得出现开发者工具入口。
+      #    实测（2026-09-29）：用户在律师端按 Ctrl+Shift+I 直接打开了开发者工具，
+      #    能改 localStorage 里的核验记录 —— 等于绕过实名核验。
+      - name: 开发者工具入口检查（命中即拒绝出包）
+        working-directory: .
+        run: node scripts/check-no-devtools-in-prod.js
 
       - name: 短信说明（短信由华为云服务器发送，App 不含密钥）
         shell: bash

@@ -1,28 +1,28 @@
 import { isLegalPreset } from './legal-preset.js';
 import { openLawyerApp } from './lawyer-app.js';
-import { createWorkbenchOverlay } from './WorkbenchOverlay.js';
+import { WorkbenchOverlay } from './WorkbenchOverlay.js';
 import { dictionaries } from './locales.js';
 /** Locale namespace owned by this plugin (overlay chrome copy). */
 const NS = 'legalmode';
 /** Settings namespace holding the deployment's chosen default agent preset. */
 const PRESET_SETTINGS_NS = 'agent-presets';
 /** Services required by the legal-mode overlay plugin. */
-export const inject = ['slots', 'locale', 'remote', 'remote.agentPresets', 'remote.settings'];
+export const inject = ['slots', 'locale', 'remote', 'remote.agentPresets'];
 /**
- * Read whether the deployment's default preset is legal mode.
+ * Read the deployment's default preset id.
  *
  * The roster resolves the default the way a session start does — settings
  * first, then the deployment default — so the answer is the preset a new
  * session would run, not merely the field a settings surface last wrote.
  * @param ctx - client root context.
- * @returns the answer, or null when the host refused the read.
+ * @returns the default preset id, or null when the host refused the read.
  */
-async function readLegalDefault(ctx) {
+async function readDefaultPreset(ctx) {
     try {
         const answer = await ctx.remote.agentPresets.list();
         if (!answer.ok)
             return null;
-        return isLegalPreset(answer.value.presets.find((preset) => preset.isDefault)?.id);
+        return answer.value.presets.find((preset) => preset.isDefault)?.id ?? '';
     }
     catch {
         // The transport rejected rather than answering; the caller keeps the fact
@@ -31,63 +31,39 @@ async function readLegalDefault(ctx) {
     }
 }
 /**
- * Make the deployment default follow the preset a session actually started with.
- *
- * The hero chip stages its pick for the NEXT session and hands it to that
- * session; it writes no deployment default, so the Agent-preset settings row
- * went on showing the previous choice while the session ran on the new one
- * (2026-09-29 user report: 首页选「法律模式」后，设置里仍是 Standard). This is
- * the same `agent-presets.default` field the settings row writes, which is what
- * the host resolves for the session after this one.
- * @param ctx - client root context.
- * @param id - preset id the started session carries.
- * @returns once the write settled; a refused write stays silent because a
- * read-only settings document is a deployment choice, not this overlay failing.
- */
-async function syncDefaultPreset(ctx, id) {
-    try {
-        const roster = await ctx.remote.agentPresets.list();
-        if (!roster.ok)
-            return;
-        const { presets } = roster.value;
-        // An id the roster does not carry is not a preset anyone can pick again.
-        if (!presets.some((preset) => preset.id === id))
-            return;
-        // Already the default: writing again only churns the settings document.
-        if (presets.find((preset) => preset.isDefault)?.id === id)
-            return;
-        await ctx.remote.settings.update(PRESET_SETTINGS_NS, { default: id }, undefined);
-    }
-    catch {
-        // The wire rejected the write; the session keeps running under the preset
-        // it already carries, which is the behavior the user asked for.
-    }
-}
-/**
  * Open the Lawyer app whenever the default preset switches into legal mode.
  *
- * The settings surfaces — the General row and the preset cards — choose the
- * preset for sessions that do not exist yet, so they start no session for the
- * overlay's session watcher to observe; this watcher covers those. It fires on
- * the switch into legal mode only: the default as found at load is the
- * baseline, so a shell that opens already on legal mode stays silent, and
- * leaving legal mode re-arms it, so every later switch opens the app again.
+ * The settings surfaces choose the preset for sessions that do not exist yet, so
+ * they start no session for the overlay's session watcher to observe; this
+ * watcher covers those. It fires on the switch into legal mode only: the default
+ * as found at load is the baseline, so a shell that opens already on legal mode
+ * stays silent, and leaving legal mode re-arms it, so every later switch opens
+ * the app again.
+ *
+ * This reads the default; it never writes it. Legal mode is a per-session choice
+ * here (user decision, 2026-09-29: 不要默认法律模式，需要再手动选择), and a
+ * session that already ran a turn cannot switch at all (DSH locks the preset) —
+ * that route is the `/lawyer` command in the node half.
  * @param ctx - client root context.
  */
 function watchDefaultPreset(ctx) {
     // null until a read lands: the first answer is the baseline, never a switch.
-    let legal = null;
+    let current = null;
     // Reads can settle out of order; only the newest issued one owns the state.
     let issued = 0;
     const refresh = () => {
         const mine = ++issued;
-        void readLegalDefault(ctx).then((now) => {
+        void readDefaultPreset(ctx).then((now) => {
             if (now === null || mine !== issued)
                 return;
-            const before = legal;
-            legal = now;
-            if (now && before === false)
-                openLawyerApp();
+            const before = current;
+            current = now;
+            // The first answer is the baseline: a shell that opens on legal mode stays silent.
+            if (before === null)
+                return;
+            if (!isLegalPreset(now) || isLegalPreset(before))
+                return;
+            openLawyerApp();
         });
     };
     ctx.effect(() => {
@@ -119,7 +95,7 @@ export function apply(ctx) {
         id: 'legal-workbench',
         order: 100,
         locale: NS,
-    }, createWorkbenchOverlay((id) => void syncDefaultPreset(ctx, id)))), 'ui-legal-mode: overlay registration');
+    }, WorkbenchOverlay)), 'ui-legal-mode: overlay registration');
     watchDefaultPreset(ctx);
 }
 //# sourceMappingURL=index.js.map

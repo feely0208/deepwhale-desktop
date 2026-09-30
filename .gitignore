@@ -32,3 +32,7 @@ Thumbs.db
 
 # 随包运行时版本号的生成物（唯一出处是 dsh-runtime.version，见 scripts/dsh-runtime-version.js）
 /src/main/dsh-version.generated.ts
+
+# Python 缓存（verify-artifacts.py 被 import 时会生成）
+__pycache__/
+*.pyc

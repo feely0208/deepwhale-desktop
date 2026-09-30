@@ -155,7 +155,7 @@ export function installCrashGuard(options: CrashGuardOptions): void {
     if (interactive) {
       void notify(
         options,
-        '深鲸壳遇到一个内部错误',
+        '深鲸桌面遇到一个内部错误',
         [
           '程序仍可继续使用，但建议重启一次。',
           '',

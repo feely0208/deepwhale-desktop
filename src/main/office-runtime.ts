@@ -103,7 +103,7 @@ export function ensureWrapperNode(
   // 路径可能含空格（macOS 的 .app 就是），必须整体加引号。
   const body = windows
     ? `@echo off\r\nset ELECTRON_RUN_AS_NODE=1\r\n"${electronPath}" %*\r\n`
-    : `#!/bin/sh\n# 由深鲸壳生成：用自带 Electron 充当 Node，避免再随包一份完整 Node。\nELECTRON_RUN_AS_NODE=1 exec "${electronPath}" "$@"\n`;
+    : `#!/bin/sh\n# 由深鲸桌面生成：用自带 Electron 充当 Node，避免再随包一份完整 Node。\nELECTRON_RUN_AS_NODE=1 exec "${electronPath}" "$@"\n`;
   const changed = writeIfChanged(file, body);
   if (!windows) {
     try {

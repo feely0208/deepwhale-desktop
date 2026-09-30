@@ -116,7 +116,7 @@ ${plugins}
   const pkg = {
     name: PKG_NAME,
     version: '1.0.0',
-    description: '深鲸壳随包的「法律模式」Agent 预设：以 bundle 声明的方式挂进 DSH 花名册。',
+    description: '深鲸桌面随包的「法律模式」Agent 预设：以 bundle 声明的方式挂进 DSH 花名册。',
     private: true,
     type: 'module',
     dsh: { bundle: { patch: './cordis.patch.yml' } },

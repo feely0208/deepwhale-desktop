@@ -210,7 +210,7 @@ function openWelcomeWindow(): void {
     resizable: false,
     minimizable: false,
     maximizable: false,
-    title: '欢迎使用深鲸壳',
+    title: '欢迎使用深鲸桌面',
     // 引导期间不挂 parent：主窗口此刻可能还在显示"正在启动 DSH"
     webPreferences: {
       contextIsolation: true,
@@ -545,7 +545,7 @@ async function handleDshStartFailure(firstError: unknown): Promise<boolean> {
     const options = {
       type: 'error' as const,
       title: 'DSH 启动失败',
-      message: '深鲸壳无法连接到 DSH 服务',
+      message: '深鲸桌面无法连接到 DSH 服务',
       detail: `${detail}\n\n可以先点「重试」；若反复失败，请查看日志并把内容反馈给我们。`,
       buttons,
       defaultId: 0,

@@ -4,7 +4,7 @@ import { autoUpdater, type UpdateInfo, type ProgressInfo } from 'electron-update
 /**
  * update-manager.ts — 应用自动更新（electron-updater + GitHub Releases）
  *
- * ── 设计原则（与深鲸壳既有功能完全隔离） ─────────────────────────────
+ * ── 设计原则（与深鲸桌面既有功能完全隔离） ─────────────────────────────
  *  1. **纯增量**：不读写 settings 之外的任何既有模块，不触碰法律模式、
  *     桌宠、皮肤、用量面板、授权等任何现有逻辑。
  *  2. **只在打包态启用**：开发态（未打包）直接跳过，避免干扰本地调试。
@@ -222,7 +222,7 @@ export class UpdateManager {
     try {
       const choice = await this.confirm(
         '发现新版本',
-        `深鲸壳 ${info.version} 已发布（当前 ${app.getVersion()}）。\n\n是否现在下载？下载过程不影响你继续使用。`,
+        `深鲸桌面 ${info.version} 已发布（当前 ${app.getVersion()}）。\n\n是否现在下载？下载过程不影响你继续使用。`,
         ['立即下载', '稍后再说'],
       );
       if (choice === 0) {
@@ -258,7 +258,7 @@ export class UpdateManager {
     try {
       const choice = await this.confirm(
         '更新已就绪',
-        `深鲸壳 ${info.version} 已下载完成。\n\n重启后即可使用新版本。`,
+        `深鲸桌面 ${info.version} 已下载完成。\n\n重启后即可使用新版本。`,
         ['立即重启', '退出时自动安装'],
       );
       if (choice === 0) {

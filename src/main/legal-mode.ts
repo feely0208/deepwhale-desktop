@@ -135,6 +135,49 @@ function mergeSessionsDir(from: string, to: string): boolean {
  * @param legacyHomes - 候选旧 home，按优先级排列。
  * @returns 是否执行了迁移。
  */
+/**
+ * 递归合并目录：**只补目标里没有的文件，不覆盖已有的**。
+ *
+ * ── 为什么需要（2026-09-30 的事故）────────────────────────────
+ * 原来的逻辑是"目标已存在就整个目录跳过"：
+ *     if (!fs.existsSync(from) || fs.existsSync(to)) continue;
+ * 而 `attachments` 明明在迁移清单里，新 home **第一次启动时就建了空的 attachments/**，
+ * 于是整目录被跳过 —— 旧 home 里 44 个图片对象一个都没搬过去。
+ * 后果：会话里引用这些图片时文件找不到，解析失败，DSH 把这类异常统一包成
+ *       `TRANSPORT`（"DeepSeek Messages transport failed"）——
+ *       看起来像网络问题，其实是**附件没搬过来**。
+ *
+ * 目录粒度"存在就跳过"在**增量**场景下永远是错的（DSH 会自己先建空目录）。
+ * 所以这里逐文件判断：缺哪个补哪个。
+ */
+function mergeDirTree(from: string, to: string): boolean {
+  let merged = false;
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(from, { withFileTypes: true });
+  } catch {
+    return false;
+  }
+  for (const entry of entries) {
+    const src = path.join(from, entry.name);
+    const dst = path.join(to, entry.name);
+    if (entry.isDirectory()) {
+      if (mergeDirTree(src, dst)) merged = true;
+      continue;
+    }
+    if (entry.isSymbolicLink()) continue;
+    try {
+      if (fs.existsSync(dst)) continue;   // 已有的不动（避免半覆盖出乱状态）
+      fs.mkdirSync(to, { recursive: true });
+      fs.copyFileSync(src, dst);
+      merged = true;
+    } catch {
+      // 单个文件失败不影响整体
+    }
+  }
+  return merged;
+}
+
 export function migrateLegacyHomeOnce(home: string, legacyHomes: string[]): boolean {
   if (fs.existsSync(path.join(home, MIGRATION_MARKER))) return false;
   if (hasSessions(home)) return false;
@@ -153,9 +196,18 @@ export function migrateLegacyHomeOnce(home: string, legacyHomes: string[]): bool
     const from = path.join(source, name);
     const to = path.join(home, name);
     try {
-      if (!fs.existsSync(from) || fs.existsSync(to)) continue;
-      fs.cpSync(from, to, { recursive: true });
-      copied += 1;
+      if (!fs.existsSync(from)) continue;
+      const stat = fs.statSync(from);
+      if (stat.isDirectory()) {
+        // ⚠️ 目录**不能**"目标存在就跳过" —— DSH 启动时会先建空目录，
+        //    一跳过就永远补不进来（attachments 就是这么丢了 44 个对象的）。
+        if (mergeDirTree(from, to)) copied += 1;
+      } else {
+        if (fs.existsSync(to)) continue;   // 文件：目标已有就保留目标的（尤其凭据）
+        fs.mkdirSync(path.dirname(to), { recursive: true });
+        fs.copyFileSync(from, to);
+        copied += 1;
+      }
     } catch (error) {
       console.error(`[legal-mode] 迁移 ${name} 失败（跳过该项）:`, error);
     }

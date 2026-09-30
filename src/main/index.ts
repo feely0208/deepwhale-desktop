@@ -694,11 +694,21 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
 
     // 手机连接：让局域网里的手机能连上（DSH 默认只绑 127.0.0.1，手机够不着）。
     // 详见 src/main/mobile-connect.ts —— 地址是运行时探测的，不写死。
-    try {
-      const mobile = ensureMobileAccess(legalHome, store.get('port'));
-      if (SMOKE) console.log(`[smoke] mobile access: changed=${String(mobile.changed)} addrs=${mobile.addresses.join(',')}`);
-    } catch (error) {
-      logInjectionFailure('mobile', '手机连接配置', error);
+    //
+    // ⚠️ 默认关闭，别删这个 if。用户叫停了手机端方向，原话是
+    //    「我当场能连不够，要用户从官网下载安装好后也能用才行」——
+    //    做到那一步还需要把「地址 + token」露到界面上（用户从来没见过 token）。
+    //    只开端口、不给钥匙 = 用户拿不到任何好处，同 WiFi 下的其他人却多了一个入口。
+    //    开关是设置里的 lanAccess；等手机端一次做全（绑 0.0.0.0 + 探测地址 + 露出凭据 + 发版）再打开。
+    if (!store.get('lanAccess')) {
+      if (SMOKE) console.log('[smoke] mobile access: disabled（lanAccess=false，默认）');
+    } else {
+      try {
+        const mobile = ensureMobileAccess(legalHome, store.get('port'));
+        if (SMOKE) console.log(`[smoke] mobile access: changed=${String(mobile.changed)} addrs=${mobile.addresses.join(',')}`);
+      } catch (error) {
+        logInjectionFailure('mobile', '手机连接配置', error);
+      }
     }
 
     // 把「意见反馈」指到我们自己的反馈页 —— 不做的话它指向 DeepSeek 官方的飞书表单，

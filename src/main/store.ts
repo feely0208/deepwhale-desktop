@@ -13,6 +13,18 @@ export interface Settings {
   command: string;
   /** DSH Web UI 端口 */
   port: number;
+  /**
+   * 是否让 DSH 对局域网开门（手机连接）。
+   *
+   * **默认关闭，且目前没有界面入口。** 原因不是功能做不出来，而是做不全就是有害的：
+   * 只把 DSH 绑到 0.0.0.0、却不给用户「地址 + token」的入口（用户从来没见过 token），
+   * 等于只开门、不发钥匙 —— 用户拿不到任何好处，却平白让同 WiFi 下的其他人多了一个入口。
+   *
+   * 用户已明确叫停手机端方向（见 2026-09-30 交接文档第五节），要求「要做就一次做全」：
+   * 绑 0.0.0.0 + 运行时探测地址 + 桌面端露出地址/token + 发正式版，缺一个用户就用不了。
+   * 接口在 src/main/mobile-connect.ts 里是现成的、测过的，等那三步齐了再把这里改成 true。
+   */
+  lanAccess: boolean;
   /** 原生界面主题：跟随系统 / 浅色 / 深色 */
   theme: 'system' | 'light' | 'dark';
   /** 背景皮肤图片文件名（userData/skins/ 下），null 表示无背景皮肤 */
@@ -67,6 +79,8 @@ const DEFAULTS: Settings = {
   // 别在这里手写 —— 手写就会出现「CI 装的是 A 版、开发机兜底命令是 B 版」的分裂。
   command: `npx @deepseek-ai/dsh@${DSH_RUNTIME_VERSION} web --port 3095 --no-open`,
   port: 3095,
+  // 默认关：见 Settings.lanAccess 的说明 —— 手机端没一次做全之前不能开
+  lanAccess: false,
   theme: 'system',
   skinImage: null,
   skinPreset: 'deepseek-blue',

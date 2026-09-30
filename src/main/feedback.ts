@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import * as crypto from 'crypto';
 
 /**
  * 把 DSH 自带的「意见反馈」入口，指到**我们自己的**反馈页。
@@ -59,7 +60,38 @@ function readText(file: string): string | null {
 export function feedbackUrl(shellVersion: string): string {
   const params = new URLSearchParams();
   params.set('prefill_shell_version', shellVersion);
+  // 入口令牌：这个反馈页**只对深鲸壳的用户开放**（用户 2026-09-30 定的），
+  // 所以不只是"没挂链接"，服务端还会校验这个令牌，不过一律拒收。
+  params.set('prefill_token', feedbackToken());
   return `${FEEDBACK_BASE}?${params.toString()}`;
+}
+
+/**
+ * 令牌密钥 —— 与后端 `FEEDBACK_TOKEN_SECRET` **必须完全一致**。
+ *
+ * ⚠️ 说清楚它是什么：这是"只对自家用户开放"的一道**门闩**，不是安全边界。
+ *    密钥打在客户端里，决心要绕过的人能把它挖出来。它挡的是顺手打开链接的人，
+ *    以及链接被转发出去之后的乱用 —— 而这里保护的东西（一条反馈）不值得
+ *    做成"每个安装一份凭据 + 服务端登记"那个量级的工程。
+ *
+ * 换密钥要**两端一起换**：先改后端、再发壳，或者反过来都会有一段窗口期
+ * 收不到反馈（旧壳的令牌会开始被拒）。真要换时，后端应当同时接受新旧两把密钥一段时间。
+ */
+const FEEDBACK_TOKEN_SECRET = process.env.DSH_FEEDBACK_TOKEN_SECRET || 'c4e04563830f539a20e0ed37677846096ef492160ed64050';
+
+/**
+ * 当天令牌 = HMAC-SHA256(密钥, UTC 日期 YYYYMMDD)。
+ *
+ * 按天轮换而不是写死一个常量：链接一旦被截图、转发出去，**它自己会过期**，
+ * 不用我们去追着换密钥。服务端同时接受"今天"与"昨天"，避免壳所在机器时钟略偏时误伤。
+ * 日期取 UTC —— 两端算法必须完全一致，本地时区会让两边算不到一块去。
+ */
+export function feedbackToken(now: Date = new Date()): string {
+  const day =
+    `${now.getUTCFullYear()}` +
+    `${String(now.getUTCMonth() + 1).padStart(2, '0')}` +
+    `${String(now.getUTCDate()).padStart(2, '0')}`;
+  return crypto.createHmac('sha256', FEEDBACK_TOKEN_SECRET).update(day).digest('hex');
 }
 
 /** 幂等写入：已经是我们这份 URL 就原样返回，不做无谓写盘。 */

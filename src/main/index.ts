@@ -27,6 +27,7 @@ import { injectSettingsExtension, expectedVersionRow, resolveShellVersion } from
 import { ensureFeedbackEntry } from './feedback';
 import { ensureMobileAccess } from './mobile-connect';
 import { UpdateManager } from './update-manager';
+import type { UpdateState } from './update-manager';
 import { installCrashGuard, crashLogDir, appendCrashLog } from './crash-guard';
 
 /** 冒烟测试模式：自动启动、打印关键事件、8 秒后退出（供 CI/自动化验证） */
@@ -931,6 +932,31 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
     if (dshReady) {
       updates = new UpdateManager({
         getWindow: () => (mainWin !== null && !mainWin.isDestroyed() ? mainWin : null),
+        // ★ 进度**采了必须显示出来**。
+        //   原来这里没有接 onStateChange —— 下载进度被采到了、然后直接扔掉，
+        //   用户点了「立即下载」之后只看得到一个弹窗，之后什么都没有。
+        //   官方有进度条、我们没有，缺的就是这一段。
+        //   两处可见反馈，都不需要新开窗口：
+        //     ① 托盘提示文字：悬停就能看到百分比
+        //     ② Dock / 任务栏上的进度条：setProgressBar
+        onStateChange: (state) => {
+          try {
+            const pct = typeof state.percent === 'number' ? state.percent : null;
+            const downloading = state.phase === 'downloading' && pct !== null;
+            if (downloading) {
+              tray?.setToolTip(`深鲸桌面 · 正在下载更新 ${String(pct)}%`);
+              if (mainWin !== null && !mainWin.isDestroyed()) {
+                // 传 0 会被当成"无进度"，所以最小给 0.01
+                mainWin.setProgressBar(Math.max(0.01, pct / 100));
+              }
+            } else {
+              tray?.setToolTip('DeepWhale Desktop');
+              if (mainWin !== null && !mainWin.isDestroyed()) mainWin.setProgressBar(-1);
+            }
+          } catch {
+            // 进度显示失败绝不能影响更新本身
+          }
+        },
       });
       try {
         updates.start();

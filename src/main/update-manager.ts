@@ -3,7 +3,7 @@ import { autoUpdater, type UpdateCheckResult, type UpdateInfo, type ProgressInfo
 import { spawnSync } from 'child_process';
 import * as path from 'path';
 import { needsManualUpdate } from './mac-signature';
-import { cdnFeedConfig, readPackagedUpdateConfig } from './update-feed';
+import { CDN_FEED_URL, cdnFeedConfig, readPackagedUpdateConfig } from './update-feed';
 
 /**
  * update-manager.ts — 应用自动更新（electron-updater + GitHub Releases）
@@ -229,7 +229,13 @@ export class UpdateManager {
     autoUpdater.setFeedURL(cdnFeedConfig());
     this.tryingCdn = true;
     try {
-      return await autoUpdater.checkForUpdates();
+      const result = await autoUpdater.checkForUpdates();
+      // 成功也留一行日志：不然"到底走没走自建源"在打包态里完全不可观测，
+      // 验收时只能靠猜（这是 2026-10-01 做 CDN 验收时补的）。
+      console.log(
+        `[update] 已通过自建更新源检查：${CDN_FEED_URL}（最新 ${result?.updateInfo?.version ?? '未知'}，当前 ${app.getVersion()}）`,
+      );
+      return result;
     } catch (cdnError) {
       if (packaged === null) throw cdnError;
       console.warn(

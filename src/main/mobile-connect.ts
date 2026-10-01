@@ -187,3 +187,42 @@ export function buildMobileUrls(
     firstTime: external ?? lan[0] ?? null,
   };
 }
+
+/**
+ * 桌面那份「手机连接地址.txt」的正文。
+ *
+ * 为什么要有这个文件：用户的原话是「我复制，这样我也不知道 token 啊」——
+ * 面板里的复制按钮对**不在电脑旁 / 要把地址发到手机上**的人不友好。
+ * 放一份能整段发出去的文本是他自己提的做法，也最省事。
+ *
+ * 纯函数，方便离线回归测试。
+ *
+ * @param at - 生成时间（人类可读），写进文件头，便于判断是不是旧的
+ */
+export function mobileAddressFileText(urls: MobileUrls, at: string): string {
+  const lines: string[] = [`深鲸 · 手机连接地址（${at}）`, ''];
+  if (urls.lan.length > 0) {
+    lines.push('【同一 WiFi 下用】');
+    for (const u of urls.lan) lines.push(u);
+  } else {
+    lines.push('【同一 WiFi 下用】没检测到局域网地址（电脑可能没连 WiFi）');
+  }
+  if (urls.external !== null) {
+    lines.push('', '【4G/5G 在外面用】', urls.external);
+  }
+  lines.push(
+    '',
+    '第一次用上面的地址打开，浏览器会记住登录状态；',
+    '以后直接输入 IP（或隧道地址）就能进，不用再管 token。',
+    '',
+    '（换网络或服务重启后，这个文件会自动更新）',
+  );
+  return `${lines.join('\n')}\n`;
+}
+
+/** 把地址文件写到桌面，返回写入路径 */
+export function writeMobileAddressFile(desktopDir: string, text: string): string {
+  const file = path.join(desktopDir, '手机连接地址.txt');
+  fs.writeFileSync(file, text);
+  return file;
+}

@@ -22,7 +22,7 @@ if (!fs.existsSync(MOD)) {
   process.exit(1);
 }
 
-const { buildMobileUrls } = require(MOD);
+const { buildMobileUrls, mobileAddressFileText } = require(MOD);
 
 let failures = 0;
 function check(label, ok, detail) {
@@ -75,6 +75,24 @@ console.log('\nD. 没有局域网地址时');
   const r = buildMobileUrls(TOKEN, 3095, [], '');
   check('lan 为空数组', Array.isArray(r.lan) && r.lan.length === 0);
   check('firstTime 为 null', r.firstTime === null, String(r.firstTime));
+}
+
+console.log('\nE. 桌面地址文件正文');
+{
+  const urls = buildMobileUrls(TOKEN, 3095, ['192.168.1.25'], 'https://mnkuil8bitiy.deepwhale.org');
+  const text = mobileAddressFileText(urls, '2026/10/1 16:20:00');
+  check('文件头带生成时间（便于判断是不是旧的）', text.startsWith('深鲸 · 手机连接地址（2026/10/1 16:20:00）'), text.split('\n')[0]);
+  check('含局域网地址且带 token', text.includes(`http://192.168.1.25:3095/?token=${TOKEN}`));
+  check('含外网地址且带 token', text.includes(`https://mnkuil8bitiy.deepwhale.org/?token=${TOKEN}`));
+  check('写明了"以后直接输 IP 就能进"', text.includes('以后直接输入 IP'));
+  check('以换行结尾', text.endsWith('\n'));
+
+  const noExt = mobileAddressFileText(buildMobileUrls(TOKEN, 3095, ['10.0.0.2'], ''), 'x');
+  check('没配外网时不出现外网段落', !noExt.includes('在外面用'));
+  check('没配外网时仍含局域网地址', noExt.includes(`http://10.0.0.2:3095/?token=${TOKEN}`));
+
+  const noLan = mobileAddressFileText(buildMobileUrls(TOKEN, 3095, [], ''), 'x');
+  check('没网卡时如实说明，而不是留空', noLan.includes('没检测到局域网地址'));
 }
 
 if (failures > 0) {

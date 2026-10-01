@@ -11,6 +11,7 @@ import {
   Tray,
 } from 'electron';
 import { clipboard } from 'electron';
+import * as http from 'http';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Store } from './store';
@@ -26,7 +27,13 @@ import { createTray, applyMenu, buildAppMenuTemplate, TrayMenuActions } from './
 import { UsageManager, UsageSnapshot } from './usage-manager';
 import { injectSettingsExtension, expectedVersionRow, resolveShellVersion } from './settings-inject';
 import { ensureFeedbackEntry } from './feedback';
-import { buildMobileUrls, ensureMobileAccess, lanAddresses } from './mobile-connect';
+import {
+  buildMobileUrls,
+  ensureMobileAccess,
+  lanAddresses,
+  mobileAddressFileText,
+  writeMobileAddressFile,
+} from './mobile-connect';
 import { profileDirOf } from './profile';
 import { UpdateManager } from './update-manager';
 import type { UpdateState } from './update-manager';
@@ -350,7 +357,7 @@ async function showMobileConnect(): Promise<void> {
       '以后直接输 IP（或隧道地址）就能进**，不用再管 token。',
   );
 
-  const buttons = ['复制局域网地址', '关闭'];
+  const buttons = ['复制局域网地址', '写到桌面文件', '关闭'];
   if (urls.external !== null) buttons.splice(1, 0, '复制外网地址');
 
   const result = await dialog.showMessageBox({
@@ -369,6 +376,96 @@ async function showMobileConnect(): Promise<void> {
     clipboard.writeText(urls.lan[0] ?? '');
   } else if (picked === '复制外网地址') {
     clipboard.writeText(urls.external ?? '');
+  } else if (picked === '写到桌面文件') {
+    // 用户明确要过之后，才持续维护这个文件（见 refreshMobileAddressFile 的说明）
+    store.set('mobileAddressFile', true);
+    refreshMobileAddressFile();
+    await dialog.showMessageBox({
+      type: 'info',
+      title: '手机连接',
+      message: '已在桌面生成「手机连接地址.txt」',
+      detail:
+        '换网络或服务重启后它会自动更新，不用你再管。\n' +
+        '把这个文件的内容发到手机，打开里面的地址即可。',
+      buttons: ['好'],
+    });
+  }
+}
+
+/**
+ * 刷新桌面那份「手机连接地址.txt」。
+ *
+ * 只在用户**明确要过**（设置里 mobileAddressFile=true，由面板上的
+ * 「写到桌面文件」按钮点亮）时才写 —— 往所有人桌面丢文件是失礼的。
+ * 一旦打开，每次启动 + 每次 token 变化都会自动刷新，用户不用管它过期。
+ */
+/**
+ * 带 token 的地址落盘，供"壳重启但 DSH 还在跑"时复用。
+ *
+ * ── 为什么必须存 ────────────────────────────────────────────────
+ * token 只在 DSH **启动日志**里出现一次，而 `ServiceManager.ensureReady()` 在
+ * 端口已就绪时直接复用、不再拉起进程 —— 于是壳重启后**永远拿不到 token**，
+ * 窗口只能加载裸地址、拿到 401 认证页（表现为"应用打开是一片空白/需要认证"）。
+ * 存一份就解决了：同一个 DSH 进程的 token 不变，复用时可继续用；
+ * 万一 DSH 其实换过了（token 失效），校验会失败并退回裸地址，不会更糟。
+ *
+ * 仅本机可读（0600）。token 是本机服务的凭据，不该让同机其他用户读走。
+ */
+function tokenUrlFile(): string {
+  return path.join(app.getPath('userData'), 'dsh-token-url.txt');
+}
+
+function persistTokenUrl(url: string): void {
+  try {
+    fs.writeFileSync(tokenUrlFile(), url, { mode: 0o600 });
+  } catch (error) {
+    console.error('[main] 保存 token 地址失败（不影响使用）:', error);
+  }
+}
+
+/** 校验一个带 token 的地址是否还能用：401 表示失效，其余（200/302）都算可用 */
+function tokenUrlUsable(url: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const req = http.get(url, { timeout: 3000 }, (res) => {
+      res.resume();
+      resolve(res.statusCode !== 401);
+    });
+    req.on('timeout', () => {
+      req.destroy();
+      resolve(false);
+    });
+    req.on('error', () => resolve(false));
+  });
+}
+
+/** 壳重启且 DSH 已被复用时，把上次存的 token 地址捞回来 */
+async function restorePersistedTokenUrl(): Promise<string> {
+  try {
+    const saved = fs.readFileSync(tokenUrlFile(), 'utf8').trim();
+    if (saved === '') return '';
+    return (await tokenUrlUsable(saved)) ? saved : '';
+  } catch {
+    return '';
+  }
+}
+
+function refreshMobileAddressFile(): void {
+  if (!store.get('mobileAddressFile')) return;
+  const token = (() => {
+    try {
+      return new URL(dshTokenUrl).searchParams.get('token') ?? '';
+    } catch {
+      return '';
+    }
+  })();
+  if (token === '') return;
+  try {
+    const urls = buildMobileUrls(token, store.get('port'), lanAddresses(), store.get('publicUrl'));
+    const at = new Date().toLocaleString('zh-CN');
+    writeMobileAddressFile(app.getPath('desktop'), mobileAddressFileText(urls, at));
+  } catch (error) {
+    // 桌面文件写不出来（比如桌面被改了权限）绝不能影响别的功能
+    console.error('[mobile] 写桌面地址文件失败:', error);
   }
 }
 
@@ -477,6 +574,16 @@ function registerIpc(): void {
     try {
       store.set(payload.key as never, payload.value as never);
       store.save();
+      // ★ 主题必须**立即**生效。
+      //   原来 nativeTheme.themeSource 只在启动流程里设一次（index.ts:803），
+      //   所以用户在设置里点「深色」只是写进了配置文件，界面要**重启**才变 ——
+      //   用户 2026-10-01 反馈「设置里切不了深色模式」就是这个原因，不是没写进去。
+      if (payload.key === 'theme') {
+        const next = payload.value;
+        if (next === 'light' || next === 'dark' || next === 'system') {
+          nativeTheme.themeSource = next;
+        }
+      }
     } catch (err) {
       console.error('[main] 设置保存失败:', payload.key, err);
     }
@@ -820,6 +927,10 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
           // 没有这一行，冒烟就只能断言"注入写了盘"，而本轮踩的坑恰恰是
           // "写盘了但界面看不到" —— 断言必须落在用户实际能看到的那个结果上。
           if (SMOKE) console.log(`[smoke] dsh token url: ${m[1]}`);
+          persistTokenUrl(dshTokenUrl);
+          // 用户开了「桌面地址文件」的话，token 一变就刷新它 ——
+          // 否则 DSH 重启换了 token，桌面那份就是过期的，用户照着输还是进不去。
+          refreshMobileAddressFile();
           // 服务就绪后窗口可能已按裸地址加载（拿到 401 鉴权页），拿到 token 立即补载
           if (mainWin && !mainWin.isDestroyed() && !mainWin.webContents.getURL().includes('token=')) {
             void mainWin.loadURL(dshTokenUrl).catch(() => {});
@@ -1017,6 +1128,10 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
     }
 
     if (dshReady) {
+      // 复用已在跑的 DSH 时，token 不会再次打日志 —— 把上次存的捞回来，
+      // 否则窗口只会加载裸地址、拿到 401 认证页（见 restorePersistedTokenUrl 的说明）。
+      if (dshTokenUrl === '') dshTokenUrl = await restorePersistedTokenUrl();
+      if (dshTokenUrl !== '') refreshMobileAddressFile();
       await mainWin.loadURL(dshTokenUrl || `http://127.0.0.1:${store.get('port')}`);
     } else {
       await showStartingPage(mainWin, true);

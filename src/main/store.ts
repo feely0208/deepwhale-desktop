@@ -41,6 +41,15 @@ export interface Settings {
    * 留空则「手机连接」只显示局域网地址。默认空 —— 不能替用户假设他有隧道。
    */
   publicUrl: string;
+  /**
+   * 是否在桌面维护一份「手机连接地址.txt」（带 token 的完整地址）。
+   *
+   * **默认关闭。** 理由：不是每个用户都要用手机连，往所有人桌面丢文件是失礼的
+   * （而且会让人以为是垃圾文件）。用户在「手机连接…」面板点一次「写到桌面文件」
+   * 即置为 true，此后每次启动自动刷新 —— 换 WiFi、DSH 重启换了 token，
+   * 文件里的地址都是新的，不用用户自己盯着。
+   */
+  mobileAddressFile: boolean;
   /** 原生界面主题：跟随系统 / 浅色 / 深色 */
   theme: 'system' | 'light' | 'dark';
   /** 背景皮肤图片文件名（userData/skins/ 下），null 表示无背景皮肤 */
@@ -105,6 +114,8 @@ const DEFAULTS: Settings = {
   lanAccessMigrated: false,
   // 外网地址默认空 —— 不能替用户假设他配了隧道
   publicUrl: '',
+  // 默认不往桌面放文件；用户点过「写到桌面文件」之后才开启
+  mobileAddressFile: false,
   theme: 'system',
   skinImage: null,
   skinPreset: 'deepseek-blue',

@@ -31,6 +31,8 @@ if (!fs.existsSync(MOD)) {
 const { CDN_FEED_URL, cdnFeedConfig, readPackagedUpdateConfig } = require(MOD);
 
 let failures = 0;
+/** 最新 v* 标签（B 段算出来，C 段复用） */
+let LATEST_TAG = '';
 function check(label, ok, detail) {
   if (ok) console.log(`  ✅ ${label}`);
   else {
@@ -98,6 +100,7 @@ if (OFFLINE) {
   } catch {
     latestTag = '';
   }
+  LATEST_TAG = latestTag;
   console.log(`     最新 tag：${latestTag || '(取不到)'}`);
 
   const files = ['latest.yml', 'latest-mac.yml', 'latest-linux.yml'];
@@ -120,11 +123,85 @@ if (OFFLINE) {
 }
 }
 
+// ── C. 用真实的 electron-updater 去读我们的 CDN ──────────────────────
+//
+// B 段只证明了「文件在那儿、版本对」。这一段补上真正缺的一环：
+// **electron-updater 自己能不能读懂我们 CDN 上的清单** ——
+// 也就是把「上传了 yml」与「客户端会正确解析」之间那段空隙补上。
+// 用真实的 GenericProvider，只把 HTTP 那一层换成 Node 的 fetch。
+async function providerGuard() {
+  console.log('\nC. 用真实 GenericProvider 读 CDN（端到端解析）');
+
+  const { GenericProvider } = require(
+    path.join(REPO, 'node_modules/electron-updater/out/providers/GenericProvider'),
+  );
+  const { HttpError } = require(path.join(REPO, 'node_modules/builder-util-runtime'));
+
+  /** 用 Node fetch 当 electron-updater 的 HTTP 层；URL 从它给的 options 重建。 */
+  function makeExecutor() {
+    const requested = [];
+    const executor = {
+      async request(options) {
+        const port = options.port ? `:${options.port}` : '';
+        const url = `${options.protocol}//${options.hostname}${port}${options.path}`;
+        requested.push(url);
+        const res = await fetch(url);
+        if (!res.ok) throw new HttpError(`HTTP ${res.status}`, res.status);
+        return await res.text();
+      },
+    };
+    return { executor, requested };
+  }
+
+  const { executor, requested } = makeExecutor();
+  const provider = new GenericProvider(
+    { provider: 'generic', url: CDN_FEED_URL },
+    { channel: undefined, isAddNoCacheQuery: true },
+    { executor, platform: 'darwin' },
+  );
+
+  const info = await provider.getLatestVersion();
+  console.log(`     实际请求：${requested[0] ?? '(无)'}`);
+  console.log(`     解析出版本：${info?.version ?? '(失败)'}`);
+  check(
+    'electron-updater 能从我们的 CDN 解析出版本号',
+    typeof info?.version === 'string' && info.version !== '',
+    String(info?.version),
+  );
+  check(
+    '请求带了 noCache（绕开 CDN 缓存）',
+    /[?&]noCache=/.test(requested[0] ?? ''),
+    requested[0] ?? '',
+  );
+  check(
+    '解析出的版本等于最新 tag',
+    LATEST_TAG !== '' && info?.version === LATEST_TAG.replace(/^v/, ''),
+    `${String(info?.version)} vs ${LATEST_TAG}`,
+  );
+
+  // 负向对照：喂一个肯定不存在的地址，必须报错 ——
+  // 否则上面三条可能只是"永远成功"的假通过。
+  const bad = makeExecutor();
+  const badProvider = new GenericProvider(
+    { provider: 'generic', url: 'https://dl.deepwhale.org.cn/definitely-not-a-feed' },
+    { channel: undefined, isAddNoCacheQuery: true },
+    { executor: bad.executor, platform: 'darwin' },
+  );
+  let threw = false;
+  try {
+    await badProvider.getLatestVersion();
+  } catch {
+    threw = true;
+  }
+  check('负向对照：不存在的 feed 地址会报错（证明上面不是假通过）', threw);
+}
+
 // 顶层 await 与 require 不能共存（Node 会报 ERR_AMBIGUOUS_MODULE_SYNTAX），
 // 所以这一整段包进 async 函数，用 .then 收尾。
 liveGuard()
+  .then(providerGuard)
   .catch((error) => {
-    console.error('\n❌ 发布守卫自身出错：', error);
+    console.error('\n❌ 守卫自身出错：', error);
     failures += 1;
   })
   .then(() => {

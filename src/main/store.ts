@@ -15,17 +15,32 @@ export interface Settings {
   /** DSH Web UI 端口 */
   port: number;
   /**
-   * 是否让 DSH 对局域网开门（手机连接）。
+   * 是否让 DSH 对局域网开门（手机连接）。**默认开启（2026-10-01 起）。**
    *
-   * **默认关闭，且目前没有界面入口。** 原因不是功能做不出来，而是做不全就是有害的：
-   * 只把 DSH 绑到 0.0.0.0、却不给用户「地址 + token」的入口（用户从来没见过 token），
-   * 等于只开门、不发钥匙 —— 用户拿不到任何好处，却平白让同 WiFi 下的其他人多了一个入口。
+   * 为什么现在敢默认开：这个功能原来"做不全就是有害的" —— 只绑 0.0.0.0、却不给用户
+   * 「地址 + token」的入口，等于只开门不发钥匙。现在三件事齐了：
+   *   ① 绑 0.0.0.0 + 运行时探测本机地址写进 trustedHosts（换 WiFi 自动更新）；
+   *   ② 桌面端有「手机连接…」入口，给出**带 token 的完整地址**（用户不用手打 token）；
+   *   ③ 鉴权**保持开启** —— 同一 WiFi 下别人没有这个地址进不来。
    *
-   * 用户已明确叫停手机端方向（见 2026-09-30 交接文档第五节），要求「要做就一次做全」：
-   * 绑 0.0.0.0 + 运行时探测地址 + 桌面端露出地址/token + 发正式版，缺一个用户就用不了。
-   * 接口在 src/main/mobile-connect.ts 里是现成的、测过的，等那三步齐了再把这里改成 true。
+   * ⚠️ 保持鉴权开启是硬约束：0.0.0.0 意味着同网段可达，关掉 token 就等于把
+   *    用户的会话记录和文件对同 WiFi 的所有人敞开。
    */
   lanAccess: boolean;
+  /**
+   * `lanAccess` 的一次性迁移标记。
+   *
+   * 为什么需要：1.0.25 引入 lanAccess 时默认 false，而 `store.save()` 会把**所有**设置
+   * 写进 settings.json —— 所以升级上来的用户文件里已经存着 `lanAccess: false`，
+   * 光改 DEFAULTS 不会生效。第一次读到旧文件时强制置为 true 并打上本标记，
+   * 之后用户自己关掉就尊重他的选择（标记已在，不再强制）。
+   */
+  lanAccessMigrated: boolean;
+  /**
+   * 外网访问地址（用户自建的隧道/反向代理），例如 `https://xxx.example.org`。
+   * 留空则「手机连接」只显示局域网地址。默认空 —— 不能替用户假设他有隧道。
+   */
+  publicUrl: string;
   /** 原生界面主题：跟随系统 / 浅色 / 深色 */
   theme: 'system' | 'light' | 'dark';
   /** 背景皮肤图片文件名（userData/skins/ 下），null 表示无背景皮肤 */
@@ -83,8 +98,13 @@ const DEFAULTS: Settings = {
   // 老用户 settings.json 里存着的旧默认串（结尾是裸 `web`）也会被壳改写，无需手工迁移。
   command: `npx @deepseek-ai/dsh@${DSH_RUNTIME_VERSION} --profile ${PROFILE_NAME} --port 3095 --no-open`,
   port: 3095,
-  // 默认关：见 Settings.lanAccess 的说明 —— 手机端没一次做全之前不能开
-  lanAccess: false,
+  // 默认开：三件事齐了（绑 0.0.0.0 + 运行时探测 trustedHosts + 桌面露出带 token 的地址），
+  // 鉴权保持开启。见 Settings.lanAccess 的说明。
+  lanAccess: true,
+  // 一次性迁移标记：升级上来的用户文件里存着旧的 false，第一次读到要强制改成 true
+  lanAccessMigrated: false,
+  // 外网地址默认空 —— 不能替用户假设他配了隧道
+  publicUrl: '',
   theme: 'system',
   skinImage: null,
   skinPreset: 'deepseek-blue',
@@ -123,6 +143,13 @@ export class Store {
       // 旧版本兼容：skin 字段迁移为 theme
       if ('skin' in parsed && !('theme' in parsed)) {
         this.data.theme = 'system';
+      }
+      // 一次性迁移：1.0.25/1.0.26 存下来的 lanAccess=false 是老默认值，不是用户的选择 ——
+      // 而 store.save() 会把所有设置写进文件，所以光改 DEFAULTS 对老用户无效。
+      // 打上标记之后就不再强制，用户自己关掉会被尊重。
+      if (!this.data.lanAccessMigrated) {
+        this.data.lanAccess = true;
+        this.data.lanAccessMigrated = true;
       }
     } catch {
       // 首次运行或文件损坏：使用默认值

@@ -10,6 +10,7 @@ import {
   shell,
   Tray,
 } from 'electron';
+import { clipboard } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Store } from './store';
@@ -25,7 +26,7 @@ import { createTray, applyMenu, buildAppMenuTemplate, TrayMenuActions } from './
 import { UsageManager, UsageSnapshot } from './usage-manager';
 import { injectSettingsExtension, expectedVersionRow, resolveShellVersion } from './settings-inject';
 import { ensureFeedbackEntry } from './feedback';
-import { ensureMobileAccess } from './mobile-connect';
+import { buildMobileUrls, ensureMobileAccess, lanAddresses } from './mobile-connect';
 import { profileDirOf } from './profile';
 import { UpdateManager } from './update-manager';
 import type { UpdateState } from './update-manager';
@@ -290,6 +291,87 @@ function openSettingsPage(): void {
 }
 
 /** 构建统一菜单动作（托盘 + macOS 顶栏共用） */
+/**
+ * 「手机连接」—— 把**带 token 的完整地址**交给用户，他不用手打 token。
+ *
+ * ── 为什么必须由我们拼 token ────────────────────────────────────────
+ * 用户的原话：「以前只需要输入 ip 就可以，从来没有让输入过什么 token」。
+ * 而现在的 DSH 有鉴权：不带 token 一律 401。DSH 的行为是「用带 token 的根地址访问一次
+ * → 种 cookie → 跳到干净的 ./」，所以**第一次用我们给的完整地址打开，之后浏览器记住
+ * cookie，用户再直接输 IP / 隧道地址就能进** —— 正是他记忆里的体验。
+ *
+ * 鉴权**保持开启**：0.0.0.0 意味着同网段可达，关掉 token 等于把会话记录对同 WiFi 敞开。
+ */
+async function showMobileConnect(): Promise<void> {
+  if (!store.get('lanAccess')) {
+    await dialog.showMessageBox({
+      type: 'info',
+      title: '手机连接',
+      message: '「允许手机连接」当前是关闭的。',
+      detail: '打开后深鲸桌面才会在局域网里可被访问。可以在设置里打开，或联系支持。',
+      buttons: ['知道了'],
+    });
+    return;
+  }
+
+  const token = (() => {
+    try {
+      return new URL(dshTokenUrl).searchParams.get('token') ?? '';
+    } catch {
+      return '';
+    }
+  })();
+
+  if (token === '') {
+    await dialog.showMessageBox({
+      type: 'info',
+      title: '手机连接',
+      message: '服务还没就绪，暂时拿不到连接地址。',
+      detail: '等深鲸桌面完全启动后（界面能正常聊天）再打开这个面板。',
+      buttons: ['知道了'],
+    });
+    return;
+  }
+
+  const urls = buildMobileUrls(token, store.get('port'), lanAddresses(), store.get('publicUrl'));
+  const lines: string[] = [];
+  if (urls.lan.length > 0) {
+    lines.push('【同一 WiFi】');
+    for (const u of urls.lan) lines.push(u);
+  } else {
+    lines.push('【同一 WiFi】没检测到局域网地址（可能没连 WiFi）');
+  }
+  if (urls.external !== null) {
+    lines.push('', '【在外面用】', urls.external);
+  }
+  lines.push(
+    '',
+    '手机浏览器打开上面的地址即可。**第一次打开之后，浏览器会记住登录状态，' +
+      '以后直接输 IP（或隧道地址）就能进**，不用再管 token。',
+  );
+
+  const buttons = ['复制局域网地址', '关闭'];
+  if (urls.external !== null) buttons.splice(1, 0, '复制外网地址');
+
+  const result = await dialog.showMessageBox({
+    type: 'info',
+    title: '手机连接',
+    message: '用手机浏览器打开下面的地址',
+    detail: lines.join('\n'),
+    buttons,
+    defaultId: 0,
+    cancelId: buttons.length - 1,
+    noLink: true,
+  });
+
+  const picked = buttons[result.response];
+  if (picked === '复制局域网地址') {
+    clipboard.writeText(urls.lan[0] ?? '');
+  } else if (picked === '复制外网地址') {
+    clipboard.writeText(urls.external ?? '');
+  }
+}
+
 function buildMenuActions(): TrayMenuActions {
   const skinSubmenu: MenuItemConstructorOptions[] = [
     { label: '背景图片…', click: () => void pickBackgroundImage() },
@@ -358,6 +440,7 @@ function buildMenuActions(): TrayMenuActions {
     },
     onRefreshUsage: () => void usage.refresh(),
     onCheckUpdate: () => void updates?.checkNow(),
+    onMobileConnect: () => void showMobileConnect(),
     skinSubmenu,
     petSubmenu,
     usagePanelVisible: store.get('usagePanelVisible'),

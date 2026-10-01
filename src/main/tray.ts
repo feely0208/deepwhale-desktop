@@ -14,6 +14,8 @@ export interface TrayMenuActions {
   onOpenPetsFolder?: () => void;
   /** 手动检查更新（有结果会如实告知，含"已是最新"与失败原因） */
   onCheckUpdate?: () => void;
+  /** 手机连接：显示「用手机打开」的地址（地址里已带 token，用户不用手打） */
+  onMobileConnect?: () => void;
   /** 皮肤子菜单（主题/背景图片，由调用方构建） */
   skinSubmenu: MenuItemConstructorOptions[];
   /** 宠物子菜单（含显示/隐藏） */
@@ -41,6 +43,7 @@ export function buildMenuTemplate(a: TrayMenuActions): MenuItemConstructorOption
     { label: '立即刷新余额', click: () => a.onRefreshUsage() },
     { label: '设置 API Key…', click: () => a.onSetApiKey() },
     { label: '自定义 CSS…', click: () => a.onOpenCustomCss() },
+    { label: '手机连接…', click: () => a.onMobileConnect?.() },
     { type: 'separator' },
     { label: '检查更新…', click: () => a.onCheckUpdate?.() },
     { type: 'separator' },
@@ -133,6 +136,7 @@ export function buildAppMenuTemplate(a: TrayMenuActions): MenuItemConstructorOpt
         { label: '打开宠物目录…', click: () => a.onOpenPetsFolder?.() },
         { label: '打开自定义 CSS…', click: () => a.onOpenCustomCss() },
         { type: 'separator' as const },
+        { label: '手机连接…', click: () => a.onMobileConnect?.() },
         { label: '检查更新…', click: () => a.onCheckUpdate?.() },
       ],
     },

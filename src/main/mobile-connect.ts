@@ -135,3 +135,55 @@ export function ensureMobileAccess(home: string, port: number): { changed: boole
   fs.writeFileSync(file, next);
   return { changed: true, addresses };
 }
+
+// ─────────────────────────────────────────────────────────────────────
+// 「手机连接」面板要展示的地址
+// ─────────────────────────────────────────────────────────────────────
+
+export interface MobileUrls {
+  /** 局域网地址（同一 WiFi 用），每个网卡一条，已在前面排好序 */
+  lan: string[];
+  /** 外网地址（用户自建的隧道/反代），没配置就是 null */
+  external: string | null;
+  /** 手机浏览器第一次打开用的完整地址（带 token） */
+  firstTime: string | null;
+}
+
+/**
+ * 组装「手机连接」要展示的地址。
+ *
+ * ── 为什么把 token 直接拼进地址 ──────────────────────────────────────
+ * 用户的原话是「以前只需要输入 ip 就可以，从来没让输入过什么 token」。
+ * 而现在的 DSH 有鉴权闸门：不带 token 一律 401。
+ * DSH 的行为是「用带 token 的根地址访问一次 → 种下 cookie → 跳到干净的 ./」，
+ * 所以**只要第一次用带 token 的完整地址打开，之后浏览器就记住 cookie，
+ * 用户再直接输 IP / 隧道地址就能进** —— 这正是他要的体验。
+ * 因此 token 必须由我们拼好交给他，而不是让他手抄。
+ *
+ * 纯函数，不碰文件系统，方便离线回归测试。
+ *
+ * @param token - DSH 本次启动的 token（从它的启动日志里拿）；拿不到时传空串
+ * @param port - DSH 端口
+ * @param addresses - 本机局域网地址（见 lanAddresses()）
+ * @param publicUrl - 用户配置的外网地址（隧道域名），可空
+ */
+export function buildMobileUrls(
+  token: string,
+  port: number,
+  addresses: string[],
+  publicUrl: string,
+): MobileUrls {
+  // token 拿不到时也保留结尾的 `/` —— 地址形状保持一致，别一会儿有一会儿没有
+  const suffix = token === '' ? '/' : `/?token=${encodeURIComponent(token)}`;
+  const lan = addresses.map((ip) => `http://${ip}:${String(port)}${suffix}`);
+
+  const base = publicUrl.trim().replace(/\/+$/, '');
+  const external = base === '' ? null : `${base}${suffix}`;
+
+  return {
+    lan,
+    external,
+    // 「第一次用哪个」：优先外网（在外面也能用），没有就给局域网第一条
+    firstTime: external ?? lan[0] ?? null,
+  };
+}

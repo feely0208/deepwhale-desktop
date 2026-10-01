@@ -2,7 +2,7 @@ import { BrowserWindow, app, nativeImage, nativeTheme, shell } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Store } from './store';
-import { presetBackgroundCss, glowInjectionScript, glowRemovalScript } from './skin-presets';
+import { presetBackgroundCss, glowRemovalScript } from './skin-presets';
 
 /**
  * 皮肤系统（按用户需求重构）：
@@ -239,7 +239,11 @@ export class SkinManager {
     }
     // 光斑层用真 DOM 建（三层模糊半径不同，一个伪元素塞不下），见 skin-presets.ts
     try {
-      await win.webContents.executeJavaScript(glowInjectionScript('bottom'));
+      // ★ 已改用纯 CSS 承载辉光（挂在 html 的 background 上）——
+      //   原来这里插 DOM + z-index:-1，DSH 界面一改版就静默失效，
+      //   用户升级到 1.0.28 后「背景变灰、蓝光没了」就是这个原因。
+      //   现在和面板色走同一条 CSS 注入通道，不再依赖 DOM 结构。
+      //   （保留 glowInjectionScript 导出仅作兜底，不再调用）
     } catch (e) {
       console.error('[skin] 内置背景光斑注入失败:', e);
     }

@@ -144,40 +144,142 @@ export function glowContainerStyle(): string {
  * 面板色沿用背景图那一套（深色面板不透明、基础底色透明）：
  * 辉光只在"没有面板盖住"的地方透出来，正文可读性不受影响。
  */
+/**
+ * 三层辉光：**可动画**的纯 CSS 实现。
+ *
+ * ── 为什么长这样（两个约束叠在一起）─────────────────────────────
+ * ① 不能再用"插 DOM + z-index:-1"（2026-10-01：升级到 1.0.28 后静默失效，
+ *    用户只看到"背景变灰、蓝光没了"）。所以必须挂在 html 的 background 上。
+ * ② 用户要求"像官方那样会动"。
+ *
+ * 而**渐变里写死 `at X Y` 是动不了的** —— CSS 没法直接动画渐变的几何。
+ * 所以改成：每个光斑做成一个**固定尺寸的图层**，光斑居中在图层里，
+ * 再用 `background-position` 把图层摆到位 —— 而 `background-position` 是
+ * 可以正常用 @keyframes 动画的属性（不需要 @property，兼容性更好）。
+ *
+ * 图层尺寸 = 光斑尺寸 + 2×模糊半径（用大半径的径向渐变近似 filter:blur）。
+ * 位置 = 目标中心 − 图层尺寸/2：
+ *   L1 660×660  中心(10vw+250, 100vh−150) → 左上(10vw−80,  100vh−480)
+ *   L2 900×600  中心(50vw,     100vh−150) → 左上(50vw−450, 100vh−450)
+ *   L3 520×520  中心(90vw−200, 100vh−120) → 左上(90vw−460, 100vh−380)
+ */
+/**
+ * 光斑图层与位置 —— **严格按官网 geometry 反推**（2026-10-01 从 deepseek.com 扒到的原样）：
+ *
+ *   官网容器：`absolute top-[80px] left-0 w-full h-[500px]`
+ *   三个光斑各自 `bottom:-100 / -50 / -80`，即底边落在带子底边(80+500=580)之下
+ *   → 光心：
+ *        L1 500×500 bottom:-100 → 底边680、高500 → 中心 y = 430
+ *        L2 700×400 bottom:-50  → 底边630、高400 → 中心 y = 430
+ *        L3 400×400 bottom:-80  → 底边660、高400 → 中心 y = 460
+ *     x：L1 = 10vw+250 ／ L2 = 50vw ／ L3 = 90vw−200
+ *
+ * ⚠️ 我中途按旧壳代码把光挪到过"窗口下方"，那是**错的** —— 官网就在上方这个位置。
+ *
+ * 图层尺寸 = 光斑尺寸 + 2×模糊半径（用多档渐隐近似 filter:blur）：
+ *   L1 500+2×80=660   L2 700+2×100=900×600   L3 400+2×60=520
+ */
+const GLOW_LAYER_SIZE: string[] = ['660px 660px', '900px 600px', '520px 520px'];
+
+const GLOW_POS_BASE: string[] = [
+  'calc(10vw - 80px) 430px',
+  'calc(50vw - 450px) 430px',
+  'calc(90vw - 460px) 460px',
+];
+
+/** 漂移终点：三层各走各的、幅度很小 —— 官网那种"在动但不明显"的调子。 */
+const GLOW_POS_DRIFT: string[] = [
+  'calc(10vw - 44px) 414px',
+  'calc(50vw - 512px) 444px',
+  'calc(90vw - 424px) 448px',
+];
+
+function glowGradientCss(scale: number): string {
+  const a = (v: number) => (v * scale).toFixed(3);
+  // ★ 必须写 `closest-side`：
+  //   径向渐变默认半径是"到**最远角**"（660×660 图层里 = 467px），
+  //   比图层半宽（330px）大 —— 于是渐变在图层边缘**还没淡到 0** 就被 background-size
+  //   硬切一刀，屏幕上就是一个个方块边（用户 2026-10-01 直接指出"看起来是色块"）。
+  //   改成 closest-side：半径正好等于到最近边的距离，渐隐刚好在边界归零，边缘干净。
+  //   中间补一档 stop，让衰减更接近原版的 filter:blur()（纯线性淡出会显得扁）。
+  return [
+    `radial-gradient(circle closest-side at center, rgba(26,56,112,${a(0.3)}) 0%, rgba(26,56,112,${a(0.24)}) 25%, rgba(26,56,112,${a(0.13)}) 50%, rgba(26,56,112,${a(0.05)}) 75%, rgba(26,56,112,0) 100%)`,
+    `radial-gradient(ellipse closest-side at center, rgba(45,95,158,${a(0.4)}) 0%, rgba(38,74,140,${a(0.33)}) 25%, rgba(26,56,112,${a(0.19)}) 50%, rgba(26,56,112,${a(0.07)}) 75%, rgba(26,56,112,0) 100%)`,
+    `radial-gradient(circle closest-side at center, rgba(74,138,196,${a(0.2)}) 0%, rgba(60,116,176,${a(0.15)}) 25%, rgba(45,95,158,${a(0.08)}) 50%, rgba(45,95,158,${a(0.03)}) 75%, rgba(45,95,158,0) 100%)`,
+  ].join(', ');
+}
+
+/** 生成 `html` 上那整段"底色 + 三层可动辉光 + 动画"。scale 用于浅色模式压淡。 */
+export function glowBackgroundCss(scale: number, base: string): string {
+  return `
+      background-color: ${base} !important;
+      background-image: ${glowGradientCss(scale)} !important;
+      background-size: ${GLOW_LAYER_SIZE.join(', ')} !important;
+      background-repeat: no-repeat !important;
+      background-position: ${GLOW_POS_BASE.join(', ')} !important;
+      background-attachment: fixed !important;
+      animation: dsh-skin-drift 26s ease-in-out infinite alternate !important;`;
+}
+
+/** 漂移关键帧。放在预设 CSS 里一起注入（只注入一次，靠 animation-name 去重）。 */
+export const GLOW_KEYFRAMES = `
+      @keyframes dsh-skin-drift {
+        from { background-position: ${GLOW_POS_BASE.join(', ')}; }
+        to   { background-position: ${GLOW_POS_DRIFT.join(', ')}; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        html { animation: none !important; }
+      }`;
+
 export function presetBackgroundCss(preset: string): string | null {
   if (preset !== 'deepseek-blue') return null;
-  return `
-      html { background-color: transparent !important; }
+  return `${GLOW_KEYFRAMES}
+      /* ★ 辉光挂在 html 上：根元素背景 = 画布背景，天然在最底层，不受界面改版影响 */
+      html {${glowBackgroundCss(1, PRESET_DARK_BASE)}
+      }
       body { background-color: transparent !important; }
       /* 深色：面板不透明、基础底色透明 —— 辉光只在空隙里透出来 */
       body[data-ds-dark-theme] {
         --dsw-alias-bg-base: transparent !important;
-        --dsw-alias-bg-layer-1: #1c1f25 !important;
-        --dsw-alias-bg-layer-2: #23272e !important;
-        --dsw-alias-bg-overlay: #16191e !important;
-        --dsw-specific-sidebar-fill: #16191e !important;
+        /* ★ 面板改成半透明 —— 这是让辉光"透上来"的关键。
+           官网的辉光铺在空旷 hero 区上所以好看；桌面端正文面板如果不透明，
+           就把光整块盖死了（用户 2026-10-01 看到"一片灰"就是这个原因）。
+           做成 rgba 之后，光从面板底下透出来，接近官网那种"雾"的感觉。
+           透明度取值原则：**正文可读性优先** —— 0.70 左右是实测能兼顾的档位。 */
+        --dsw-alias-bg-layer-1: rgba(24, 28, 34, 0.70) !important;
+        --dsw-alias-bg-layer-2: rgba(32, 37, 44, 0.74) !important;
+        --dsw-alias-bg-overlay: rgba(18, 21, 26, 0.80) !important;
+        --dsw-specific-sidebar-fill: rgba(16, 19, 24, 0.62) !important;
         --dsw-specific-sidebar-nav-item-active: rgba(255, 255, 255, 0.08) !important;
         --dsw-specific-sidebar-nav-item-hover: rgba(255, 255, 255, 0.05) !important;
       }
       body[data-ds-dark-theme] [class*="sidebarCol"] {
-        background: #14171c !important;
+        background: rgba(14, 17, 22, 0.58) !important;
+      }
+      /* 面板加一点毛玻璃，半透明才不会"脏"（Electron/Chromium 支持） */
+      body[data-ds-dark-theme] [class*="sidebarCol"],
+      body[data-ds-dark-theme] [class*="panel"],
+      body[data-ds-dark-theme] [class*="Card"] {
+        backdrop-filter: blur(16px) saturate(1.15);
+        -webkit-backdrop-filter: blur(16px) saturate(1.15);
       }
       /* 浅色：底色换成近白，并把光斑整体压淡（screen 混合在白底上会糊成一片） */
-      body:not([data-ds-dark-theme]) #dsh-skin-glow {
-        background: ${PRESET_LIGHT_BASE} !important;
-        opacity: 0.45 !important;
+      /* 浅色：近白底 + 辉光压淡（白底上原强度会糊成一片） */
+      html:has(body:not([data-ds-dark-theme])) {${glowBackgroundCss(0.45, PRESET_LIGHT_BASE)}
       }
+      body:not([data-ds-dark-theme]) { background-color: transparent !important; }
       body:not([data-ds-dark-theme]) {
         --dsw-alias-bg-base: transparent !important;
-        --dsw-alias-bg-layer-1: #ffffff !important;
-        --dsw-alias-bg-layer-2: #f4f6f8 !important;
-        --dsw-alias-bg-overlay: #ffffff !important;
-        --dsw-specific-sidebar-fill: #f4f6f8 !important;
+        /* 浅色同样半透明，否则白底面板会把辉光完全挡住 */
+        --dsw-alias-bg-layer-1: rgba(255, 255, 255, 0.72) !important;
+        --dsw-alias-bg-layer-2: rgba(244, 246, 248, 0.76) !important;
+        --dsw-alias-bg-overlay: rgba(255, 255, 255, 0.82) !important;
+        --dsw-specific-sidebar-fill: rgba(244, 246, 248, 0.62) !important;
         --dsw-specific-sidebar-nav-item-active: rgba(0, 0, 0, 0.06) !important;
         --dsw-specific-sidebar-nav-item-hover: rgba(0, 0, 0, 0.04) !important;
       }
       body:not([data-ds-dark-theme]) [class*="sidebarCol"] {
-        background: linear-gradient(to right, rgba(247, 248, 250, 0.94), rgba(247, 248, 250, 0.18)) !important;
+        background: linear-gradient(to right, rgba(247, 248, 250, 0.66), rgba(247, 248, 250, 0.16)) !important;
       }
     `;
 }

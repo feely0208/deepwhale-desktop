@@ -4,6 +4,34 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [SemVer](https://semver.org/lang/zh-CN/)。
 
+## [1.0.27] - 2026-10-01
+
+**更新源从"只有 GitHub"改成"自建 CDN 为主、GitHub 兜底"。**
+
+### 变更
+- **接上自建更新源（`dl.deepwhale.org.cn`）。** 原来检查更新只有一条路：GitHub Releases。
+  国内用户经常连不上 GitHub，表现就是「点检查更新没反应」——**根本不知道有新版本**。
+  现在主源改成我们自己的 CDN（安装包与 `latest*.yml` 都已经在那里），
+  **失败自动回退**到打包时写好的更新源。
+
+  为什么必须留回退：CDN 是自建的 —— 某个版本忘了传 `latest*.yml`、或者 CDN 抽风，
+  只写 CDN 就等于**所有用户都收不到更新**，比原来更糟。回退配置直接读打包时的
+  `Resources/app-update.yml`，不硬编码 owner/repo，免得哪天改名两边不一致。
+
+  实现上有两个不显然的点：
+  · `checkForUpdates()` **既 emit('error') 又 reject** —— 试 CDN 期间的 error 事件
+    先用标记按住，否则会出现"回退成功了、但界面闪了一次假报错"；
+  · generic provider 会自动给 channel 文件加 `noCache=<时间戳>`（见 `update-feed.ts` 注释），
+    正好绕开 CDN 缓存 —— 所以**不需要每次发版人工刷 CDN**。
+
+### 新增测试
+- `scripts/test-update-feed.js`（16 项），三段：
+  · A 段离线：回退配置的解析（含"缺 provider 就返回 null，不给半成品配置"）；
+  · B 段联网**发布守卫**：CDN 上三个 `latest*.yml` 都要能取到，且**版本号 == 最新的 v\* 标签**
+    —— 专门挡"推了 tag 却忘了补传 yml"这种无声故障（客户端只会一直读到旧版本，没有任何报错）；
+  · C 段端到端：用**真实的 `GenericProvider`**（只把 HTTP 层换成 Node fetch）请求我们的 CDN，
+    确认它能解析出版本号、请求确实带 `noCache`，并有负向对照证明不是"永远成功"。
+
 ## [1.0.26] - 2026-10-01
 
 两件事：把 macOS 上「点了没反应」的升级提示改成真能用的出口；并让壳启动 DSH 时

@@ -265,6 +265,77 @@ function copyTreeIfChanged(srcDir: string, destDir: string): boolean {
  * 用户也可能自己写过条目。只做两件事：已含本行则原样返回；否则在保留原有内容
  * （含注释）的前提下追加一个 `- insert:` 块。
  */
+/**
+ * 把「我们自己插的」insert 块从 patch 文件里删掉。
+ *
+ * ── 为什么要有这个删除 ──────────────────────────────────────────────
+ * 这些行原来在 **home 级**和 **profile 级**各写一份，注释里当时的说法是
+ * "重复是安全的（实测只挂载一次）"。但那是旧 DSH 上的实测，而且忽略了一件事：
+ * **profile 级那个 patch 是 DSH 自己的地盘** —— 用户在界面里改主题/聊天显示等
+ * 设置时 DSH 会重写它（文件底部那些 `- id: ui-theme` / `ui-chat` 就是 DSH 写的），
+ * 并且会把我们插的块**重新排版**（office 块里的长字符串被折成多行就是证据）。
+ * 同一个 id 在两层各声明一次，等于让 DSH 的配置装载去合并两份重复输入 ——
+ * 而 home 级那一份才是真正生效的那份（见上方说明）。
+ *
+ * 只删我们自己插的块：按顶层 `- ` 划块，块内既有 `- insert:`、id 又命中才删。
+ * DSH 自己写的条目（`- id: ui-theme` 这种）不会被误伤。
+ * 紧邻在上面的注释（我们自己写的段标题）一并清掉；但**文件开头的说明注释不动**
+ * —— 那是 DSH 写的头部，判断办法是"它前面没有非注释内容"。
+ *
+ * @returns 是否真的改动了文件
+ */
+export function removeOurInsertBlocks(file: string, ids: string[]): boolean {
+  const current = readText(file);
+  if (current === null || current.trim() === '') return false;
+  const lines = current.split('\n');
+  const kept: string[] = [];
+  let removed = false;
+  let i = 0;
+  while (i < lines.length) {
+    if (/^- /.test(lines[i])) {
+      const block: string[] = [];
+      while (i < lines.length && (block.length === 0 || !/^- /.test(lines[i]))) {
+        block.push(lines[i]);
+        i += 1;
+      }
+      const text = block.join('\n');
+      const hit =
+        text.includes('- insert:') &&
+        ids.some((id) => new RegExp(`^\\s+- id:\\s*${id}\\s*$`, 'm').test(text));
+      if (hit) {
+        removed = true;
+        // 顺带清掉紧邻在上面的注释行（我们自己的段标题）。
+        // 仅当 already-kept 里存在非注释内容时才清 —— 否则会把 DSH 的文件头注释删掉。
+        const hasBody = (): boolean =>
+          kept.some((l) => l.trim() !== '' && !l.trim().startsWith('#'));
+        while (
+          hasBody() &&
+          kept.length > 0 &&
+          kept[kept.length - 1].trim().startsWith('#')
+        ) {
+          kept.pop();
+        }
+        // 压掉因此产生的重复空行
+        while (
+          kept.length >= 2 &&
+          kept[kept.length - 1].trim() === '' &&
+          kept[kept.length - 2].trim() === ''
+        ) {
+          kept.pop();
+        }
+      } else {
+        kept.push(...block);
+      }
+    } else {
+      kept.push(lines[i]);
+      i += 1;
+    }
+  }
+  if (!removed) return false;
+  fs.writeFileSync(file, kept.join('\n'));
+  return true;
+}
+
 function ensurePatchRow(file: string): boolean {
   // 文件不存在时**按空文件处理并创建**。
   //
@@ -497,18 +568,18 @@ export function ensureLegalModeSetup(
   // 实测：启动前写好 home 级 patch + `<home>/node_modules` 解析点，
   // DSH 首次启动的插件清单里就**已经包含** ui-legal-mode（零报错）。
   //
-  // ⚠️ 与 profile 级那几行**重复是安全的**：实测 home 级与 profile 级同时存在时，
-  //    插件仍然只挂载一次（清单里 legal 条目数 = 1），DSH 启动无任何告警。
-  //    所以老用户无需做"删除 profile 级旧行"的迁移。
+  // ⚠️ 2026-10-01 更正：以前这里写着"与 profile 级重复是安全的（实测只挂载一次）"。
+  //    那是旧 DSH 上的实测，且忽略了 profile 级 patch 归 DSH 自己重写这件事。
+  //    现在改为**只留 home 级**，profile 级的旧行会被 removeOurInsertBlocks 删掉。
   changed = ensurePluginEntry(
     path.join(home, 'node_modules', ...PLUGIN_NAME.split('/')),
     pluginDir,
   ) || changed;
   changed = ensurePatchRow(path.join(home, 'cordis.patch.yml')) || changed;
 
-  // 3. profile 侧：保留原有注入，兼容只读 profile 级 patch 的 DSH 版本与既有用户。
+  // 3. profile 侧：**只保留模块接线，不再往 patch 里插行**（2026-10-01 去重复）。
   //
-  // ⚠️ 目录**先于文件**落盘：DSH 把 profiles/web 建出来后，cordis.patch.yml 与
+  // ⚠️ 目录**先于文件**落盘：DSH 把 profiles/<name> 建出来后，cordis.patch.yml 与
   // package.json 还要过一会儿才写。早先这里只在"目录不存在"时算 pending，于是
   // 文件那一瞬间不在，下面就静默 `return false` 放弃写入。
   const profileDir = profileDirOf(home);
@@ -522,7 +593,10 @@ export function ensureLegalModeSetup(
       pluginDir,
     ) || changed;
     changed = ensureProfileDependency(path.join(profileDir, 'package.json'), pluginDir) || changed;
-    changed = ensurePatchRow(path.join(profileDir, 'cordis.patch.yml')) || changed;
+    // 老用户 profile 级那份重复行要**删掉**：profile 级 patch 归 DSH 管，
+    // 我们的行留在那里只会让同一 id 被声明两次（见 removeOurInsertBlocks 的说明）。
+    changed =
+      removeOurInsertBlocks(path.join(profileDir, 'cordis.patch.yml'), [PLUGIN_ROW_ID]) || changed;
   }
 
   return { changed, profilePending };

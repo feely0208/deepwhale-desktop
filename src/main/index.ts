@@ -393,6 +393,30 @@ async function showMobileConnect(): Promise<void> {
 }
 
 /**
+ * DSH 端口上是否已经有服务在应答。
+ *
+ * 用来判断"这次是冷启动（要先把注入写进盘、再拉起 DSH）还是复用已有 DSH"。
+ * 复用时**绝不能写任何配置文件**：DSH 运行期间外部改动 `cordis.patch.yml` 会让
+ * chokidar 触发第二次 HMR runExclusive，直接抛 `HMR transactions cannot be nested`。
+ */
+function dshPortAnswered(): Promise<boolean> {
+  return new Promise((resolve) => {
+    const req = http.get(
+      { host: '127.0.0.1', port: store.get('port'), path: '/', timeout: 1500 },
+      (res) => {
+        res.resume();
+        resolve(true);
+      },
+    );
+    req.on('timeout', () => {
+      req.destroy();
+      resolve(false);
+    });
+    req.on('error', () => resolve(false));
+  });
+}
+
+/**
  * 刷新桌面那份「手机连接地址.txt」。
  *
  * 只在用户**明确要过**（设置里 mobileAddressFile=true，由面板上的
@@ -976,11 +1000,13 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
       const INJECT_ATTEMPTS = 12;
       const INJECT_RETRY_MS = 1500;
       const injectedIds = ['ui-legal-mode', 'skill-office', 'tool-workspace-dependencies'];
-      const profilePatchPath = (): string =>
-        path.join(profileDirOf(legalHome), 'cordis.patch.yml');
+      // ⚠️ 看护的是 **home 级** patch，不再看 profile 级（2026-10-01 去重复）。
+      //    home 级是壳自己创建、DSH 不会重写的那个文件，也是真正生效的那份；
+      //    profile 级归 DSH 管（它改设置时会重写），我们的行已从那里清掉。
+      const injectPatchPath = (): string => path.join(legalHome, 'cordis.patch.yml');
       const patchHasAllRows = (): boolean => {
         try {
-          const text = fs.readFileSync(profilePatchPath(), 'utf8');
+          const text = fs.readFileSync(injectPatchPath(), 'utf8');
           return injectedIds.every((id) => text.includes(id));
         } catch {
           return false;
@@ -1003,43 +1029,54 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
       //   这个缺陷是 v1.0.18 引入「连续两轮稳定」时带进来的：
       //   加之前最后一轮可能是 changed，加了之后必然不是。
       let anyChanged = false;
-      for (let attempt = 1; attempt <= INJECT_ATTEMPTS; attempt += 1) {
-        try {
-          after = ensureLegalModeSetup(legalHome, payloadDir, legalRuntimeDir);
-        } catch (error) {
-          logInjectionFailure('legal-mode', 'profile 注入', error);
+      // ⚠️ 复用已在跑的 DSH 时**一个字都不能写**（2026-10-01）：
+      //   DSH 运行期间由外部改 `cordis.patch.yml`，chokidar 会触发第二次 HMR
+      //   runExclusive，直接抛 `HMR transactions cannot be nested`
+      //   （dsh-hmr/lib/index.js:280）—— 用户在插件页点「启用」失败就是这么来的。
+      //   而 DSH 还活着，说明它早把这份配置读进去了，此刻重写没有任何收益。
+      const dshAlreadyUp = await dshPortAnswered();
+      if (dshAlreadyUp && SMOKE) {
+        console.log('[smoke] DSH 已在运行 —— 跳过注入写盘（避免与其配置写入冲突）');
+      }
+      if (!dshAlreadyUp) {
+        for (let attempt = 1; attempt <= INJECT_ATTEMPTS; attempt += 1) {
+          try {
+            after = ensureLegalModeSetup(legalHome, payloadDir, legalRuntimeDir);
+          } catch (error) {
+            logInjectionFailure('legal-mode', 'profile 注入', error);
+          }
+          try {
+            afterOffice = ensureOfficeSetup(legalHome, officePayload, legalRuntimeDir, process.execPath);
+          } catch (error) {
+            logInjectionFailure('office', 'profile 注入', error);
+          }
+          try {
+            afterPlugins = ensureBundledPlugins(legalHome, pluginsPayload);
+          } catch (error) {
+            logInjectionFailure('plugins', 'profile 注入', error);
+          }
+          anyChanged =
+            anyChanged || after.changed || afterOffice.changed || afterPlugins.changed;
+          const ready =
+            !after.profilePending && !afterOffice.profilePending && !afterPlugins.profilePending;
+          const rows = patchHasAllRows();
+          if (ready && rows) {
+            stableRounds += 1;
+          } else {
+            stableRounds = 0;
+          }
+          if (SMOKE) {
+            console.log(
+              `[smoke] profile injection (第 ${String(attempt)} 次): legal=${String(after.changed)} ` +
+                `office=${String(afterOffice.changed)} plugins=${String(afterPlugins.changed)} ` +
+                `ready=${String(ready)} rows=${String(rows)} stable=${String(stableRounds)}`,
+            );
+          }
+          if (stableRounds >= 2) {
+            break;
+          }
+          await new Promise((resolve) => setTimeout(resolve, INJECT_RETRY_MS));
         }
-        try {
-          afterOffice = ensureOfficeSetup(legalHome, officePayload, legalRuntimeDir, process.execPath);
-        } catch (error) {
-          logInjectionFailure('office', 'profile 注入', error);
-        }
-        try {
-          afterPlugins = ensureBundledPlugins(legalHome, pluginsPayload);
-        } catch (error) {
-          logInjectionFailure('plugins', 'profile 注入', error);
-        }
-        anyChanged =
-          anyChanged || after.changed || afterOffice.changed || afterPlugins.changed;
-        const ready =
-          !after.profilePending && !afterOffice.profilePending && !afterPlugins.profilePending;
-        const rows = patchHasAllRows();
-        if (ready && rows) {
-          stableRounds += 1;
-        } else {
-          stableRounds = 0;
-        }
-        if (SMOKE) {
-          console.log(
-            `[smoke] profile injection (第 ${String(attempt)} 次): legal=${String(after.changed)} ` +
-              `office=${String(afterOffice.changed)} plugins=${String(afterPlugins.changed)} ` +
-              `ready=${String(ready)} rows=${String(rows)} stable=${String(stableRounds)}`,
-          );
-        }
-        if (stableRounds >= 2) {
-          break;
-        }
-        await new Promise((resolve) => setTimeout(resolve, INJECT_RETRY_MS));
       }
       // 兜底看护：DSH 的设置导入可能在我们收工之后才写 patch，把三行覆盖掉
       // （实测 6 次全新启动里有 1 次发生在上面那个窗口之外）。
@@ -1059,23 +1096,29 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
       let steadyTicks = 0;
       const injectGuard = setInterval(() => {
         guardTicks += 1;
-        // ⚠️ profile 还没被 DSH 建出来时**没有可看护的东西**，要算"稳定"。
-        //    典型场景：老用户升级后，DSH 进程还是上一个版本拉起来的
-        //    （keepDshRunning=true 会留着它），于是 profiles/<我们的> 一直不存在。
-        //    若这里老老实实按"三行不在"处理，看护循环会每 2 秒白跑一次并刷
-        //    「注入行被覆盖，已补回」的告警，整整 60 秒 —— 现象是启动日志里一堆假告警。
-        const profileReady = fs.existsSync(profilePatchPath());
-        if (profileReady && patchHasAllRows()) {
+        // patch 文件本身还没落盘时**没有可看护的东西**，要算"稳定"。
+        const patchReady = fs.existsSync(injectPatchPath());
+        if (patchReady && patchHasAllRows()) {
           steadyTicks += 1;
-        } else if (!profileReady) {
+        } else if (!patchReady) {
           steadyTicks += 1;
         } else {
           steadyTicks = 0;
+          // ⚠️ 这里**不再重写**（2026-10-01，由另一条线交回的诊断定位）：
+          //   DSH 运行期间由外部改 `cordis.patch.yml`，会和 DSH 自己的配置写入撞上 ——
+          //   chokidar 触发第二次 HMR runExclusive，直接抛
+          //   `HMR transactions cannot be nested`（dsh-hmr/lib/index.js:280）。
+          //   用户升级 1.0.28 后遇到的闪退 / 插件异常，根因就是这个：
+          //   一个"看护"动作每 2 秒重写一次配置文件，最长 60 秒。
+          //
+          //   改成**只读校验 + 告警**：真正的落盘只发生在"拉起 DSH 之前"那一次。
+          //   （home 级的 patch 本来就不被 DSH 的设置导入覆盖，见上面 1050 行的说明，
+          //     所以这里丢掉"自动补回"不会影响法律模式预设的可见性。）
           try {
-            ensureLegalModeSetup(legalHome, payloadDir, legalRuntimeDir);
-            ensureOfficeSetup(legalHome, officePayload, legalRuntimeDir, process.execPath);
-            ensureBundledPlugins(legalHome, pluginsPayload);
-            console.warn('[inject] profile 注入行被覆盖，已补回');
+            console.warn(
+              '[inject] 注入行不见了 —— DSH 运行期间只读不写（避免与 DSH 的配置写入冲突）；' +
+                '下次启动会在拉起 DSH 之前重新写入',
+            );
           } catch (error) {
             logInjectionFailure('inject-guard', 'profile 注入补回', error);
           }

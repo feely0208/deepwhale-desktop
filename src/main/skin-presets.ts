@@ -41,9 +41,13 @@
  */
 
 /** 深色底：官网的 --ds-color-bg-page（中性近黑，不偏蓝）。 */
-export const PRESET_DARK_BASE = '#0a0a0a';
+// ⚠️ 2026-10-01 从 #0a0a0a（中性纯黑）改成带蓝的深黑：
+//    浅色的底色 #eaf1fb 本身就是"带蓝的"，所以整屏看着明朗；
+//    深色用中性黑时，颜色**全靠辉光提供**，而辉光又被面板压掉大半 —— 结果就是一片死黑。
+//    带蓝的底色让深色也自带"深蓝"基调，辉光只负责亮度层次。
+export const PRESET_DARK_BASE = '#0b1018';
 /** 浅色底 */
-export const PRESET_LIGHT_BASE = '#f7f8fa';
+export const PRESET_LIGHT_BASE = '#eaf1fb';   // 浅色底色本身带蓝 —— 官方浅色就是这样，不是白底加蓝光
 
 /** 预设名 */
 export type SkinPreset = 'none' | 'deepseek-blue';
@@ -194,26 +198,32 @@ const GLOW_POS_DRIFT: string[] = [
   'calc(90vw - 424px) 448px',
 ];
 
-function glowGradientCss(scale: number): string {
-  const a = (v: number) => (v * scale).toFixed(3);
-  // ★ 必须写 `closest-side`：
-  //   径向渐变默认半径是"到**最远角**"（660×660 图层里 = 467px），
-  //   比图层半宽（330px）大 —— 于是渐变在图层边缘**还没淡到 0** 就被 background-size
-  //   硬切一刀，屏幕上就是一个个方块边（用户 2026-10-01 直接指出"看起来是色块"）。
-  //   改成 closest-side：半径正好等于到最近边的距离，渐隐刚好在边界归零，边缘干净。
-  //   中间补一档 stop，让衰减更接近原版的 filter:blur()（纯线性淡出会显得扁）。
-  return [
-    `radial-gradient(circle closest-side at center, rgba(26,56,112,${a(0.3)}) 0%, rgba(26,56,112,${a(0.24)}) 25%, rgba(26,56,112,${a(0.13)}) 50%, rgba(26,56,112,${a(0.05)}) 75%, rgba(26,56,112,0) 100%)`,
-    `radial-gradient(ellipse closest-side at center, rgba(45,95,158,${a(0.4)}) 0%, rgba(38,74,140,${a(0.33)}) 25%, rgba(26,56,112,${a(0.19)}) 50%, rgba(26,56,112,${a(0.07)}) 75%, rgba(26,56,112,0) 100%)`,
-    `radial-gradient(circle closest-side at center, rgba(74,138,196,${a(0.2)}) 0%, rgba(60,116,176,${a(0.15)}) 25%, rgba(45,95,158,${a(0.08)}) 50%, rgba(45,95,158,${a(0.03)}) 75%, rgba(45,95,158,0) 100%)`,
-  ].join(', ');
+function glowGradientCss(mode: 'dark' | 'light'): string {
+  // 深色＝深蓝；浅色＝**淡蓝**（不是把深色压低透明度 —— 那样白底上会发灰发脏）。
+  const D = mode === 'dark';
+  // ⚠️ 深色的不透明度 2026-10-01 上调过：原来 [0.38,0.46,0.26] 配 #1A3870 这类暗蓝，
+  //    在 #0a0a0a 底上峰值只有 (19,34,56)/255 —— 用户直接说「深色的辉光给你搞没了」。
+  //    色相仍用官网那三个（#1A3870 / #2D5F9E / #4A8AC4），只把强度提上来。
+  // 深色的三个色相仍是官网那三个（#1A3870 / #2D5F9E / #4A8AC4）提亮而来 ——
+  // 官网那套是配 `mix-blend-mode: screen` + blur 用的，纯渐变不复现 screen，
+  // 用原值就会"在近黑底上几乎看不见"（实测峰值只有 (19,34,56)）。
+  const rgb = D
+    ? ['46,92,168', '82,146,214', '124,186,240']
+    : ['160,197,241', '132,178,234', '190,218,248'];
+  const a = D ? [0.90, 1.0, 0.80] : [0.9, 0.95, 0.8];
+  return rgb
+    .map((c, i) => {
+      const o = a[i];
+      return `radial-gradient(circle closest-side at center, rgba(${c},${o.toFixed(3)}) 0%, rgba(${c},${(o * 0.8).toFixed(3)}) 25%, rgba(${c},${(o * 0.48).toFixed(3)}) 50%, rgba(${c},${(o * 0.19).toFixed(3)}) 75%, rgba(${c},0) 100%)`;
+    })
+    .join(', ');
 }
 
-/** 生成 `html` 上那整段"底色 + 三层可动辉光 + 动画"。scale 用于浅色模式压淡。 */
-export function glowBackgroundCss(scale: number, base: string): string {
+export function glowBackgroundCss(mode: 'dark' | 'light'): string {
+  const base = mode === 'dark' ? PRESET_DARK_BASE : PRESET_LIGHT_BASE;
   return `
       background-color: ${base} !important;
-      background-image: ${glowGradientCss(scale)} !important;
+      background-image: ${glowGradientCss(mode)} !important;
       background-size: ${GLOW_LAYER_SIZE.join(', ')} !important;
       background-repeat: no-repeat !important;
       background-position: ${GLOW_POS_BASE.join(', ')} !important;
@@ -221,66 +231,76 @@ export function glowBackgroundCss(scale: number, base: string): string {
       animation: dsh-skin-drift 26s ease-in-out infinite alternate !important;`;
 }
 
-/** 漂移关键帧。放在预设 CSS 里一起注入（只注入一次，靠 animation-name 去重）。 */
 export const GLOW_KEYFRAMES = `
       @keyframes dsh-skin-drift {
         from { background-position: ${GLOW_POS_BASE.join(', ')}; }
         to   { background-position: ${GLOW_POS_DRIFT.join(', ')}; }
       }
       @media (prefers-reduced-motion: reduce) {
-        html { animation: none !important; }
+        body { animation: none !important; }
       }`;
 
 export function presetBackgroundCss(preset: string): string | null {
   if (preset !== 'deepseek-blue') return null;
   return `${GLOW_KEYFRAMES}
-      /* ★ 辉光挂在 html 上：根元素背景 = 画布背景，天然在最底层，不受界面改版影响 */
-      html {${glowBackgroundCss(1, PRESET_DARK_BASE)}
-      }
-      body { background-color: transparent !important; }
-      /* 深色：面板不透明、基础底色透明 —— 辉光只在空隙里透出来 */
-      body[data-ds-dark-theme] {
+      /* ══ 深浅色到底该认哪个信号（2026-10-01 实测更正）══════════════════
+
+         以前这里用的是 @media (prefers-color-scheme: dark/light)。
+         **那是错的**，而且错得很隐蔽 —— 它和 DSH 界面的深浅是**两套互不相干的开关**：
+
+           · preferds-color-scheme  ← 由**壳**的 nativeTheme.themeSource 决定
+                                      （壳设置里的「原生界面主题」）
+           · body[data-ds-dark-theme] ← 由 **DSH 自己**的主题偏好决定
+                                      （profile patch 里 ui-theme 的 preference）
+
+         DSH 源码里写得很清楚（dsh-client-ui-layout/lib/client.js）：
+             const DARK_ATTRIBUTE = "data-ds-dark-theme";        // 挂在 body 上
+             const THEME_SOURCE_ATTRIBUTE = "data-ds-theme-source";
+         而 DSH 自己的样式表**全部**用 body[data-ds-dark-theme] 选深浅。
+
+         两个开关不一致时，就会出现"文字按深色渲染、背景按浅色铺"——
+         实测本机就是这个状态：DSH 的 preference = light（页面 boot 里写着），
+         而壳的 theme = system，OS 深色时 prefers-color-scheme = dark，
+         于是皮肤铺了深色背景，字却是深色 → **被洗白，什么都看不清**。
+
+         结论：皮肤装饰的是 DSH 界面，就必须**认 DSH 的信号**。
+         这里只用 body[data-ds-dark-theme]，不依赖 :has()，也不需要脚本。 */
+
+      /* html 不留背景：html 无背景时 body 的背景会传播到画布，效果与挂在 html 上一致，
+         而且这样能直接用 body[data-ds-dark-theme] 选深浅。 */
+      html { background-color: transparent !important; background-image: none !important; }
+
+      /* ── 浅色（body 上没有那个属性时走这里）── */
+      body {${glowBackgroundCss('light')}
         --dsw-alias-bg-base: transparent !important;
-        /* ★ 面板改成半透明 —— 这是让辉光"透上来"的关键。
-           官网的辉光铺在空旷 hero 区上所以好看；桌面端正文面板如果不透明，
-           就把光整块盖死了（用户 2026-10-01 看到"一片灰"就是这个原因）。
-           做成 rgba 之后，光从面板底下透出来，接近官网那种"雾"的感觉。
-           透明度取值原则：**正文可读性优先** —— 0.70 左右是实测能兼顾的档位。 */
-        --dsw-alias-bg-layer-1: rgba(24, 28, 34, 0.70) !important;
-        --dsw-alias-bg-layer-2: rgba(32, 37, 44, 0.74) !important;
-        --dsw-alias-bg-overlay: rgba(18, 21, 26, 0.80) !important;
-        --dsw-specific-sidebar-fill: rgba(16, 19, 24, 0.62) !important;
-        --dsw-specific-sidebar-nav-item-active: rgba(255, 255, 255, 0.08) !important;
-        --dsw-specific-sidebar-nav-item-hover: rgba(255, 255, 255, 0.05) !important;
-      }
-      body[data-ds-dark-theme] [class*="sidebarCol"] {
-        background: rgba(14, 17, 22, 0.58) !important;
-      }
-      /* 面板加一点毛玻璃，半透明才不会"脏"（Electron/Chromium 支持） */
-      body[data-ds-dark-theme] [class*="sidebarCol"],
-      body[data-ds-dark-theme] [class*="panel"],
-      body[data-ds-dark-theme] [class*="Card"] {
-        backdrop-filter: blur(16px) saturate(1.15);
-        -webkit-backdrop-filter: blur(16px) saturate(1.15);
-      }
-      /* 浅色：底色换成近白，并把光斑整体压淡（screen 混合在白底上会糊成一片） */
-      /* 浅色：近白底 + 辉光压淡（白底上原强度会糊成一片） */
-      html:has(body:not([data-ds-dark-theme])) {${glowBackgroundCss(0.45, PRESET_LIGHT_BASE)}
-      }
-      body:not([data-ds-dark-theme]) { background-color: transparent !important; }
-      body:not([data-ds-dark-theme]) {
-        --dsw-alias-bg-base: transparent !important;
-        /* 浅色同样半透明，否则白底面板会把辉光完全挡住 */
-        --dsw-alias-bg-layer-1: rgba(255, 255, 255, 0.72) !important;
-        --dsw-alias-bg-layer-2: rgba(244, 246, 248, 0.76) !important;
-        --dsw-alias-bg-overlay: rgba(255, 255, 255, 0.82) !important;
-        --dsw-specific-sidebar-fill: rgba(244, 246, 248, 0.62) !important;
+        /* 面板偏实：设置页/浮层底下压着会话正文，太透就会两种字叠在一起
+           （用户 2026-10-01「设置里面看有点透底」）。
+           注意：**不要用 backdrop-filter 治透底** —— 选择器一旦匹配到根容器
+           会把整个界面糊成一片（已踩过，见交接文档第四节第 5 条）。 */
+        --dsw-alias-bg-layer-1: rgba(255, 255, 255, 0.95) !important;
+        --dsw-alias-bg-layer-2: rgba(247, 249, 252, 0.97) !important;
+        --dsw-alias-bg-overlay: rgba(255, 255, 255, 0.98) !important;
+        --dsw-specific-sidebar-fill: rgba(246, 249, 253, 0.38) !important;
         --dsw-specific-sidebar-nav-item-active: rgba(0, 0, 0, 0.06) !important;
         --dsw-specific-sidebar-nav-item-hover: rgba(0, 0, 0, 0.04) !important;
       }
-      body:not([data-ds-dark-theme]) [class*="sidebarCol"] {
-        background: linear-gradient(to right, rgba(247, 248, 250, 0.66), rgba(247, 248, 250, 0.16)) !important;
+      [class*="sidebarCol"] { background: rgba(247, 248, 250, 0.40) !important; }
+
+      /* ── 深色 ── */
+      body[data-ds-dark-theme] {${glowBackgroundCss('dark')}
+        /* 正文底半实：辉光透一点、文字压得住（全透会让辉光糊到文字上） */
+        /* 正文底：原来 0.62 把辉光压掉六成 → 深色看着就是一片黑。
+           降到 0.42：辉光透得上来，而正文是近白字，在深蓝上对比仍然充足。 */
+        --dsw-alias-bg-base: rgba(11, 16, 24, 0.42) !important;
+        /* 面板/浮层比正文实：设置页盖在会话上，透底就是从这里来的 */
+        --dsw-alias-bg-layer-1: rgba(23, 26, 32, 0.96) !important;
+        --dsw-alias-bg-layer-2: rgba(32, 36, 43, 0.97) !important;
+        --dsw-alias-bg-overlay: rgba(18, 21, 26, 0.98) !important;
+        --dsw-specific-sidebar-fill: rgba(16, 19, 24, 0.80) !important;
+        --dsw-specific-sidebar-nav-item-active: rgba(255, 255, 255, 0.08) !important;
+        --dsw-specific-sidebar-nav-item-hover: rgba(255, 255, 255, 0.05) !important;
       }
+      body[data-ds-dark-theme] [class*="sidebarCol"] { background: rgba(14, 17, 22, 0.78) !important; }
     `;
 }
 

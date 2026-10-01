@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import { profileDirOf } from './profile';
+import { removeOurInsertBlocks } from './legal-mode';
 import * as path from 'path';
 import { DEV_REPO_ROOT } from './dsh-runtime';
 
@@ -220,19 +221,19 @@ export function ensureOfficeSetup(
     payloadDir,
   ) || changed;
 
-  // profile 级：保留原有注入，兼容只读 profile 级 patch 的 DSH 版本与既有用户。
-  // ⚠️ 与 home 级重复是安全的（实测只挂载一次）。
+  // profile 级：**不再插行，改把我们以前插的删掉**（2026-10-01 去重复）。
+  // 理由同 legal-mode：profile 级 patch 归 DSH 自己重写，我们的行留在那里会让
+  // skill-office / tool-workspace-dependencies 这两个 id 被声明两次。
   const profileDir = profileDirOf(home);
   const profilePending =
     !fs.existsSync(profileDir) ||
     !fs.existsSync(path.join(profileDir, 'cordis.patch.yml'));
   if (!profilePending) {
-    changed = ensureOfficePatchRows(
-      path.join(profileDir, 'cordis.patch.yml'),
-      wrapper.file,
-      cliPath,
-      payloadDir,
-    ) || changed;
+    changed =
+      removeOurInsertBlocks(path.join(profileDir, 'cordis.patch.yml'), [
+        OFFICE_ROW_ID,
+        DEPS_ROW_ID,
+      ]) || changed;
   }
 
   return { changed, profilePending };

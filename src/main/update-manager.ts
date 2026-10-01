@@ -1,8 +1,9 @@
 import { app, dialog, BrowserWindow, shell } from 'electron';
-import { autoUpdater, type UpdateInfo, type ProgressInfo } from 'electron-updater';
+import { autoUpdater, type UpdateCheckResult, type UpdateInfo, type ProgressInfo } from 'electron-updater';
 import { spawnSync } from 'child_process';
 import * as path from 'path';
 import { needsManualUpdate } from './mac-signature';
+import { cdnFeedConfig, readPackagedUpdateConfig } from './update-feed';
 
 /**
  * update-manager.ts — 应用自动更新（electron-updater + GitHub Releases）
@@ -194,7 +195,7 @@ export class UpdateManager {
 
     this.setState({ phase: 'checking', message: '正在检查更新…' });
     try {
-      const result = await autoUpdater.checkForUpdates();
+      const result = await this.checkWithFeedFallback();
       // 没有可用更新时，electron-updater 会在 update-not-available 事件里通知；
       // 这里同时兜底处理返回 null 的情况。
       if (result === null) {
@@ -210,6 +211,40 @@ export class UpdateManager {
       if (interactive) {
         await this.alert('检查更新失败', `无法连接到更新服务器。\n\n${message}`);
       }
+    }
+  }
+
+  /** 正在尝试自建 CDN 源（这期间的 error 事件可能马上被回退救回来，先不当成最终失败）。 */
+  private tryingCdn = false;
+
+  /**
+   * 先用自建 CDN 检查更新，失败则回退到打包时写好的更新源（GitHub）。
+   *
+   * 为什么要回退：CDN 是自建的，某个版本忘了传 `latest*.yml`、或 CDN 抽风，
+   * 只写 CDN 就等于**所有用户都收不到更新** —— 比原来更糟。
+   * 回退配置读打包时的 `app-update.yml`（见 ./update-feed.ts），不硬编码 owner/repo。
+   */
+  private async checkWithFeedFallback(): Promise<UpdateCheckResult | null> {
+    const packaged = readPackagedUpdateConfig(process.resourcesPath);
+    autoUpdater.setFeedURL(cdnFeedConfig());
+    this.tryingCdn = true;
+    try {
+      return await autoUpdater.checkForUpdates();
+    } catch (cdnError) {
+      if (packaged === null) throw cdnError;
+      console.warn(
+        '[update] 自建更新源不可用，回退到打包时的更新源（GitHub）：',
+        cdnError instanceof Error ? cdnError.message : String(cdnError),
+      );
+      this.tryingCdn = false;
+      // 形状来自 electron-builder 自己生成的 app-update.yml，与 PublishConfiguration 同源；
+      // 但我们不引它的类型（那是 electron-updater 的传递依赖），只做一次局部断言。
+      autoUpdater.setFeedURL(
+        packaged as unknown as Parameters<typeof autoUpdater.setFeedURL>[0],
+      );
+      return await autoUpdater.checkForUpdates();
+    } finally {
+      this.tryingCdn = false;
     }
   }
 
@@ -243,6 +278,15 @@ export class UpdateManager {
     });
 
     autoUpdater.on('error', (error: Error) => {
+      // 正在试自建 CDN 源时的错误先不当作"最终失败"：checkWithFeedFallback 可能马上
+      // 回退到 GitHub 并成功。若这里就把状态打成 error，用户会看到一次假的报错闪烁。
+      if (this.tryingCdn) {
+        console.warn(
+          '[update] 自建更新源出错（先不回退状态，交给回退逻辑判定）:',
+          error.message,
+        );
+        return;
+      }
       // 自动检查/下载期间的错误只记日志，不打扰用户
       console.error('[update] 更新出错:', error);
       this.setState({ phase: 'error', message: error.message });

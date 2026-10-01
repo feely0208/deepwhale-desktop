@@ -22,6 +22,7 @@
     "test:migrate": "node scripts/test-migrate-attachments.js",
     "test:mac-gate": "node scripts/test-mac-update-gate.js",
     "test:profile": "node scripts/test-profile.js",
+    "test:update-feed": "node scripts/test-update-feed.js",
     "icons": "node scripts/gen-icons.js",
     "dist": "npm run build && electron-builder",
     "dist:mac": "npm run build && electron-builder --mac",

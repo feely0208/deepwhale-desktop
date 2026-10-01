@@ -4,10 +4,11 @@ import * as path from 'path';
 import { DEV_REPO_ROOT } from './dsh-runtime';
 
 /**
- * 随包分发的「bundle 插件」—— 深鲸自己的两个能力包。
+ * 随包分发的「bundle 插件」—— 深鲸自己的能力包（中文合规、公文排版、法律模式预设、
+ * 会话右键菜单四行）。
  *
  * 它们发布在 npm 上，但为了**装完即用、不依赖联网**而随 app 一起分发。
- * 与法律模式插件（客户端插件，靠往 patch 里插一行）不同，这两个是**标准 bundle**：
+ * 与法律模式插件（客户端插件，靠往 patch 里插一行）不同，这些是**标准 bundle**：
  * 各自带 `dsh.bundle.patch`，官方约定是把包名列进 profile 的 `dsh.profile.bundles`，
  * 由它们自己的 patch 把插件行挂进组合。因此这里**不手动插行**，只做三件事：
  *   ① 把包体复制到 `<home>/plugins/`
@@ -33,6 +34,11 @@ const BUNDLED_PLUGINS: BundledPlugin[] = [
   // 用户在选择器里根本找不到它（2026-09-28 实测：--dump-config 只有 4 个随包预设）。
   // 产物由 scripts/build-legal-preset-bundle.js 从 legal-mode/preset/ 生成。
   { name: '@deepwhale-cn/dsh-legal-preset', dir: 'dsh-legal-preset' },
+  // 会话右键菜单四行（在访达中打开 / 打开所在文件夹 / 复制文件路径 / 复制会话 ID）。
+  // 同样是标准 bundle：宿主半边是空壳，功能全在客户端半边 lib/client.js ——
+  // 正因为它以 bundle 行的形式被 loader 挂载，@deepseek-ai/dsh-client-modules
+  // 才会扫到本包的 dsh.client 声明，把 ./client 下发给浏览器。
+  { name: '@deepwhale-cn/dsh-shell-session-actions', dir: 'dsh-shell-session-actions' },
 ];
 
 /** 注入结果。 */

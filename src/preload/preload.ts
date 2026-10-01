@@ -56,4 +56,10 @@ contextBridge.exposeInMainWorld('dsh', {
   petStudioOpen: () => ipcRenderer.send('petstudio:open'),
   petStudioSave: (name: string, svg: string) => ipcRenderer.send('petstudio:save', { name, svg }),
   petStudioImport: () => ipcRenderer.invoke('petstudio:import-image'),
+
+  // ---- 会话右键菜单的「在访达中打开 / 打开所在文件夹 / 复制文件路径 / 复制会话 ID」----
+  // 由随包客户端插件 @deepwhale-cn/dsh-shell-session-actions 调用；主进程按会话 ID
+  // 自己找回话文件（不信任前端传路径），返回 { ok, message? }。
+  sessionAction: (payload: { kind: string; sessionId: string; title?: string }) =>
+    ipcRenderer.invoke('session:action', payload),
 });

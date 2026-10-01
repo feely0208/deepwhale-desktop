@@ -136,6 +136,24 @@ async function main() {
     stdio: 'inherit',
   });
 
+  // 第四个也是**本地源码**的 bundle（不是 npm 包）：会话右键菜单扩展。
+  //
+  // ⚠️ 它必须由这里拷进载荷，不能直接放在 bundled-plugins/ 下 ——
+  //    本目录是 .gitignore 的构建产物（见 .gitignore 第 31 行），
+  //    而且本脚本开头就 `fs.rmSync(outDir)` 整个清空重建：
+  //    源码放在那里的话，跑一次就没了，而且 git 里根本看不见。
+  //
+  // ⚠️ 这一步还关系到"发出去的版本有没有这个菜单"：
+  //    .github/workflows/release.yml 在打包前会重跑本脚本，
+  //    CI 若找不到这一步，打出的包就**没有**这个插件 ——
+  //    于是出现"本机能用、用户装了没有"的最难查的分裂。
+  const localShellPlugin = path.join(__dirname, '..', 'shell-plugins', 'dsh-shell-session-actions');
+  if (!fs.existsSync(path.join(localShellPlugin, 'cordis.patch.yml'))) {
+    throw new Error(`缺少本地插件源码：${localShellPlugin}（应随仓库提交，不是构建产物）`);
+  }
+  fs.cpSync(localShellPlugin, path.join(outDir, 'dsh-shell-session-actions'), { recursive: true });
+  console.log('[bundled-plugins]   → dsh-shell-session-actions（本地源码）');
+
   console.log(`[bundled-plugins] done → ${outDir}`);
 }
 

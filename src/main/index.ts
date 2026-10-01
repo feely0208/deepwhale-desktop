@@ -575,6 +575,38 @@ function rebuildMenus(): void {
   Menu.setApplicationMenu(Menu.buildFromTemplate(buildAppMenuTemplate(buildMenuActions())));
 }
 
+/**
+ * 按会话 ID 找出该会话的落盘文件（`session.jsonl.zstd`）。
+ *
+ * DSH 的会话按 workspace 分目录存放：
+ *   `<home>/sessions/<workspace 编码>/<sessionId>/session.jsonl.zstd`
+ * 前端只传会话 ID、**不传路径** —— 路径在这里自己扫出来，界面塞不进任意路径。
+ *
+ * @param sessionId - 会话 ID（UUID 形态）。
+ * @returns 会话文件的绝对路径；找不到返回 null。
+ */
+function sessionFileOf(sessionId: string): string | null {
+  // 只接受 UUID 形态的 ID：既挡住路径穿越（../），也避免把特殊字符拼进路径。
+  if (!/^[A-Za-z0-9._-]+$/.test(sessionId) || sessionId === '.' || sessionId === '..') return null;
+  const root = path.join(legalModeHome(app.getPath('userData')), 'sessions');
+  let workspaces: fs.Dirent[];
+  try {
+    workspaces = fs.readdirSync(root, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+  for (const entry of workspaces) {
+    if (!entry.isDirectory()) continue;
+    const candidate = path.join(root, entry.name, sessionId, 'session.jsonl.zstd');
+    try {
+      if (fs.existsSync(candidate)) return candidate;
+    } catch {
+      // 单个目录不可读：继续找下一个
+    }
+  }
+  return null;
+}
+
 function registerIpc(): void {
   pet?.registerIpc();
 
@@ -612,6 +644,58 @@ function registerIpc(): void {
       console.error('[main] 设置保存失败:', payload.key, err);
     }
   });
+
+  // ---- 会话右键菜单：在访达中打开 / 打开所在文件夹 / 复制文件路径 / 复制会话 ID ----
+  // 由随包客户端插件 @deepwhale-cn/dsh-shell-session-actions 调用。前端只给会话 ID，
+  // 会话文件在主进程里按 ID 扫出来（见 sessionFileOf），返回 { ok, message? }。
+  ipcMain.handle(
+    'session:action',
+    async (
+      _e,
+      payload: { kind?: string; sessionId?: string; title?: string },
+    ): Promise<{ ok: boolean; message?: string }> => {
+      const kind = payload?.kind;
+      const sessionId = payload?.sessionId;
+      if (typeof sessionId !== 'string' || sessionId.length === 0) {
+        return { ok: false, message: '缺少会话 ID' };
+      }
+      if (typeof kind !== 'string' || kind.length === 0) {
+        return { ok: false, message: '缺少操作类型' };
+      }
+
+      const file = sessionFileOf(sessionId);
+      const dir = file ? path.dirname(file) : null;
+
+      switch (kind) {
+        case 'reveal': {
+          if (!file || !dir) return { ok: false, message: '找不到该会话的文件' };
+          // Linux 上 showItemInFolder 依赖桌面环境的文件管理器，不可靠；退化为开目录。
+          if (process.platform === 'linux') {
+            const error = await shell.openPath(dir);
+            return error ? { ok: false, message: error } : { ok: true };
+          }
+          shell.showItemInFolder(file);
+          return { ok: true };
+        }
+        case 'openFolder': {
+          if (!dir) return { ok: false, message: '找不到该会话的文件夹' };
+          const error = await shell.openPath(dir);
+          return error ? { ok: false, message: error } : { ok: true };
+        }
+        case 'copyPath': {
+          if (!file) return { ok: false, message: '找不到该会话的文件' };
+          clipboard.writeText(file);
+          return { ok: true, message: file };
+        }
+        case 'copyId': {
+          clipboard.writeText(sessionId);
+          return { ok: true, message: sessionId };
+        }
+        default:
+          return { ok: false, message: `未知操作：${kind}` };
+      }
+    },
+  );
 
   // ---- 主题 / 背景皮肤（设置页/菜单共用） ----
   ipcMain.handle('theme:state', () => ({

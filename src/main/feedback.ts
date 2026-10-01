@@ -67,6 +67,36 @@ export function feedbackUrl(shellVersion: string): string {
 }
 
 /**
+ * 会话级反馈地址：在应用级地址基础上，再把**这一个会话**的 ID 与标题带上，
+ * 让用户不用自己抄会话 ID（借鉴 zcode 的做法）。
+ *
+ * 会话「…」菜单的「反馈问题」走这里。`prefill_session_id` / `prefill_session_title`
+ * 与官网 `feedback.html` 读取的参数名**必须逐字一致**（那边读 `prefill_session_id`）。
+ *
+ * ⚠️ 只带 ID 与标题，**不带任何文件路径** —— 工作区目录、会话文件路径、日志路径
+ *    一律不出客户端：路径里常常含用户名、案件名、客户名，而定位问题有会话 ID 就够。
+ *
+ * 令牌复用 `feedbackUrl` 里那一套（同一个 `feedbackToken()`），不另起一套：
+ * 门禁只有一把锁，两边算法必须完全一致（详见 feedbackToken 的说明）。
+ *
+ * @param shellVersion - 深鲸桌面版本
+ * @param session - 目标会话：ID 与显示标题（标题可能为空，页面会自行省略那一行）
+ */
+export function feedbackUrlForSession(
+  shellVersion: string,
+  session: { sessionId: string; title?: string },
+): string {
+  const params = new URLSearchParams();
+  params.set('prefill_shell_version', shellVersion);
+  params.set('prefill_token', feedbackToken());
+  const sessionId = (session?.sessionId ?? '').trim();
+  const title = (session?.title ?? '').trim();
+  if (sessionId) params.set('prefill_session_id', sessionId);
+  if (title) params.set('prefill_session_title', title);
+  return `${FEEDBACK_BASE}?${params.toString()}`;
+}
+
+/**
  * 令牌密钥 —— 与后端 `FEEDBACK_TOKEN_SECRET` **必须完全一致**。
  *
  * ⚠️ 说清楚它是什么：这是"只对自家用户开放"的一道**门闩**，不是安全边界。

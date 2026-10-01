@@ -82,14 +82,25 @@ function download(url, dest) {
 
 async function main() {
   const argv = process.argv.slice(2);
-  let outDir = path.join(__dirname, '..', 'bundled-plugins');
+  let finalDir = path.join(__dirname, '..', 'bundled-plugins');
   for (let i = 0; i < argv.length; i += 1) {
-    if (argv[i] === '--out') outDir = path.resolve(argv[++i]);
+    if (argv[i] === '--out') finalDir = path.resolve(argv[++i]);
   }
 
+  // ⚠️ 先写临时目录，**全部成功之后**再原子替换目标（2026-10-01 实测踩到）。
+  //
+  //   原来是一进来就 `rmSync(outDir)`，于是**中途任何失败都会留下一个空载荷目录**。
+  //   本次亲历一次：npm registry 抖动（ECONNRESET）→ bundled-plugins/ 被清空。
+  //   而 release.yml 的载荷检查只断言"目录存在且 ≥1 个文件 ≥10KB"，
+  //   打包脚本也只看目录在不在 —— 结果就是能**打出一个没有随包插件的安装包**，
+  //   而这种包在用户那儿表现为"功能凭空消失"，极难定位。
+  //
+  //   改成临时目录：失败时把临时目录清掉，**上一个好载荷原样留着**。
+  const outDir = `${finalDir}.staging-${String(process.pid)}`;
   fs.rmSync(outDir, { recursive: true, force: true });
   fs.mkdirSync(outDir, { recursive: true });
 
+  try {
   for (const name of PLUGINS) {
     const dirName = name.split('/')[1];
     const meta = await fetchJson(`https://registry.npmjs.org/${encodeURIComponent(name)}`);
@@ -154,7 +165,15 @@ async function main() {
   fs.cpSync(localShellPlugin, path.join(outDir, 'dsh-shell-session-actions'), { recursive: true });
   console.log('[bundled-plugins]   → dsh-shell-session-actions（本地源码）');
 
-  console.log(`[bundled-plugins] done → ${outDir}`);
+  // 到这里才算全部成功 —— 替换目标目录（先删旧的再改名，同分区内是瞬时的）
+  fs.rmSync(finalDir, { recursive: true, force: true });
+  fs.renameSync(outDir, finalDir);
+  console.log(`[bundled-plugins] done → ${finalDir}`);
+  } catch (error) {
+    // 失败只清本次的临时目录；**绝不碰 finalDir** —— 上一个好载荷要留着
+    fs.rmSync(outDir, { recursive: true, force: true });
+    throw error;
+  }
 }
 
 main().catch((error) => {

@@ -4,12 +4,16 @@
  * ── 它是什么 ─────────────────────────────────────────────────────────
  * DSH 的会话「…」右键菜单是一个**插槽**：`sidebar.workspaces.session.menu.item`
  * （list 槽，owner 是 client-ui-workspace，自带 pin=100 / rename=200 / fork=300 /
- * archive=400）。本插件往这个槽里追加四行，排在最后（500/510/520/530）：
+ * archive=400）。本插件往这个槽里追加五行，排在最后（500/510/520/530/540）：
  *
  *   在访达中打开（Windows：在文件资源管理器中显示 / Linux：在文件管理器中显示）
  *   打开所在文件夹
  *   复制文件路径
  *   复制会话 ID
+ *   反馈问题（打开官网反馈页，并把本会话的 ID 与标题预填进去）
+ *
+ * 第五行只透传会话 ID 与标题，**不传任何文件路径** —— 反馈页那边只需要能定位到
+ * 会话，路径是隐私，不送出去。
  *
  * 每行点击后经 `window.dsh.sessionAction(...)` 桥到 Electron 主进程完成真实动作
  * （找回话文件、showItemInFolder / openPath / clipboard）。浏览器里直接打开 DSH 时
@@ -94,9 +98,9 @@ window.__ModuleLoader__.load({
 
     /**
      * 调壳的桥。`window.dsh` 不存在（浏览器里直接开 DSH）时静默返回。
-     * @param kind - reveal | openFolder | copyPath | copyId
+     * @param kind - reveal | openFolder | copyPath | copyId | feedback
      * @param sessionId - 目标会话
-     * @param title - 会话显示名（仅透传，便于壳侧日志/将来使用）
+     * @param title - 会话显示名（feedback 会把它预填进反馈页的标题栏）
      */
     function sessionAction(kind, sessionId, title) {
       const bridge = typeof window === 'object' && window ? window.dsh : undefined;
@@ -243,12 +247,14 @@ window.__ModuleLoader__.load({
       return { id: `${NS}.${key}`, order, component: ShellSessionActionMenuItem };
     }
 
-    /** 四行，按 order 排在自带 archive(400) 之后。 */
+    /** 五行，按 order 排在自带 archive(400) 之后。 */
     const ROWS = [
       makeItem('reveal', 500, REVEAL_LABEL, 'IconFolderOpenOutlineRegular', true),
       makeItem('openFolder', 510, '打开所在文件夹', 'IconFolderOpenOutlineRegular', false),
       makeItem('copyPath', 520, '复制文件路径', 'IconCopyOutlineRegular', false),
       makeItem('copyId', 530, '复制会话 ID', 'IconCopyOutlineRegular', false),
+      // 反馈问题：与上面四行（文件操作）分开一组，所以再画一条分组线。
+      makeItem('feedback', 540, '反馈问题', 'IconQuestionOutlineRegular', true),
     ];
 
     function apply(ctx) {

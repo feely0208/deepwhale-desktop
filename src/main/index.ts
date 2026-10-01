@@ -26,7 +26,7 @@ import { PetWindow } from './pet';
 import { createTray, applyMenu, buildAppMenuTemplate, TrayMenuActions } from './tray';
 import { UsageManager, UsageSnapshot } from './usage-manager';
 import { injectSettingsExtension, expectedVersionRow, resolveShellVersion } from './settings-inject';
-import { ensureFeedbackEntry } from './feedback';
+import { ensureFeedbackEntry, feedbackUrlForSession } from './feedback';
 import {
   buildMobileUrls,
   ensureMobileAccess,
@@ -645,7 +645,7 @@ function registerIpc(): void {
     }
   });
 
-  // ---- 会话右键菜单：在访达中打开 / 打开所在文件夹 / 复制文件路径 / 复制会话 ID ----
+  // ---- 会话右键菜单：在访达中打开 / 打开所在文件夹 / 复制文件路径 / 复制会话 ID / 反馈问题 ----
   // 由随包客户端插件 @deepwhale-cn/dsh-shell-session-actions 调用。前端只给会话 ID，
   // 会话文件在主进程里按 ID 扫出来（见 sessionFileOf），返回 { ok, message? }。
   ipcMain.handle(
@@ -661,6 +661,17 @@ function registerIpc(): void {
       }
       if (typeof kind !== 'string' || kind.length === 0) {
         return { ok: false, message: '缺少操作类型' };
+      }
+
+      // 反馈问题：打开官网反馈页，把本会话的 ID 与标题预填进去（用户不用自己抄）。
+      // 刻意放在 sessionFileOf **之前**：这个动作不需要会话文件 ——
+      // 会话可能已被删除或还没落盘，那种情况下更要能反馈，不能因为找不到文件就失败。
+      // 只传 ID 与标题，不带任何路径（见 feedback.ts 的 feedbackUrlForSession）。
+      if (kind === 'feedback') {
+        await shell.openExternal(
+          feedbackUrlForSession(resolveShellVersion(), { sessionId, title: payload?.title }),
+        );
+        return { ok: true };
       }
 
       const file = sessionFileOf(sessionId);

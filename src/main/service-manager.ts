@@ -5,6 +5,7 @@ import * as os from 'os';
 import * as path from 'path';
 import kill from 'tree-kill';
 import { EventEmitter } from 'events';
+import { applyProfileToCommandArgs, profileLaunchArgs } from './profile';
 
 export interface ServiceOptions {
   /** DSH Web UI 端口 */
@@ -118,7 +119,20 @@ export class ServiceManager extends EventEmitter {
       return;
     }
 
-    const { command, args } = parseCommand(this.command);
+    const parsed = parseCommand(this.command);
+    const command = parsed.command;
+    // 兜底命令（settings.command，通常是 `npx @deepseek-ai/dsh@x web --port …`）里
+    // 那个裸的 profile 名要换成我们自己的 profile —— 否则 DSH 会启动到自带 `web`，
+    // 而注入全写在 `profiles/<我们的>/`，插件会**静默失效**。详见 ./profile.ts。
+    const applied = applyProfileToCommandArgs(parsed.args, this.options.env?.DSH_HOME);
+    const args = applied.args;
+    if (!applied.ok) {
+      console.warn(
+        '[service] 兜底命令没能保证使用自有 profile（命令里既没有可替换的自带 profile 名，' +
+          '也没有 --profile）—— 插件注入可能不生效。建议把它写成 ' +
+          '`… --profile deepwhale …`。',
+      );
+    }
     const resolved = resolveExecutable(command);
     // Windows 下 npx 常装在带空格的目录（如 C:\Program Files\nodejs\ 或 E:\Program Files\...），
     // 经 cmd（shell: true）执行时路径会被按空格截断（报错形如 'E:\Program' 不是内部或外部命令），
@@ -155,8 +169,21 @@ export class ServiceManager extends EventEmitter {
     // process.execArgv 含 `--expose-internals` 时才由 loader 建立；否则整个
     // profile 加载失败、进程立刻退出（报 `--expose-internals is required for
     // HMR service`），壳这边表现为"DSH 服务启动失败"。Electron-as-Node 支持该开关。
-    const args = ['--expose-internals', bin, 'web', '--port', String(this.port), '--no-open'];
-    console.log(`[service] 启动随包 DSH 运行时（Electron 内置 Node）: ${bin}`);
+    //
+    // profile：不再用 DSH 自带的 `web`，而是我们自己的 profile（首启会带上
+    // `--from-default-profile web` 从自带模板派生）。原因与两个硬约束见 ./profile.ts。
+    const profileArgs = profileLaunchArgs(this.options.env?.DSH_HOME);
+    const args = [
+      '--expose-internals',
+      bin,
+      ...profileArgs,
+      '--port',
+      String(this.port),
+      '--no-open',
+    ];
+    console.log(
+      `[service] 启动随包 DSH 运行时（Electron 内置 Node）: ${bin}  profile=${profileArgs.join(' ')}`,
+    );
     this.child = spawn(process.execPath, args, {
       env,
       windowsHide: true,

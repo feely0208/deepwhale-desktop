@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import { profileDirOf } from './profile';
 import * as path from 'path';
 import { DEV_REPO_ROOT } from './dsh-runtime';
 
@@ -221,7 +222,7 @@ export function ensureOfficeSetup(
 
   // profile 级：保留原有注入，兼容只读 profile 级 patch 的 DSH 版本与既有用户。
   // ⚠️ 与 home 级重复是安全的（实测只挂载一次）。
-  const profileDir = path.join(home, 'profiles', 'web');
+  const profileDir = profileDirOf(home);
   const profilePending =
     !fs.existsSync(profileDir) ||
     !fs.existsSync(path.join(profileDir, 'cordis.patch.yml'));

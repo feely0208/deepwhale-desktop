@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import { profileDirOf } from './profile';
 import * as path from 'path';
 import { DEV_REPO_ROOT } from './dsh-runtime';
 
@@ -510,7 +511,7 @@ export function ensureLegalModeSetup(
   // ⚠️ 目录**先于文件**落盘：DSH 把 profiles/web 建出来后，cordis.patch.yml 与
   // package.json 还要过一会儿才写。早先这里只在"目录不存在"时算 pending，于是
   // 文件那一瞬间不在，下面就静默 `return false` 放弃写入。
-  const profileDir = path.join(home, 'profiles', 'web');
+  const profileDir = profileDirOf(home);
   const profilePending =
     !fs.existsSync(profileDir) ||
     !fs.existsSync(path.join(profileDir, 'package.json')) ||

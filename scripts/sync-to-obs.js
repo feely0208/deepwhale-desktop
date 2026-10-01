@@ -30,10 +30,10 @@ const DEFAULT_EXCLUDE = [
 ];
 
 function parseArgs(argv) {
-  const out = { dir: null, 'key-prefix': '', 'dry-run': false, concurrency: 1, verify: false };
+  const out = { dir: null, 'key-prefix': '', 'dry-run': false, concurrency: 1, verify: false, 'no-exclude': false };
   for (let i = 0; i < argv.length; i += 1) {
     const k = argv[i].replace(/^--/, '');
-    if (k === 'dry-run' || k === 'verify') { out[k] = true; continue; }
+    if (k === 'dry-run' || k === 'verify' || k === 'no-exclude') { out[k] = true; continue; }
     out[k] = argv[i + 1]; i += 1;
   }
   return out;
@@ -80,7 +80,11 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (!args.dir) throw new Error('需要 --dir <目录>');
 
-  const files = collect(path.resolve(args.dir), DEFAULT_EXCLUDE);
+  // --no-exclude：连默认排除的文件也一起传。
+  // 为什么需要：更新链路要用的 `latest*.yml` / `*.blockmap` 平时是排除的（官网不需要它们），
+  // 但给**已经发布过的版本**补传这几个小文件时要用同一个工具 —— 不能为了补传去改默认行为。
+  const excludes = args['no-exclude'] ? [] : DEFAULT_EXCLUDE;
+  const files = collect(path.resolve(args.dir), excludes);
   const totalMB = files.reduce((s, f) => s + f.size, 0) / 1048576;
 
   console.log(`[obs] 待上传 ${files.length} 个文件，合计 ${totalMB.toFixed(1)} MB`);

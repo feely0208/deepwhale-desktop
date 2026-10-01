@@ -2,6 +2,7 @@ import { app } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import { DSH_RUNTIME_VERSION } from './dsh-version.generated';
+import { PROFILE_NAME } from './profile';
 
 /**
  * 应用设置（极简 JSON store）。
@@ -77,7 +78,10 @@ const DEFAULTS: Settings = {
   // 钉住 harness 版本：法律模式联动的插件按该版本的客户端 API 实测通过，不随上游漂移。
   // 版本号唯一的出处是仓库根目录的 dsh-runtime.version（见 scripts/dsh-runtime-version.js），
   // 别在这里手写 —— 手写就会出现「CI 装的是 A 版、开发机兜底命令是 B 版」的分裂。
-  command: `npx @deepseek-ai/dsh@${DSH_RUNTIME_VERSION} web --port 3095 --no-open`,
+  // profile：用我们自己的（不写 DSH 自带的 `web`）。首启时壳会自动补
+  // `--from-default-profile web` 把 profile 从自带模板派生出来，见 src/main/profile.ts。
+  // 老用户 settings.json 里存着的旧默认串（结尾是裸 `web`）也会被壳改写，无需手工迁移。
+  command: `npx @deepseek-ai/dsh@${DSH_RUNTIME_VERSION} --profile ${PROFILE_NAME} --port 3095 --no-open`,
   port: 3095,
   // 默认关：见 Settings.lanAccess 的说明 —— 手机端没一次做全之前不能开
   lanAccess: false,

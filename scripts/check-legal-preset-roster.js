@@ -47,17 +47,19 @@ for (const [p, label] of [
 
 const { ensureLegalModeSetup } = require(path.join(REPO, 'dist/main/legal-mode.js'));
 const { ensureBundledPlugins } = require(path.join(REPO, 'dist/main/bundled-plugins.js'));
+// profile 名跟着实现走（实现已从自带 `web` 换成自有 profile）
+const { profileDirOf, PROFILE_NAME } = require(path.join(REPO, 'dist/main/profile.js'));
 
 console.log('== 法律模式预设花名册自检 ==');
 const home = fs.mkdtempSync(path.join(os.tmpdir(), 'legal-roster-'));
 try {
   // ① 先造出「DSH 已经建好 profile」的样子，再注入 —— 顺序反了会得到
   //    profilePending=true，bundle 那一半根本没装（实测踩过）。
-  const profileDir = path.join(home, 'profiles', 'web');
+  const profileDir = profileDirOf(home);
   fs.mkdirSync(profileDir, { recursive: true });
   fs.writeFileSync(
     path.join(profileDir, 'package.json'),
-    `${JSON.stringify({ name: 'dsh-profile-web', private: true }, null, 2)}\n`,
+    `${JSON.stringify({ name: `dsh-profile-${PROFILE_NAME}`, private: true }, null, 2)}\n`,
   );
 
   ensureLegalModeSetup(home, LEGAL_PAYLOAD, RUNTIME_MODULES);
@@ -72,7 +74,9 @@ try {
   console.log(`  ✅ profile bundles 含 @deepwhale-cn/dsh-legal-preset`);
 
   // ② 跑组合，看花名册里有没有那一行 —— 这才是用户在选择器里能看到的东西
-  const run = spawnSync(process.execPath, [DSH_BIN, '--profile', 'web', '--dump-config'], {
+  //    ⚠️ profile 名要跟注入用的是同一个（写死 `web` 会去 dump 另一个 profile，
+  //       然后误报"花名册里没有 preset-legal"）。
+  const run = spawnSync(process.execPath, [DSH_BIN, '--profile', PROFILE_NAME, '--dump-config'], {
     env: { ...process.env, DSH_HOME: home },
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,

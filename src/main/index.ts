@@ -26,6 +26,7 @@ import { UsageManager, UsageSnapshot } from './usage-manager';
 import { injectSettingsExtension, expectedVersionRow, resolveShellVersion } from './settings-inject';
 import { ensureFeedbackEntry } from './feedback';
 import { ensureMobileAccess } from './mobile-connect';
+import { profileDirOf } from './profile';
 import { UpdateManager } from './update-manager';
 import type { UpdateState } from './update-manager';
 import { installCrashGuard, crashLogDir, appendCrashLog } from './crash-guard';
@@ -781,12 +782,11 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
       const INJECT_ATTEMPTS = 12;
       const INJECT_RETRY_MS = 1500;
       const injectedIds = ['ui-legal-mode', 'skill-office', 'tool-workspace-dependencies'];
+      const profilePatchPath = (): string =>
+        path.join(profileDirOf(legalHome), 'cordis.patch.yml');
       const patchHasAllRows = (): boolean => {
         try {
-          const text = fs.readFileSync(
-            path.join(legalHome, 'profiles', 'web', 'cordis.patch.yml'),
-            'utf8',
-          );
+          const text = fs.readFileSync(profilePatchPath(), 'utf8');
           return injectedIds.every((id) => text.includes(id));
         } catch {
           return false;
@@ -865,7 +865,15 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
       let steadyTicks = 0;
       const injectGuard = setInterval(() => {
         guardTicks += 1;
-        if (patchHasAllRows()) {
+        // ⚠️ profile 还没被 DSH 建出来时**没有可看护的东西**，要算"稳定"。
+        //    典型场景：老用户升级后，DSH 进程还是上一个版本拉起来的
+        //    （keepDshRunning=true 会留着它），于是 profiles/<我们的> 一直不存在。
+        //    若这里老老实实按"三行不在"处理，看护循环会每 2 秒白跑一次并刷
+        //    「注入行被覆盖，已补回」的告警，整整 60 秒 —— 现象是启动日志里一堆假告警。
+        const profileReady = fs.existsSync(profilePatchPath());
+        if (profileReady && patchHasAllRows()) {
+          steadyTicks += 1;
+        } else if (!profileReady) {
           steadyTicks += 1;
         } else {
           steadyTicks = 0;

@@ -22,6 +22,8 @@ const REPO = path.join(__dirname, '..');
 const { ensureLegalModeSetup } = require(path.join(REPO, 'dist/main/legal-mode.js'));
 const { ensureOfficeSetup } = require(path.join(REPO, 'dist/main/office-runtime.js'));
 const { ensureBundledPlugins } = require(path.join(REPO, 'dist/main/bundled-plugins.js'));
+// profile 名跟着实现走，别再写死 `web`（实现改成自有 profile 后这里会一起变）
+const { profileDirOf, PROFILE_NAME } = require(path.join(REPO, 'dist/main/profile.js'));
 
 const PAYLOAD = {
   legal: path.join(REPO, 'legal-mode'),
@@ -71,11 +73,11 @@ const IMPORTED_SETTINGS = `- id: ui-settings-general
 /** 搭一个「DSH 已经建好 profile」的 home。 */
 function makeHome() {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-inject-test-'));
-  const dir = path.join(home, 'profiles', 'web');
+  const dir = profileDirOf(home);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(
     path.join(dir, 'package.json'),
-    `${JSON.stringify({ name: 'dsh-profile-web', private: true }, null, 2)}\n`,
+    `${JSON.stringify({ name: `dsh-profile-${PROFILE_NAME}`, private: true }, null, 2)}\n`,
   );
   fs.writeFileSync(path.join(dir, 'cordis.patch.yml'), PROFILE_HEADER);
   return home;
@@ -92,7 +94,7 @@ function inject(home) {
 /** 模拟 DSH 的设置导入：**整段重写** profile 级 patch。 */
 function simulateSettingsImport(home) {
   fs.writeFileSync(
-    path.join(home, 'profiles', 'web', 'cordis.patch.yml'),
+    path.join(profileDirOf(home), 'cordis.patch.yml'),
     PROFILE_HEADER + IMPORTED_SETTINGS,
   );
 }
@@ -100,7 +102,7 @@ function simulateSettingsImport(home) {
 /** 三行是否都在「生效的那一层」上 —— 按层顺序，home 级优先于 profile 级。 */
 function rowsWhere(home) {
   const homePatch = path.join(home, 'cordis.patch.yml');
-  const profilePatch = path.join(home, 'profiles', 'web', 'cordis.patch.yml');
+  const profilePatch = path.join(profileDirOf(home), 'cordis.patch.yml');
   const read = (f) => {
     try {
       return fs.readFileSync(f, 'utf8');
@@ -150,7 +152,7 @@ console.log('\n场景 1：注入 → DSH 设置导入整段重写 profile patch'
     // 关键前提：profile 层**确实**被整段重写了。少了这条，本用例就是空转 ——
     // 三行还在也可能只是因为压根没被覆盖过。
     const profileText = fs.readFileSync(
-      path.join(home, 'profiles', 'web', 'cordis.patch.yml'),
+      path.join(profileDirOf(home), 'cordis.patch.yml'),
       'utf8',
     );
     check(
@@ -202,7 +204,7 @@ console.log('\n场景 3：模拟 1.0.17 用户升级（profile 级已存在同 i
   try {
     // 1.0.17 的状态：三行在 profile 级
     fs.writeFileSync(
-      path.join(home, 'profiles', 'web', 'cordis.patch.yml'),
+      path.join(profileDirOf(home), 'cordis.patch.yml'),
       `${PROFILE_HEADER}${IMPORTED_SETTINGS}
 - insert:
     - id: ui-legal-mode
@@ -216,7 +218,7 @@ console.log('\n场景 3：模拟 1.0.17 用户升级（profile 级已存在同 i
     );
     inject(home);
     const profileText = fs.readFileSync(
-      path.join(home, 'profiles', 'web', 'cordis.patch.yml'),
+      path.join(profileDirOf(home), 'cordis.patch.yml'),
       'utf8',
     );
     check('三行仍然生效', rowsWhere(home).length === 3, `实际 ${rowsWhere(home).length}/3`);

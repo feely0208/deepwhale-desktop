@@ -1,5 +1,8 @@
-import { app, dialog, BrowserWindow } from 'electron';
+import { app, dialog, BrowserWindow, shell } from 'electron';
 import { autoUpdater, type UpdateInfo, type ProgressInfo } from 'electron-updater';
+import { spawnSync } from 'child_process';
+import * as path from 'path';
+import { needsManualUpdate } from './mac-signature';
 
 /**
  * update-manager.ts — 应用自动更新（electron-updater + GitHub Releases）
@@ -58,6 +61,42 @@ const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 /** 下载完成后，用户选择"稍后"时也不重复打扰的时长 */
 const SNOOZE_MS = 12 * 60 * 60 * 1000;
 
+/** 官网下载页：macOS 无法自动安装时给用户的出口（这是真能用的那一步） */
+const DOWNLOAD_PAGE = 'https://deepwhale.org.cn/download.html';
+
+/**
+ * macOS 上是否只能手动下载安装。判定逻辑与依据见 ./mac-signature.ts。
+ *
+ * 一句话：我们的包是 ad-hoc 签名，Squirrel.Mac 在安装前会拿**运行中那版**的
+ * designated requirement（= cdhash，每次构建都变）去校验新包，必然失败 ——
+ * Electron 官方文档明说 macOS 自动更新要求 App 已签名。所以这里改成如实告知，
+ * 并把用户送到下载页，而不是演一遍"下载完成 → 重启 → 什么都没发生"。
+ *
+ * 用**运行时探测**而不是写死 process.platform === 'darwin'：哪天真去签名了，
+ * 这里会自动判定为"可以自动更新"，不需要回来改代码。
+ */
+let cachedNeedsManual: boolean | null = null;
+
+function macNeedsManualUpdate(): boolean {
+  if (cachedNeedsManual !== null) return cachedNeedsManual;
+  cachedNeedsManual = needsManualUpdate(process.platform, () => {
+    try {
+      // process.execPath = <Xxx>.app/Contents/MacOS/<Xxx> → 往上三层就是 .app 本体
+      const bundle = path.resolve(process.execPath, '..', '..', '..');
+      const result = spawnSync('/usr/bin/codesign', ['-dv', '--verbose=2', bundle], {
+        encoding: 'utf8',
+        timeout: 10_000,
+      });
+      // codesign -dv 把签名信息写在 stderr 上，所以要两边一起看
+      const text = `${result.stdout ?? ''}${result.stderr ?? ''}`.trim();
+      return text === '' ? null : text;
+    } catch {
+      return null;
+    }
+  });
+  return cachedNeedsManual;
+}
+
 export class UpdateManager {
   private readonly getWindow: () => BrowserWindow | null;
   private readonly onStateChange: ((state: UpdateState) => void) | undefined;
@@ -86,8 +125,10 @@ export class UpdateManager {
 
     // 更新源是本仓库的 GitHub Releases；autoDownload 关闭，改由用户确认
     autoUpdater.autoDownload = false;
-    // 用户选择"稍后"时，退出应用顺带安装，避免反复打扰
-    autoUpdater.autoInstallOnAppQuit = true;
+    // 用户选择"稍后"时，退出应用顺带安装，避免反复打扰。
+    // macOS 上不能这么做：那里根本装不上（Squirrel 的签名校验过不去，见 macNeedsManualUpdate），
+    // 开着它只会在退出时白折腾一次，所以按平台关掉。
+    autoUpdater.autoInstallOnAppQuit = !macNeedsManualUpdate();
 
     this.firstTimer = setTimeout(() => {
       void this.check(false);
@@ -220,6 +261,30 @@ export class UpdateManager {
     }
     this.prompting = true;
     try {
+      // macOS + 未签名：不能走"下载→重启安装"，那条路必然失败。如实告知并给下载页。
+      if (macNeedsManualUpdate()) {
+        this.setState({
+          phase: 'available',
+          version: info.version,
+          message: `发现新版本 ${info.version}（macOS 需手动安装）`,
+        });
+        const choice = await this.confirm(
+          '发现新版本',
+          `深鲸桌面 ${info.version} 已发布（当前 ${app.getVersion()}）。\n\n` +
+            'macOS 版需要手动下载安装：当前安装包未做苹果开发者签名，' +
+            '系统会拒绝自动替换应用，所以这里没法替你完成这一步（不是网络问题）。\n\n' +
+            '要现在打开下载页吗？',
+          ['打开下载页', '稍后再说'],
+        );
+        if (choice === 0) {
+          await shell.openExternal(DOWNLOAD_PAGE);
+        } else {
+          this.snoozeUntil = Date.now() + SNOOZE_MS;
+        }
+        this.setState({ phase: 'idle' });
+        return;
+      }
+
       const choice = await this.confirm(
         '发现新版本',
         `深鲸桌面 ${info.version} 已发布（当前 ${app.getVersion()}）。\n\n是否现在下载？下载过程不影响你继续使用。`,

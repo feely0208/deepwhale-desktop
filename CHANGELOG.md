@@ -4,6 +4,47 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [SemVer](https://semver.org/lang/zh-CN/)。
 
+## [1.0.26] - 2026-10-01
+
+两件事：把 macOS 上「点了没反应」的升级提示改成真能用的出口；并让壳启动 DSH 时
+改用**我们自己的 profile**，不再往 DSH 自带的 profile 里写东西。
+
+### 修复
+- **macOS 上点「立即下载」之后什么都没发生。** 原因是 macOS 的自动更新要求 App 具备
+  苹果开发者签名（Squirrel.Mac 的硬要求），我们的是 ad-hoc 签名 —— 下载能完成，
+  **安装那一步必然被系统拒绝**。实测：ad-hoc 的 designated requirement 是 cdhash，
+  每次构建都变，用 1.0.24 的要求校验 1.0.25 的包，系统判定不合格（退出码 3）。
+  现在 macOS 上改成如实告知「需要手动下载」并给「打开下载页」按钮，不再演一遍
+  「下载完成 → 重启 → 什么都没发生」。签名与否是**运行时探测**的（读 `codesign -dv`
+  找 Developer ID），将来真去签名了会自动回到自动更新，不需要改代码。
+- **注入看护循环在 profile 尚未创建时空转。** 老用户升级后 DSH 进程仍是上一版拉起的
+  （`keepDshRunning=true` 会保留），新 profile 不会立刻出现；此时看护循环会每 2 秒
+  白跑一次并刷「注入行被覆盖，已补回」的假告警，持续 60 秒。现在 profile 不存在时
+  按「无可看护」处理。
+
+### 变更
+- **DSH 启动改用自有 profile（`deepwhale`），不再用自带的 `web`。**
+  `web` 是 DSH 自带的 profile，会在设置导入、版本升级时被 reconcile 重写 ——
+  2026-09-27 实测到的「设置导入把注入的三行整段覆盖」就是它。现在从自带模板派生一个
+  归我们所有的 profile（首启带 `--from-default-profile web`，之后不再带 —— 重复带会
+  让 DSH 直接报 `already exists`）。注入、启动参数、兜底命令共 6 处统一走
+  `src/main/profile.ts` 的常量。
+  · 会话 / 设置 / 凭据都在 `$DSH_HOME` 级，**不在 profile 里，不会因此丢数据**；
+  · 老用户的 `profiles/web` 原样保留，不做迁移、不删除；
+  · 首次启动的可见性仍由 **home 级 patch** 保证（它是主力机制，先于 DSH 启动即可写），
+    profile 级只是兼容性兜底。
+- **`scripts/sync-to-obs.js` 新增 `--no-exclude` 开关**：更新链路要用的
+  `latest*.yml` / `*.blockmap` 平时被默认排除（官网不需要），补传时用开关而不是
+  去改默认行为。
+
+### 测试
+- 新增 `scripts/test-profile.js`（17 项：profile 名的两个硬约束、首启判断、
+  兜底命令改写、以及「源码里不许再写死 `profiles/web`」的静态守卫）。
+- 新增 `scripts/test-mac-update-gate.js`（15 项，含本机实证与对照组）。
+- `test-inject-race.js` / `check-legal-preset-roster.js` 改为跟随 profile 常量，
+  不再写死 `web`（写死会去 dump 另一个 profile 而**误报**花名册缺预设）。
+- 新增 `npm run test:profile` / `npm run test:mac-gate`。
+
 ## [1.0.25] - 2026-09-30
 
 把已经改好、但**没进上一个包**的两件事真正发出去；并关掉一处会默认改变用户环境的改动。

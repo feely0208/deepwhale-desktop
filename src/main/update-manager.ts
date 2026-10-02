@@ -107,6 +107,8 @@ export class UpdateManager {
   private firstTimer: NodeJS.Timeout | null = null;
   private intervalTimer: NodeJS.Timeout | null = null;
   private snoozeUntil = 0;
+  /** 用户已选过「退出时自动安装」的版本号 —— 记着就不再重复弹窗烦他（2026-10-02） */
+  private deferredVersion: string | null = null;
   private disposed = false;
   /** 正在等待用户答复，避免并发弹窗 */
   private prompting = false;
@@ -124,8 +126,14 @@ export class UpdateManager {
     }
     this.wireEvents();
 
-    // 更新源是本仓库的 GitHub Releases；autoDownload 关闭，改由用户确认
-    autoUpdater.autoDownload = false;
+    // 更新源是自建 CDN（dl.deepwhale.org.cn）——原注释写成"本仓库的 GitHub Releases"，早已不是，2026-10-02 更正。
+    //
+    // autoDownload：**Windows / Linux 自动在后台下载**，macOS 保持关闭。
+    //   · 为什么开：用户是不懂技术的律师，"要不要现在下载"这一步对他们是纯负担；
+    //     后台下好、只问一次"重启生效"才是贴心（下完 autoInstallOnAppQuit 还会兜底）。
+    //   · 为什么 macOS 不开：未签名装不上（Squirrel 校验不过），下载 300MB 纯属浪费 ——
+    //     macOS 那条分支会引导用户去下载页手动装。
+    autoUpdater.autoDownload = !macNeedsManualUpdate();
     // 用户选择"稍后"时，退出应用顺带安装，避免反复打扰。
     // macOS 上不能这么做：那里根本装不上（Squirrel 的签名校验过不去，见 macNeedsManualUpdate），
     // 开着它只会在退出时白折腾一次，所以按平台关掉。
@@ -335,25 +343,17 @@ export class UpdateManager {
         return;
       }
 
-      const choice = await this.confirm(
-        '发现新版本',
-        `深鲸桌面 ${info.version} 已发布（当前 ${app.getVersion()}）。\n\n是否现在下载？下载过程不影响你继续使用。`,
-        ['立即下载', '稍后再说'],
-      );
-      if (choice === 0) {
-        this.setState({ phase: 'downloading', percent: 0, message: '正在下载…' });
-        try {
-          await autoUpdater.downloadUpdate();
-        } catch (error) {
-          console.error('[update] 下载更新失败:', error);
-          await this.alert('下载失败', error instanceof Error ? error.message : String(error));
-          this.setState({ phase: 'error' });
-        }
-      } else {
-        // 用户选择稍后：推迟一段时间再提示
-        this.snoozeUntil = Date.now() + SNOOZE_MS;
-        this.setState({ phase: 'idle' });
-      }
+      // ⚠️ 2026-10-02 改：**Windows / Linux 自动在后台下载**，不再弹「是否现在下载」。
+      //
+      // 为什么：我们的用户大多是不懂技术的执业律师。对他们讲"新版本、新插件、MCP"
+      // 是鸡同鸭讲 —— 他们只关心"我不用管，重启一下就好了"。
+      // 原来那一步询问是纯负担：他既不知道 1.0.39 是什么，也不知道要不要现在下。
+      // 现在：后台静静下好（进度显示在托盘提示与任务栏进度条上、不打断使用），
+      // 下完只问一次「立即重启 / 退出时自动安装」—— 全程他只需要点一下。
+      // macOS 不走这条路（见上面的 macNeedsManualUpdate 分支）。
+      // autoDownload = true 时 electron-updater **已经在下载了**，这里不再调 downloadUpdate()，
+      // 只把状态摆出来给界面用（进度由 download-progress 推过来，下完由 update-downloaded 收尾）。
+      this.setState({ phase: 'downloading', percent: 0, message: '正在后台下载新版本…' });
     } finally {
       this.prompting = false;
     }
@@ -366,6 +366,11 @@ export class UpdateManager {
       percent: 100,
       message: `新版本 ${info.version} 已就绪`,
     });
+    // 他已经选过"退出时自动安装"（只是还没退出）→ 不必再问一遍：
+    // 每 6 小时重复弹同一个窗，对用户就是"骚扰"，而我们本来就保证退出时会装。
+    if (this.deferredVersion === info.version) {
+      return;
+    }
     if (this.prompting) {
       return;
     }
@@ -382,7 +387,11 @@ export class UpdateManager {
           autoUpdater.quitAndInstall(false, true);
         });
       }
-      // 选"退出时自动安装"时无需额外动作：autoInstallOnAppQuit 已开启
+      // 选"退出时自动安装"：无需额外动作（autoInstallOnAppQuit 已开启），
+      // 但记下这个版本，避免下次检查又弹一次同样的窗。
+      else {
+        this.deferredVersion = info.version;
+      }
     } finally {
       this.prompting = false;
     }

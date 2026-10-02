@@ -29,7 +29,11 @@ const DSH_BIN = path.join(REPO, 'dsh-runtime', 'node_modules', '@deepseek-ai', '
 const RUNTIME_MODULES = path.join(REPO, 'dsh-runtime', 'node_modules');
 const LEGAL_PAYLOAD = path.join(REPO, 'legal-mode');
 const BUNDLE_PAYLOAD = path.join(REPO, 'bundled-plugins');
-const EXPECTED_ROW = 'preset-legal';
+// ⚠️ 2026-10-02：行 id 从 `preset-legal` 改为 `preset-legal-mode`。
+//    原因见 scripts/build-legal-preset-bundle.js 里 PRESET_ID 那段注释：
+//    预设 id 必须与 src/main/legal-mode.ts 的 PRESET_ID（legal-mode）
+//    以及覆盖层插件的比对值一致，否则切到法律模式**覆盖层永远不弹**。
+const EXPECTED_ROW = 'preset-legal-mode';
 const EXPECTED_NAME = '法律模式';
 
 function fail(msg) {
@@ -49,6 +53,52 @@ const { ensureLegalModeSetup } = require(path.join(REPO, 'dist/main/legal-mode.j
 const { ensureBundledPlugins } = require(path.join(REPO, 'dist/main/bundled-plugins.js'));
 // profile 名跟着实现走（实现已从自带 `web` 换成自有 profile）
 const { profileDirOf, PROFILE_NAME } = require(path.join(REPO, 'dist/main/profile.js'));
+
+// ── ⓪ 预设 id 的三方一致性（2026-10-02 加，起因是一次真实故障）────────────────
+//
+// 症状：用户「可以选法律模式了，但覆盖层没弹」。
+// 根因：同一个 id 散在三处，其中一处写错：
+//   · scripts/build-legal-preset-bundle.js 的 PRESET_ID 写成了 `legal`      ❌
+//   · src/main/legal-mode.ts 的 PRESET_ID 是 `legal-mode`                   ✅
+//   · 覆盖层插件判 `agentPreset === 'legal-mode'` / `p.id === 'legal-mode'` ✅
+// 于是预设注册成了 `legal`，插件永远匹配不上 → 覆盖层不触发。
+//
+// 这个故障**没有任何检查会报**（花名册里确实有"法律模式"，只是 id 不对），
+// 所以在这里把三方钉死：任何一处被改动而另两处没跟上，自检立刻失败。
+function presetIdOf(file, re, label) {
+  const text = fs.readFileSync(file, 'utf8');
+  const m = text.match(re);
+  if (!m) fail(`读不出 ${label} 里的预设 id（正则 ${re}）→ ${file}`);
+  return m[1];
+}
+const idInGenerator = presetIdOf(
+  path.join(REPO, 'scripts/build-legal-preset-bundle.js'),
+  /const PRESET_ID = '([^']+)'/,
+  '生成器',
+);
+const idInShell = presetIdOf(
+  path.join(REPO, 'src/main/legal-mode.ts'),
+  /const PRESET_ID = '([^']+)'/,
+  '壳',
+);
+const idInPlugin = presetIdOf(
+  path.join(REPO, 'lawyer/workbench/dsh-plugin-ui-legal-mode/src/client/index.ts'),
+  /agentPreset === '([^']+)'/,
+  '覆盖层插件',
+);
+const idInBundle = presetIdOf(
+  path.join(BUNDLE_PAYLOAD, 'dsh-legal-preset', 'cordis.patch.yml'),
+  /^ {8}id: ([A-Za-z0-9_-]+)$/m,
+  'bundle 产物',
+);
+const ids = { 生成器: idInGenerator, 壳: idInShell, 覆盖层插件: idInPlugin, bundle产物: idInBundle };
+const uniq = [...new Set(Object.values(ids))];
+if (uniq.length !== 1) {
+  fail('预设 id 三方（四方）不一致 —— 覆盖层会永远不弹：\n' +
+    Object.entries(ids).map(([k, v]) => `    ${k}: ${v}`).join('\n') +
+    '\n  修法：以 src/main/legal-mode.ts 的 PRESET_ID 为准，改生成器后重跑 npm run build。');
+}
+console.log(`  ✅ 预设 id 四方一致：${uniq[0]}`);
 
 console.log('== 法律模式预设花名册自检 ==');
 const home = fs.mkdtempSync(path.join(os.tmpdir(), 'legal-roster-'));

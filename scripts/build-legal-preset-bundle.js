@@ -36,8 +36,20 @@ const DIR_NAME = 'dsh-legal-preset';
 
 /** 必须与 bundled-plugins.ts 的清单、以及 profile `dsh.profile.bundles` 里的条目完全一致。 */
 const PKG_NAME = '@deepwhale-cn/dsh-legal-preset';
-/** 预设 id：选择器里显示的名字取自 config.name，id 用于 Loader 行 `preset-<id>`。 */
-const PRESET_ID = 'legal';
+/**
+ * 预设 id：选择器里显示的名字取自 config.name，id 用于 Loader 行 `preset-<id>`。
+ *
+ * ⚠️ 2026-10-02 修正：这里原来写的是 `'legal'`，而
+ *    · `src/main/legal-mode.ts` 的 PRESET_ID 是 **`'legal-mode'`**
+ *    · 覆盖层插件 `@deepseek-ai/dsh-client-ui-legal-mode` 判定"是否法律模式"比的也是
+ *      `agentPreset === 'legal-mode'`（还有预设的 `id === 'legal-mode' && isDefault`）
+ *    两边对不上 → **切到法律模式时覆盖层永远不弹**（用户实测："可以选法律模式了，但没弹"）。
+ *    而且 DSH 侧本来就有旧形态的 `.agent-presets/legal-mode/` 目录 —— 说明
+ *    `legal-mode` 才是原始约定的 id，是本文件单方面缩成了 `legal`。
+ *
+ *    三者必须一致：本常量 === src/main/legal-mode.ts 的 PRESET_ID === 插件的比对值。
+ */
+const PRESET_ID = 'legal-mode';
 
 function parseArgs(argv) {
   const out = {};

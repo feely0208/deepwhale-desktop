@@ -1,5 +1,9 @@
 /* 深鲸·律师端 · 授权 / 激活（A款-订阅token版 / B款-自备API key版 · ¥399/年）
- * 授权：手机号 + 短信验证码（本地模拟，留 sendSmS 真接口）+ 机器指纹离线授权（Ed25519）
+ * 授权：手机号 + **短信验证码（真实下发，走 preload 桥 → main 进程 → 阿里云短信）**
+ *      + 机器指纹离线授权（Ed25519）
+ * ⚠️ 2026-10-02：**去掉了"无桥时本地模拟验证码"**。原来在没有 preload 桥的环境里
+ *    会本地生成一个码并显示在屏幕上、校验也拿它比 —— 等于手机号验证形同虚设。
+ *    现在无桥直接如实拒绝（那些环境本来就完不成后面的机器码授权）。详见 sendSms 处的注释。
  * 状态存 localStorage：
  *   legal-mode.sku        'A' | 'B'     用户选择的款型
  *   legal-mode.activate   { phone, smsAt(验证码校验时间戳), machine, plan, exp, lic }
@@ -64,9 +68,18 @@
   function realMachine() { try { return (window.__licenseGetMachine && window.__licenseGetMachine()) || ""; } catch (e) { return ""; } }
   function realVerify(key) { try { return window.__licenseVerify ? window.__licenseVerify(key) : null; } catch (e) { return { ok: false, msg: "校验失败" }; } }
 
-  // —— 模拟短信验证码（本地生成；真服务时改 sendSms）——
+  // —— 短信验证码 ——
+  // ⚠️ 2026-10-02 改：**无桥时不再本地模拟**（堵一个真实存在的口子）。
+  //
+  // 原来这里在没有 preload 桥的环境里会本地生成一个验证码、并把它**显示在屏幕上**，
+  // 校验时也拿这个本地码去比 —— 也就是说"手机号验证"在那个环境里**没有任何意义**：
+  // 任何人填任意手机号都能过第二步。
+  //
+  // 正式路径是**律师端应用窗口**（preload 桥在，走真实短信），不受影响。
+  // 而浏览器 / 覆盖层这些无桥环境，本来也会在下一步被"机器码桥"挡住
+  // （见 finish() 里的 isRealDesktop 判断），**完不成激活** ——
+  // 所以改成明确拒绝只会把话说早一步，不会挡住任何本来能激活的用户。
   var _smsCache = { phone: null, code: null, exp: 0 };
-  function genCode() { return String(Math.floor(100000 + Math.random() * 900000)); }
   var SEND_COOLDOWN_MS = 60000;
   var lastSendAt = 0;
   function sendSms(phone) {
@@ -75,10 +88,13 @@
       return window.__sendSms({ phone: phone }).then(function (r) {
         // r = { ok, simulated?, code?, msg? }
         return { ok: !!r.ok, code: r.code, msg: r.msg, simulated: !!r.simulated };
-      }).catch(function () { return { ok: false, msg: "短信服务异常" }; });
+      }).catch(function () { return { ok: false, msg: "短信服务异常" } });
     }
-    // 无桥：本地模拟（浏览器/未接真服务时）
-    return Promise.resolve({ ok: true, code: genCode(), simulated: true });
+    // 无桥：**直接拒绝**，不做任何本地模拟
+    return Promise.resolve({
+      ok: false,
+      msg: "当前环境无法发送短信，请在「深鲸·律师端」桌面端里完成激活",
+    });
   }
 
   function state() {
@@ -423,12 +439,10 @@
       smsMsg(m, "正在发送…");
       sendSms(ph).then(function (r) {
         if (!r || !r.ok) { smsMsg(m, "发送失败：" + (r && r.msg || "请重试")); return; }
-        _smsCache.phone = ph; _smsCache.code = String(r.code).slice(0, 6); _smsCache.exp = Date.now() + 5 * 60000;
-        if (r.simulated) {
-          smsMsg(m, "验证码已发送（本地模拟：" + _smsCache.code + "），5分钟内有效。正式接入短信服务后为真实下发。");
-        } else {
-          smsMsg(m, "验证码已发送至手机 " + ph.slice(0, 3) + "****" + ph.slice(-4) + "，5分钟内有效。");
-        }
+        // ⚠️ 不再区分 simulated：**任何情况下都不把验证码显示在屏幕上**（2026-10-02）。
+        //    真实短信已经发到用户手机上了，屏幕上再显示一遍等于把这道门槛抹掉。
+        _smsCache.phone = ph; _smsCache.exp = Date.now() + 5 * 60000;
+        smsMsg(m, "验证码已发送至手机 " + ph.slice(0, 3) + "****" + ph.slice(-4) + "，5分钟内有效。");
       });
     });
 
@@ -473,9 +487,11 @@
         }).catch(function () { msg(m, "短信校验服务异常，请重试", "#e07070"); });
         return;
       }
-      // 无桥：本地回退校验
-      if (String(code).slice(0, 6) !== String(_smsCache.code).slice(0, 6)) { msg(m, "验证码不正确，请核对", "#e07070"); return; }
-      autoActivate();
+      // 无桥：**不再本地回退校验**（2026-10-02 堵口）。
+      // 原来这里是拿"本地模拟出来的码"比对 —— 等于自己验自己，没有任何意义。
+      // 无桥环境本来就完不成后面的机器码授权，所以直接如实拒绝。
+      msg(m, "当前环境无法校验短信验证码，请在「深鲸·律师端」桌面端里完成激活", "#e07070");
+      return;
     });
 
     // 清除 Key：此前只能覆盖、不能删除，用户换账号或想停用 AI 时无路可走

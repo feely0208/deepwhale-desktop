@@ -25,7 +25,12 @@ const { execFileSync } = require('child_process');
 // 实测占同步总量的 29%。blockmap / latest*.yml 同理不需要落到官网。
 const DEFAULT_EXCLUDE = [
   /\.blockmap$/,
-  /(^|\/)latest.*\.yml$/,
+  // ⚠️ 2026-10-02 修：**不再排除 latest*.yml**。
+  //    原来这里把 latest.yml / latest-mac.yml / latest-linux.yml 一起排除了，
+  //    理由是"与官网下载页实际引用的格式一致" —— 但下载页不引用 ≠ 不该上传：
+  //    这三个 yml 正是 electron-updater **自动更新**读取的清单，
+  //    排掉它们 = 用户永远收不到新版本（1.0.38 与 1.0.39 两次都靠手工补传）。
+  //    它们只有几百字节，全传几乎零成本。
   /(^|\/)DeepWhale-Desktop-.*\.zip$/,
 ];
 

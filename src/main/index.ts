@@ -1281,9 +1281,16 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
     rebuildMenus();
 
     // 自动更新：等应用完全可用后再启动，避免与 DSH 冷启动争抢资源。
-    // DSH 没起来时（dshReady=false）不启动——此时用户有更紧急的问题要处理。
-    // 整个流程纯增量，出错只记日志，不影响任何既有功能。
-    if (dshReady) {
+    // 自动更新：**无条件启动**（2026-10-02 改）。
+    //
+    // ⚠️ 这段原来关在 `if (dshReady)` 里，理由是"DSH 没起来时用户有更紧急的问题要处理"。
+    //    那个理由**恰好反了**：DSH 起不来时，用户唯一的出路就是**装上修好的新版** ——
+    //    而这道 guard 让更新检查根本不跑，于是他被永久困住。
+    //    真实场景（用户报上来的）：1.0.37 因配置写坏起不来 → **永远等不到更新提示** →
+    //    只能手动下载覆盖安装，而他是小白，做不了。
+    //    更新检查与 DSH 是否就绪无关，必须无条件启动
+    //    （UpdateManager 自己会处理"没有窗口"的情况，下面的回调也都有空值保护）。
+    {
       updates = new UpdateManager({
         getWindow: () => (mainWin !== null && !mainWin.isDestroyed() ? mainWin : null),
         // ★ 进度**采了必须显示出来**。

@@ -728,7 +728,9 @@ function registerIpc(): void {
   /** 在隐藏窗口里把文件交给系统打印，完成后销毁窗口。 */
   async function printFileInHiddenWindow(file: string): Promise<{ ok: boolean; message?: string }> {
     const ext = path.extname(file).toLowerCase();
-    if (!PRINTABLE_EXT.has(ext)) {
+    // ⚠️ Office 扩展名也要放行 —— 它们先转 PDF 再打印（见下面的 OFFICE_EXT 分支）。
+    //    只在 PRINTABLE_EXT 里判断的话，docx 会被挡在这一行，永远走不到转换。
+    if (!PRINTABLE_EXT.has(ext) && !OFFICE_EXT.has(ext)) {
       return { ok: false, message: '这类文件请在预览区里打印' };
     }
     // Office 文档：先用同目录的 libreoffice-kit 转成 PDF，再按 PDF 打印 ——

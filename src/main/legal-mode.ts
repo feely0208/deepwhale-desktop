@@ -332,7 +332,80 @@ export function removeOurInsertBlocks(file: string, ids: string[]): boolean {
     }
   }
   if (!removed) return false;
-  fs.writeFileSync(file, kept.join('\n'));
+  writeFileAtomic(file, kept.join('\n'));   // 原子写：见 writeFileAtomic 的说明
+  return true;
+}
+
+/**
+ * 原子写：先写临时文件，再 rename 覆盖。
+ *
+ * 直接 `writeFileSync` 是「先截断、再写」——中途被打断（进程被杀 / 断电 /
+ * **Windows 杀软过滤驱动**）就会留下半截或带空洞（NUL 字节）的文件。
+ * 而这些 patch 文件一旦坏，DSH 启动时就解析不了、**整个应用打不开**（见下面的实测）。
+ */
+export function writeFileAtomic(file: string, text: string): void {
+  const tmp = `${file}.tmp-${process.pid}`;
+  fs.writeFileSync(tmp, text);
+  fs.renameSync(tmp, file); // 同盘 rename = 原子替换（Windows 上覆盖已存在文件也 OK）
+}
+
+/**
+ * 去掉 BOM、注释行、空行后，第一个有效字符必须是 `-`（块序列）或 `[`（流序列）。
+ * DSH 的 parsePatchList 要求这些 patch 的**顶层是 YAML 数组**，不是就报错。
+ */
+function patchLooksLikeArray(text: string): boolean {
+  for (const raw of text.replace(/^\uFEFF/, '').split('\n')) {
+    const line = raw.trim();
+    if (line === '' || line.startsWith('#')) continue;
+    if (line === '---') continue;
+    return line.startsWith('-') || line.startsWith('[');
+  }
+  return false; // 全是注释/空行 → DSH 会报 "must be a top-level YAML array"，同样算坏
+}
+
+/**
+ * patch 文件体检 + 自愈（2026-10-02）。
+ *
+ * ── 为什么必须有这段 ──────────────────────────────────────────────
+ * 一个真实用户（Windows）的实测：更新到 1.0.37 后，第二天早上打不开，
+ * 界面只有「重试/查看日志/打开设置/退出」，报错是
+ *
+ *   dsh: failed to parse overlay
+ *     C:\Users\...\AppData\Roaming\DeepWhale Desktop\dsh-home\profiles\deepwhale\cordis.patch.yml:
+ *   YAMLException: null byte is not allowed in input (1:1)
+ *
+ * 也就是那个文件**开头多了一个 NUL 字节** —— 文件被写坏了。
+ * 而这个文件是**两个进程都在写**的（壳写 home 级、DSH 写 profile 级），
+ * 叠加 Windows 上的杀软过滤驱动，写坏在现实里是会发生的事。
+ * 后果极重：**应用从此再也起不来**，而用户是小白，完全无从下手。
+ *
+ * 所以壳必须在**拉起 DSH 之前**先体检这些文件，坏了就修好 ——
+ * 宁可丢掉一个本来就无法解析的文件，也不能让应用打不开。
+ *
+ * 修法：先把坏文件**改名备份**成 `.bad-<时间戳>`（万一里头还有用户配置，
+ * 人工还能找回），再写一个合法的空数组 `[]`，DSH 会在它基础上重建自己的内容。
+ *
+ * @returns 是否真的修了（用于判断"本轮有改动、需要重载窗口"）
+ */
+export function repairPatchFileIfBroken(file: string): boolean {
+  let buf: Buffer;
+  try {
+    buf = fs.readFileSync(file);
+  } catch {
+    return false; // 不存在 / 读不到：不是这里要处理的情形（DSH 会自己创建）
+  }
+  const text = buf.toString('utf8');
+  // 含 NUL 字节、出现替换字符（非法 UTF-8）、或去掉注释空行后不是数组 → 一律判坏
+  const broken = buf.includes(0) || text.includes('\uFFFD') || !patchLooksLikeArray(text);
+  if (!broken) return false;
+
+  const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 15);
+  try {
+    fs.renameSync(file, `${file}.bad-${stamp}`);
+  } catch {
+    /* 备份失败也要继续修 —— 让应用能起来优先 */
+  }
+  writeFileAtomic(file, '[]\n');
   return true;
 }
 
@@ -366,7 +439,7 @@ function ensurePatchRow(file: string): boolean {
   const next = effective === '' || effective === '[]'
     ? `${comments === '' ? '' : `${comments}\n`}${block}`
     : `${current.replace(/\s*$/, '')}\n\n${block}`;
-  fs.writeFileSync(file, next);
+  writeFileAtomic(file, next);   // 原子写：见 writeFileAtomic 的说明
   return true;
 }
 
@@ -575,6 +648,8 @@ export function ensureLegalModeSetup(
     path.join(home, 'node_modules', ...PLUGIN_NAME.split('/')),
     pluginDir,
   ) || changed;
+  // 启动前体检：坏 patch 会让 DSH 直接起不来（真实用户实测，见 repairPatchFileIfBroken 的说明）
+  changed = repairPatchFileIfBroken(path.join(home, 'cordis.patch.yml')) || changed;
   changed = ensurePatchRow(path.join(home, 'cordis.patch.yml')) || changed;
 
   // 3. profile 侧：**只保留模块接线，不再往 patch 里插行**（2026-10-01 去重复）。
@@ -588,6 +663,10 @@ export function ensureLegalModeSetup(
     !fs.existsSync(path.join(profileDir, 'package.json')) ||
     !fs.existsSync(path.join(profileDir, 'cordis.patch.yml'));
   if (!profilePending) {
+    // 启动前体检 —— **这个文件就是真实用户那次「打不开」的元凶**
+    // （profiles/deepwhale/cordis.patch.yml 开头一个 NUL 字节）。
+    // 它在用户数据目录里，壳有能力也有责任在 DSH 读它之前修好。
+    changed = repairPatchFileIfBroken(path.join(profileDir, 'cordis.patch.yml')) || changed;
     changed = ensurePluginEntry(
       path.join(profileDir, 'node_modules', ...PLUGIN_NAME.split('/')),
       pluginDir,

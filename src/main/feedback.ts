@@ -190,6 +190,7 @@ export function ensureFeedbackEntry(home: string, shellVersion: string): boolean
   const base = kept.join('\n').replace(/\n{3,}/g, '\n\n').replace(/\s*$/, '');
 
   fs.mkdirSync(home, { recursive: true });
-  fs.writeFileSync(file, `${base === '' ? '' : `${base}\n\n`}${block}`);
+  // 原子写：这个文件坏掉会让 DSH 启动失败（与 legal-mode.ts 的 writeFileAtomic 同理）
+  { const tmp = `${file}.tmp-${process.pid}`; fs.writeFileSync(tmp, `${base === '' ? '' : `${base}\n\n`}${block}`); fs.renameSync(tmp, file); }
   return true;
 }

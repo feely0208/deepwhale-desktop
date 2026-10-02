@@ -1,7 +1,7 @@
 {
   "name": "deepwhale-lawyer",
   "productName": "深鲸·律师端",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "面向律师的 AI 法律工作台桌面端",
   "main": "main.js",
   "homepage": "https://deepwhale.org",

@@ -637,6 +637,63 @@ function createAdminWindow() {
   win.loadFile(path.join(__dirname, 'admin.html'));
 }
 
+// —— 工作台静态服务（默认 3089）——
+//
+// 为什么需要：深鲸桌面的「法律模式」覆盖层是个 iframe，地址硬编码成
+//   http://127.0.0.1:3089/   （见 dsh-plugin-ui-legal-mode/src/client/index.ts）
+// 但**从来没有任何进程服务这个端口** —— 全仓库只有插件那一处提到 3089，
+// 律师端的服务端一直是 7777（运营后台 API）。于是覆盖层打开就是白屏。
+//
+// 律师端本身就带着 workbench/ 这套界面，由它来服务最自然：只要律师端在跑，
+// 覆盖层就能显示工作台。只监听 127.0.0.1（不对外暴露）。
+function startWorkbenchServer() {
+  const http = require('http');
+  const fs = require('fs');
+  const path = require('path');
+  const ROOT = path.join(__dirname, 'workbench');
+  const PORT = Number(process.env.DSH_WORKBENCH_PORT || 3089);
+  const MIME = {
+    '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
+    '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8',
+    '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif',
+    '.svg': 'image/svg+xml', '.webp': 'image/webp', '.ico': 'image/x-icon',
+    '.woff': 'font/woff', '.woff2': 'font/woff2', '.ttf': 'font/ttf',
+    '.mp4': 'video/mp4', '.webm': 'video/webm', '.txt': 'text/plain; charset=utf-8',
+    '.map': 'application/json; charset=utf-8',
+  };
+  const server = http.createServer((req, res) => {
+    try {
+      const u = new URL(req.url, 'http://localhost');
+      let rel = decodeURIComponent(u.pathname || '/');
+      if (rel === '/' || rel === '') rel = '/index.html';
+      const full = path.resolve(ROOT, '.' + rel);
+      // 防目录穿越：解析后必须仍在 ROOT 之内
+      const within = path.relative(ROOT, full);
+      if (within.startsWith('..') || path.isAbsolute(within)) {
+        res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end('forbidden'); return;
+      }
+      fs.readFile(full, (err, buf) => {
+        if (err) {
+          res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end('not found'); return;
+        }
+        res.writeHead(200, {
+          'Content-Type': MIME[path.extname(full).toLowerCase()] || 'application/octet-stream',
+          'Cache-Control': 'no-store',
+        });
+        res.end(buf);
+      });
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end('server error');
+    }
+  });
+  // 端口被占（比如律师端开了两个）不该让整个应用崩掉
+  server.on('error', (e) => console.error('[workbench] 静态服务启动失败：' + e.message));
+  server.listen(PORT, '127.0.0.1', () => {
+    console.log('[workbench] 工作台已监听 http://127.0.0.1:' + PORT + '/（供深鲸桌面「法律模式」覆盖层加载）');
+  });
+  return server;
+}
+
 // —— 运营后台 HTTP API（局域网设备提交免费申请/律师核验/反馈并轮询结果；仅 admin 模式启动）——
 function startAdminApiServer() {
   const http = require('http');
@@ -860,6 +917,9 @@ app.whenReady().then(() => {
     applicationVersion: app.getVersion(),
     copyright: '© 2026 深鲸 DeepWhale',
   });
+  // 工作台静态服务：**任何模式都启动** —— 深鲸桌面的「法律模式」覆盖层靠它显示
+  // （原来没人服务 3089，覆盖层是白屏）
+  try { startWorkbenchServer(); } catch (e) { console.error('[workbench] 启动异常：' + e.message); }
   if (process.env.DSH_ADMIN === '1') { startAdminApiServer(); createAdminWindow(); return; }
   createWindow();
 });

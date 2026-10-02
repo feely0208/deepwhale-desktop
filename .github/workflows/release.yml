@@ -359,13 +359,23 @@ jobs:
             echo "::warning::未配置 OBS_AK，跳过同步（请在 Settings → Secrets 添加）"
             exit 0
           fi
-          # sync-to-obs.js 默认就排除桌面端 .zip（官网不提供该格式，占同步量约 29%）、
-          # blockmap 与 latest*.yml —— 与官网下载页实际引用的格式一致。
+          # sync-to-obs.js 默认排除桌面端 .zip（官网不提供该格式，占同步量约 29%）与 blockmap。
+          #
+          # ⚠️ 2026-10-02 修：**latest*.yml 必须一起同步**。
+          #    它们是 electron-updater 读取的更新清单 —— 不传，用户就永远收不到新版本。
+          #    原来这里有两道筛子（脚本 DEFAULT_EXCLUDE 一条 + 下面的 case 一条），
+          #    而且文件名是 latest.yml，**根本不匹配 DeepWhale-Desktop-* 这个 glob**，
+          #    所以 1.0.38 / 1.0.39 两次发版 yml 都停在上一个版本，靠手工补传才修好。
           mkdir -p obs-desktop
           for f in dist-assets/DeepWhale-Desktop-*; do
             [ -f "$f" ] || continue
-            case "$f" in *.blockmap|*.yml|*.zip) continue;; esac
+            case "$f" in *.blockmap|*.zip) continue;; esac
             cp "$f" obs-desktop/
+          done
+          # 更新清单（体积只有几百字节，但决定"用户能不能收到更新"）
+          for y in dist-assets/latest*.yml; do
+            [ -f "$y" ] || continue
+            cp "$y" obs-desktop/
           done
           echo "待同步 $(find obs-desktop -type f | wc -l) 个文件"
           START=$(date +%s)

@@ -24,7 +24,20 @@ files:
   # ⚠️ DSH 是**子进程 + ESM** 跑的，必须确认 Electron-as-Node 能从 asar 里 import ESM
   # （实测通过；普通 Node 不行，但我们用的是 Electron）。
   - dsh-runtime/**/*
-asar: true
+# ⚠️ 2026-10-02 改为 false：Office 预览（docx/xlsx/pptx）坏在 asar 上。
+#
+#   libreoffice-kit 找引擎包用的是 require.resolve('<engine-pkg>/package.json')，
+#   拿到的是 **asar 逻辑路径**；Electron 在 ELECTRON_RUN_AS_NODE 模式下不做
+#   asar→unpacked 映射，于是 fs.statSync 返回 **0644（无执行位）**，
+#   引擎自检直接抛 `Installed LibreOfficeKit executable is not executable`，
+#   侧边栏只能显示「Office 预览不可用」，**日志里完全看不出原因**。
+#
+#   实测：asar 路径 stat=644 ❌ ／ 真实路径 stat=755 ✅ ／ 真实目录下转换成功 ✅
+#   （asarUnpack 解决不了：解析出来仍是 asar 逻辑路径，已试过）
+#
+#   代价：安装/更新时多写约 26k 个文件（实测 +12 秒）、包体约 +15%。
+#   换来的是整个运行时按真实文件运行 —— 与开发态完全一致，原生引擎不再有暗坑。
+asar: false
 npmRebuild: false
 # 原生模块不能从 asar 里 dlopen，必须解包成真实文件。
 # 实测整个运行时只有 13 个 .node，分布在下列包中；这里按包目录整体解包（比只解包
@@ -37,6 +50,13 @@ asarUnpack:
   - dsh-runtime/node_modules/sherpa-onnx-*/**
   - dsh-runtime/node_modules/node-addon-require-builtin-*/**
   - dsh-runtime/node_modules/@deepseek-ai/node-addon-system-*/**
+  # LibreOffice 原生引擎（Office 预览 / docx·xlsx·pptx 转 PDF 用）。
+  # ⚠️ 缺这两行会静默坏掉：asar 里的文件模式是 0644（没有执行位），
+  #    libreoffice-kit 自检时抛 `Installed LibreOfficeKit executable is not executable`，
+  #    于是侧边栏预览直接显示「Office 预览不可用」，而**日志里看不出原因** ——
+  #    实测：仓库真实目录跑同一个 cli 能转出 PDF；打包后的 asar 路径必报这句。
+  - dsh-runtime/node_modules/@deepseek-ai/libreoffice-kit/**
+  - dsh-runtime/node_modules/@deepseek-ai/libreoffice-kit-*/**
 
 # 法律模式载荷（约 130KB）：ui-legal-mode 插件包 + legal-mode 预设。
 # 首次启动由主进程注入到应用专属 DSH home，使"任何渠道切到法律模式都拉起律师端"

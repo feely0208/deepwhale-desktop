@@ -182,3 +182,64 @@
 这样每年约 6 个验证文件会自动消失，且不需要给 CI 任何删除权限。
 
 > 不做也不影响功能 —— 一年也就几十个 43 字节的文件。但加上更干净。
+
+---
+
+## 附：2026-10-02 血泪补充（发版必读）
+
+### ⚠️ 一、`latest*.yml` 必须上传，而且 CDN 必须刷新
+
+**症状**：安装包都传上去了，但**用户永远收不到更新**（连提示都没有）。
+
+**三个坑（当天全踩了一遍）**：
+
+| # | 坑 | 位置 |
+|---|---|---|
+| 1 | 默认排除 `latest*.yml` | `scripts/sync-to-obs.js` 的 `DEFAULT_EXCLUDE` |
+| 2 | CI 循环里 `case "$f" in *.yml) continue`；而且 yml 叫 `latest.yml`，**不匹配 `DeepWhale-Desktop-*` 这个 glob** | `.github/workflows/release.yml` |
+| 3 | **CDN 缓存 `latest.yml`（TTL 很长）**，源站更新了也照样返回旧内容 | 华为云 CDN |
+
+**1、2 已修**；第 3 条**每次发版都要人工做**：
+
+> 上传完 → 华为云 **CDN 控制台 → 刷新预热 → URL 刷新** → 刷这三条：
+> ```
+> https://dl.deepwhale.org.cn/latest.yml
+> https://dl.deepwhale.org.cn/latest-mac.yml
+> https://dl.deepwhale.org.cn/latest-linux.yml
+> ```
+
+**验收（唯一标准）**：
+```bash
+for y in latest.yml latest-mac.yml latest-linux.yml; do
+  printf "%-18s " "$y"; curl -s "https://dl.deepwhale.org.cn/$y?cb=$RANDOM" | grep -m1 '^version:'
+done
+# 必须全部等于本次版本号
+```
+注意 `curl -I` 看 `Age`：`Age` 很小但 `Last-Modified` 是**旧时间**，说明源站没更新；
+`Age: 1` + `Last-Modified` 是刚才，才算真的换掉了。
+
+### 二、本地补传（比跨海 CI 快十几倍）
+
+CI 从美国机器传到国内 OBS：5 个包 ≈ 1.3 GB，慢的时候会卡几十分钟（1.0.37 卡过 23 分钟）。
+
+**本地一条命令**（密钥读 `~/.obs-credentials`，600 权限，不进仓库）：
+```bash
+scripts/upload-to-cdn-local.sh v1.0.40
+```
+
+⚠️ **端点区域别照抄**：指引正文里的 `cn-north-4` 是**示例**。
+本桶真实区域是 **`cn-east-3`**（`obs.cn-east-3.myhuaweicloud.com`）。
+判断方法（不带签名直接问，公开对象会返回 200，桶不存在返回 404，桶存在但匿名无权返回 403）：
+```bash
+for r in cn-north-4 cn-east-3 cn-south-1; do
+  printf "%-14s " "$r"
+  curl -s -o /dev/null -w "%{http_code}\n" "https://deepwhale-downloads.obs.$r.myhuaweicloud.com/latest.yml"
+done
+# 403 = 就是它
+```
+
+### 三、彻底关掉 CI 的 CDN 同步（可选）
+
+既然本地补传又快又稳，可以把 workflow 里那段 OBS 同步**去掉**，
+发布流程改成：**CI 只出产物 → 本地一条命令传 + 刷新 CDN**。
+（`--dir` 传什么就传什么，不会再有两道筛子合起来坑人。）

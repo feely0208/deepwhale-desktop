@@ -203,6 +203,9 @@ export class UpdateManager {
     this.onStateChange?.(next);
   }
 
+  /** 手动检查在途：用于在 update-not-available 时补一次反馈（见 wireEvents）。 */
+  private interactiveCheckPending = false;
+
   private async check(interactive: boolean): Promise<void> {
     if (this.disposed) {
       return;
@@ -217,13 +220,15 @@ export class UpdateManager {
     }
 
     this.setState({ phase: 'checking', message: '正在检查更新…' });
+    this.interactiveCheckPending = interactive;
     try {
       const result = await this.checkWithFeedFallback();
       // 没有可用更新时，electron-updater 会在 update-not-available 事件里通知；
       // 这里同时兜底处理返回 null 的情况。
       if (result === null) {
         this.setState({ phase: 'up-to-date', message: '已是最新版本' });
-        if (interactive) {
+        if (interactive && this.interactiveCheckPending) {
+          this.interactiveCheckPending = false;   // 事件已弹过就不重复
           await this.alert('检查更新', `当前已是最新版本（${app.getVersion()}）。`);
         }
       }
@@ -292,6 +297,14 @@ export class UpdateManager {
 
     autoUpdater.on('update-not-available', () => {
       this.setState({ phase: 'up-to-date', message: '已是最新版本' });
+      // 2026-10-02 修：手动点「检查更新…」时必须给反馈。
+      // 原来这里只改状态、不弹窗，而 check() 的弹窗只在 result === null 时触发 ——
+      // 正常『已是最新』走的正是这个事件，于是用户点下去毫无反应，以为功能坏了。
+      // 自动检查保持静默是对的，所以只在手动检查时弹。
+      if (this.interactiveCheckPending) {
+        this.interactiveCheckPending = false;
+        void this.alert('检查更新', `当前已是最新版本（${app.getVersion()}）。`);
+      }
     });
 
     autoUpdater.on('download-progress', (progress: ProgressInfo) => {
@@ -320,6 +333,7 @@ export class UpdateManager {
       console.error('[update] 更新出错:', error);
       this.setState({ phase: 'error', message: error.message });
       this.prompting = false;
+        this.interactiveCheckPending = false;
     });
   }
 

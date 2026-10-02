@@ -358,6 +358,86 @@
 
   // —— 其它模块：占位框架 ——
   // —— 空白模块填充（第5条配套）：虚拟数据 + 直达源头链接 ——
+  // —— 系统设置里的「授权与激活」卡片（2026-10-02）——
+  //
+  // ⚠️ 教训（当天被用户当场发现）：第一版我直接接管了整个 settings 视图，
+  //    把主题 / 壁纸 / 数据 / 运行日志那几组卡片**全顶掉了**。
+  //    设置页里的东西是**加法**，不是替换 —— 授权这块只加一张卡 + 一个按钮，
+  //    点开才展开详情。
+  function licenseSetCard() {
+    var L = window.License || {};
+    var activated = !!(L.isActivated && L.isActivated());
+    var trialActive = !!(L.isTrialActive && L.isTrialActive());
+    var days = (L.trialDays && L.trialDays()) || 0;
+    var st = (L.state && L.state()) || {};
+    var sku = (L.skuInfo && L.skuInfo(st.sku)) || {};
+    var exp = (st.activate && st.activate.exp) || "";
+    var status = activated ? "已激活" : (trialActive ? ("试用中 · 剩余 " + days + " 天") : "未授权 / 已到期");
+    var color = activated ? "#3fbf6a" : (trialActive ? "#e0a83f" : "#e07070");
+    var line = activated
+      ? ((sku.name || "—") + (exp ? (" · 至 " + exp) : ""))
+      : "试用期结束后需激活才能继续使用";
+    return "<div class='set-card glow' style='--acc:#2fa36b'>" +
+      "<div class='set-head'><span class='set-ico'></span><strong>授权与激活</strong></div>" +
+      "<div class='set-body'>" +
+      "<div style='margin-bottom:8px'>当前：<b style='color:" + color + "'>" + status + "</b></div>" +
+      "<div class='tl-meta' style='margin-bottom:8px'>" + line + "</div>" +
+      "<button class='btn btn-primary btn-sm' data-lic-info>查看授权详情</button>" +
+      "</div></div>";
+  }
+
+  /** 授权详情：点按钮才展开，不占设置页版面 */
+  function openLicenseInfo() {
+    var old = document.getElementById("lic-info-modal");
+    if (old) old.remove();
+    var L = window.License || {};
+    var st = (L.state && L.state()) || {};
+    var act = st.activate || null;
+    var sku = (L.skuInfo && L.skuInfo(st.sku)) || {};
+    var activated = !!(L.isActivated && L.isActivated());
+    var trialActive = !!(L.isTrialActive && L.isTrialActive());
+    var days = (L.trialDays && L.trialDays()) || 0;
+    var machine = (L.realMachine && L.realMachine()) || "";
+    var mask = function (p) {
+      var s = String(p || "");
+      return s.length >= 7 ? (s.slice(0, 3) + "****" + s.slice(-4)) : (s || "—");
+    };
+    var status = activated ? "已激活" : (trialActive ? ("试用中 · 剩余 " + days + " 天") : "未授权 / 已到期");
+    var statusColor = activated ? "#3fbf6a" : (trialActive ? "#e0a83f" : "#e07070");
+    var rows = [
+      ["授权状态", "<b style='color:" + statusColor + "'>" + status + "</b>"],
+      ["版本", (activated && sku.name) ? sku.name : "—"],
+      ["到期日", (activated && act && act.exp) ? act.exp : "—"],
+      ["手机号", (activated && act && act.phone) ? mask(act.phone) : "—"],
+      ["本机机器码", machine ? ("<code style='font-size:12px'>" + machine + "</code>") : "（本环境取不到）"],
+    ];
+    var d = document.createElement("div");
+    d.id = "lic-info-modal";
+    d.style.cssText = "position:fixed;inset:0;z-index:2147483647;background:rgba(6,9,14,.62);" +
+      "display:flex;align-items:center;justify-content:center;padding:24px;";
+    d.innerHTML =
+      "<div style='width:min(560px,94vw);max-height:86vh;overflow:auto;background:#12161d;" +
+      "border:1px solid rgba(255,255,255,.14);border-radius:14px;padding:20px 22px;" +
+      "box-shadow:0 18px 48px rgba(0,0,0,.45);color:#e8edf6'>" +
+      "<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:14px'>" +
+      "<b style='font-size:15px'>授权与激活</b>" +
+      "<button class='btn btn-ghost btn-sm' id='lic-info-close'>关闭</button></div>" +
+      "<table class='table'><tbody>" + rows.map(function (r) {
+        return "<tr><td style='width:120px;opacity:.7'>" + r[0] + "</td><td>" + r[1] + "</td></tr>";
+      }).join("") + "</tbody></table>" +
+      "<div class='tl-meta' style='margin-top:12px'>手机号只显示前 3 后 4 位；授权数据仅保存在本机，不上传。</div>" +
+      "<div style='display:flex;gap:8px;justify-content:flex-end;margin-top:14px'>" +
+      "<button class='btn btn-primary btn-sm' id='lic-info-open'>" +
+      (activated ? "查看 / 变更授权" : "去激活") + "</button></div></div>";
+    document.body.appendChild(d);
+    var close = function () { d.remove(); };
+    d.addEventListener("click", function (e) { if (e.target === d) close(); });
+    d.querySelector("#lic-info-close").addEventListener("click", close);
+    d.querySelector("#lic-info-open").addEventListener("click", function () {
+      close(); if (L.open) L.open();
+    });
+  }
+
   function renderModuleStub(key, title) {
     const row = function (tds, links) {
       const linkHtml = links.map(function (l) {
@@ -507,6 +587,7 @@
           "</div>" +
           "<div class='tl-meta' style='margin-top:8px'>日志是否提供给我们，完全由你决定。" +
           "提供可显著加快定位速度；不提供也不影响我们按既定流程为你排查。</div>") +
+        licenseSetCard() +
         "</div>";
     } else if (key === "profile") {
       const name = meName();
@@ -608,6 +689,26 @@
     if (dm) dm.addEventListener("click", function () { if (window.WbData && window.WbData.openDataManager) window.WbData.openDataManager(); });
     const lic = el.content.querySelector("[data-open-lic]");
     if (lic) lic.addEventListener("click", function () { if (window.License && window.License.open) window.License.open(); else if (window.toast) window.toast("激活模块未就绪", "error"); });
+    // 授权详情：设置页那张「授权与激活」卡上的按钮（点开才展开，不影响本页其它卡片）
+    const licInfo = el.content.querySelector("[data-lic-info]");
+    if (licInfo) licInfo.addEventListener("click", function () { openLicenseInfo(); });
+    // 授权状态变化时**就地刷新那张卡**（用户停在设置页上激活时，卡片不能还是旧的）
+    // ⚠️ 必须只注册一次：这段代码在**每次渲染**都会跑，直接 addEventListener 会越积越多。
+    if (!window.__legalLicenseChangedBound) {
+      window.__legalLicenseChangedBound = true;
+      document.addEventListener("legal-license-changed", function () {
+        const btn = document.querySelector("[data-lic-info]");
+        if (!btn) return;                     // 设置页没开着，什么都不用做
+        const grid = btn.closest(".set-grid");
+        const card = btn.closest(".set-card");
+        if (!grid || !card) return;
+        const tmp = document.createElement("div");
+        tmp.innerHTML = licenseSetCard();
+        if (tmp.firstChild) grid.replaceChild(tmp.firstChild, card);
+        const nb = grid.querySelector("[data-lic-info]");
+        if (nb) nb.addEventListener("click", function () { openLicenseInfo(); });
+      });
+    }
     const kk = el.content.querySelector("[data-open-key]");
     if (kk) kk.addEventListener("click", function () { if (window.KeyMgr && window.KeyMgr.open) window.KeyMgr.open(); else { if (window.toast) window.toast("算力模块未就绪", "error"); } });
     const pp = el.content.querySelector("#ppOpen");
@@ -2496,10 +2597,19 @@
     let i = 0;
     function next() {
       if (i >= steps.length) {
-        setTimeout(function () {
-          el.boot.classList.add("done");
-          el.app.classList.add("ready");
-        }, 300);
+        // ⚠️ 2026-10-02 修「跑完进度条后有 1~2 秒白屏」：
+        //
+        // 原来两句话同时执行 —— `#boot` 淡出 0.6s 与 `#app` 淡入 0.6s **交叉进行**，
+        // 中间那段时间两层都是半透明，于是透出 body 背景色；浅色主题下看起来就是白屏。
+        //
+        // 现在改成**串行**：先把应用 ready（它在启动页下面自己淡入 0.6s），
+        // 等它完全显形了，再让启动页淡出。全程都有东西盖着，不会露背景。
+        //
+        // 另外：首屏内容在 init() 里已经 `switchTo("dashboard")` 渲染过了，
+        // 所以这里不需要"等内容画完"那套判断（我第一版加过，方向是错的，
+        // 而且选择器写错会白等 6 秒）。
+        el.app.classList.add("ready");
+        setTimeout(function () { el.boot.classList.add("done"); }, 620);
         return;
       }
       state.textContent = steps[i][0];

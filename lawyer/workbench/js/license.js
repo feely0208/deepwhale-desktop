@@ -757,11 +757,15 @@
 
   function ensureBadge() {
     var id = "legal-license-badge";
-    if (document.getElementById(id)) return;
+    var existing = document.getElementById(id);
+    // ⚠️ 2026-10-02 修：已激活时**必须把已有的试用徽标移除**。
+    //    原来只在"创建分支"里判 isActivated()，而元素一旦存在就 `return` 了 ——
+    //    于是激活后徽标赖着不走（用户实测："激活的同时右下方小黑条没有消失"）。
+    if (isActivated()) { if (existing) existing.remove(); return; }
+    if (existing) return;
     // 关闭记忆：legal-mode.trialBadgeClosedAt 时间戳，1天内不再显示
     var closedAt = read("legal-mode.trialBadgeClosedAt", 0);
     if (closedAt && (Date.now() - closedAt) < 24 * 3600 * 1000) return;
-    if (isActivated()) return; // 已激活不显示试用块
     var b = document.createElement("button");
     b.id = id;
     b.style.cssText = "position:fixed;right:16px;bottom:16px;z-index:2147483640;padding:8px 14px;border-radius:999px;border:none;font:600 12.5px -apple-system,Segoe UI,sans-serif;cursor:pointer;background:rgba(20,24,32,.92);color:#e7ebf2;box-shadow:0 4px 16px rgba(0,0,0,.3);display:flex;align-items:center;gap:8px;";
@@ -783,9 +787,25 @@
   // 激活后立即刷新徽标文本 + 关掉全屏 gate
   function updateBadgeText() {
     var b = document.getElementById("legal-license-badge");
-    if (b) b.textContent = badgeText();
+    // ⚠️ 2026-10-02 修：只更新里头那个 <span>，**不要 b.textContent = …**。
+    //    整块赋值会把关闭用的 ✕ 一起抹掉 —— 用户看到的就是
+    //    "一个没有 ✕、还赖着不走的试用徽标"。要走就整块移除，别把按钮掏空。
+    if (b) {
+      var span = b.querySelector("span");
+      if (span) span.textContent = badgeText(); else b.textContent = badgeText();
+    }
+    // 激活之后，提醒"试用还剩几天"的徽标与顶部横幅**都该立刻消失**，
+    // 不能等下次重启（原来 showTrialBanner 只有创建、没有移除）。
+    if (isActivated()) {
+      if (b) b.remove();
+      var banner = document.getElementById("legal-trial-banner");
+      if (banner) banner.remove();
+    }
     var g = document.getElementById("legal-expire-gate");
     if (g && isActivated()) g.remove();
+    // 通知界面：授权状态变了（工作台里「系统设置」那张授权卡会就地刷新，
+    // 免得用户停在设置页上激活之后看到的是旧状态）
+    try { document.dispatchEvent(new CustomEvent("legal-license-changed")); } catch (e) {}
   }
 
   function gateIfExpired() {
@@ -848,8 +868,15 @@
     b.innerHTML =
       "<div style='flex:0 0 auto;font-weight:700;font-size:14px'>深鲸·律师端</div>" +
       "<div style='flex:1;opacity:.92'>欢迎试用！当前为 <b style='color:#ffd479'>免费试用期 · 剩余 " + days + " 天</b>。试用期内全部功能正常可用；如使用满意，请及时<b>注册授权</b>，以免影响后续使用。</div>" +
-      "<button class='btn btn-ghost' id='legal-trial-banner-btn' style='padding:7px 16px'>去激活</button>" +
-      "<button class='btn btn-ghost' id='legal-trial-banner-close' style='padding:7px 12px'>知道了</button>";
+      // ⚠️ 2026-10-02：原来用 class='btn btn-ghost' —— 那是给**浅色底**设计的，
+      //    压在深蓝横幅上就成了"灰字压深蓝"，用户实测几乎看不见。
+      //    改成和旁边「只读横幅」同款的全内联样式：主按钮亮底深字，次按钮描边浅字。
+      "<button id='legal-trial-banner-btn' style='flex:0 0 auto;padding:7px 18px;border:0;border-radius:999px;" +
+      "font:600 13px -apple-system,Segoe UI,sans-serif;cursor:pointer;background:#ffd479;color:#1a2340;" +
+      "box-shadow:0 2px 8px rgba(0,0,0,.25)'>去激活</button>" +
+      "<button id='legal-trial-banner-close' style='flex:0 0 auto;padding:7px 16px;border-radius:999px;" +
+      "font:600 13px -apple-system,Segoe UI,sans-serif;cursor:pointer;background:rgba(255,255,255,.14);" +
+      "color:#eef2f8;border:1px solid rgba(255,255,255,.42)'>知道了</button>";
     document.body.appendChild(b);
     var act = b.querySelector("#legal-trial-banner-btn");
     var close = b.querySelector("#legal-trial-banner-close");

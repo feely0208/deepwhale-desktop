@@ -363,10 +363,14 @@ export class UpdateManager {
           if (percent !== lastPercent) {
             lastPercent = percent;
             this.setState({ phase: 'downloading', percent, message: '正在下载新版本安装包…' });
+            // macOS 原生反馈：Dock 图标上画进度条。285MB 静默下载不给任何动静，
+            // 用户会以为卡死。setProgressBar(-1) 清除。
+            for (const w of BrowserWindow.getAllWindows()) w.setProgressBar(percent / 100);
           }
         }
       }
       await new Promise<void>((resolve) => stream.end(() => resolve()));
+      for (const w of BrowserWindow.getAllWindows()) w.setProgressBar(-1);   // 完成，清掉 Dock 进度
       return fs.existsSync(file) && fs.statSync(file).size > 1024 * 1024 ? file : null;
     } catch {
       return null;

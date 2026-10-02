@@ -1,4 +1,5 @@
 import { app, dialog, BrowserWindow, shell } from 'electron';
+import * as fs from 'fs';
 import { autoUpdater, type UpdateCheckResult, type UpdateInfo, type ProgressInfo } from 'electron-updater';
 import { spawnSync } from 'child_process';
 import * as path from 'path';
@@ -77,6 +78,20 @@ const DOWNLOAD_PAGE = 'https://deepwhale.org.cn/download.html';
  * 这里会自动判定为"可以自动更新"，不需要回来改代码。
  */
 let cachedNeedsManual: boolean | null = null;
+
+/** 自建 CDN 的站点根（用于拼安装包直链）。 */
+function cdnOrigin(): string {
+  try {
+    return new URL(CDN_FEED_URL).origin;
+  } catch {
+    return 'https://dl.deepwhale.org.cn';
+  }
+}
+
+/** macOS 安装包文件名（electron-builder 的产物命名）。 */
+function macDmgName(version: string): string {
+  return `DeepWhale-Desktop-${version}-${process.arch === 'arm64' ? 'arm64' : 'x64'}.dmg`;
+}
 
 function macNeedsManualUpdate(): boolean {
   if (cachedNeedsManual !== null) return cachedNeedsManual;
@@ -308,6 +323,42 @@ export class UpdateManager {
     });
   }
 
+  /**
+   * mac 专用：把安装包 dmg 下到「下载」目录，返回本地路径；失败返回 null。
+   *
+   * ⚠️ 刻意**不走** autoUpdater.downloadUpdate() —— 那条路是给 Squirrel 装更新用的，
+   *    未签名 mac 必然失败。这里只要"把文件拿到手"。
+   */
+  private async downloadMacDmg(version: string): Promise<string | null> {
+    const file = path.join(app.getPath('downloads'), macDmgName(version));
+    try {
+      // 已经下过就不重复下（用户可能点了几次"检查更新"）
+      if (fs.existsSync(file) && fs.statSync(file).size > 1024 * 1024) return file;
+      const response = await fetch(`${cdnOrigin()}/${macDmgName(version)}`);
+      if (!response.ok || response.body === null) return null;
+      const total = Number(response.headers.get('content-length') ?? '0');
+      const stream = fs.createWriteStream(file);
+      let received = 0;
+      let lastPercent = -1;
+      for await (const chunk of response.body) {
+        const buf = chunk as Buffer;
+        received += buf.length;
+        stream.write(buf);
+        if (total > 0) {
+          const percent = Math.round((received / total) * 100);
+          if (percent !== lastPercent) {
+            lastPercent = percent;
+            this.setState({ phase: 'downloading', percent, message: '正在下载新版本安装包…' });
+          }
+        }
+      }
+      await new Promise<void>((resolve) => stream.end(() => resolve()));
+      return fs.existsSync(file) && fs.statSync(file).size > 1024 * 1024 ? file : null;
+    } catch {
+      return null;
+    }
+  }
+
   private async onAvailable(info: UpdateInfo): Promise<void> {
     this.setState({
       phase: 'available',
@@ -326,6 +377,40 @@ export class UpdateManager {
           version: info.version,
           message: `发现新版本 ${info.version}（macOS 需手动安装）`,
         });
+
+        // ── 2026-10-02：mac 上**替用户把 dmg 下好**，他只差最后一步 ─────────
+        // 为什么：mac 没有苹果开发者签名，Squirrel 装不了更新，这一步**永远**得手动。
+        // 但"下载"完全可以替他做 —— 用户从「找链接 + 下载 + 拖」变成「点一下 + 拖一下」。
+        // 这是 Windows 上那句"直接下载好，他还觉得很贴心"在 mac 上的等价物。
+        const macDmg = await this.downloadMacDmg(info.version);
+        if (macDmg !== null) {
+          this.setState({
+            phase: 'available',
+            version: info.version,
+            message: `新版本已下载好（${path.basename(macDmg)}）`,
+          });
+          const dmgChoice = await this.confirm(
+            '新版本已下载好',
+            `深鲸桌面 ${info.version} 的安装包已经下载完成。\n\n` +
+              'macOS 版没有苹果开发者签名，系统不允许自动替换应用 —— ' +
+              '所以最后一步要你亲手拖一下（不是网络问题）：\n\n' +
+              '   ① 点「打开安装包」\n' +
+              '   ② 把里面的图标拖进「应用程序」\n' +
+              '   ③ 系统问「替换吗」→ 替换\n\n' +
+              `文件位置：${macDmg}`,
+            ['打开安装包', '稍后再说'],
+          );
+          if (dmgChoice === 0) {
+            await shell.openPath(macDmg);
+          } else {
+            shell.showItemInFolder(macDmg);
+            this.snoozeUntil = Date.now() + SNOOZE_MS;
+          }
+          this.setState({ phase: 'idle' });
+          return;
+        }
+
+        // 下载失败（网络不通等）→ 老实退回"下载页"，别让用户卡死
         const choice = await this.confirm(
           '发现新版本',
           `深鲸桌面 ${info.version} 已发布（当前 ${app.getVersion()}）。\n\n` +

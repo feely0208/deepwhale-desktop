@@ -50,6 +50,8 @@ window.__ModuleLoader__.load({
     const ORDER = 60;
 
     const PRINTABLE_ATTR = 'data-dsh-print-root';
+    /** 打印根到 body 的祖先链：打印时要一并解开高度与滚动裁剪。 */
+    const CHAIN_ATTR = 'data-dsh-print-chain';
     const STYLE_ID = 'dsh-print-action-style';
     const ISOLATION_ID = 'dsh-print-isolation';
 
@@ -158,25 +160,49 @@ window.__ModuleLoader__.load({
       return false;
     }
 
-    /** ② 降级：只打印预览区（临时注入 @media print 隔离样式）。 */
+    /**
+     * ② 打印「文档画布」本身（Office / Markdown / 文本 / 代码走这条）。
+     *
+     * 关键不是"隐藏别的东西"，而是**解开滚动容器**：预览面板及其祖先都是定高 +
+     * overflow:hidden/auto 的滚动容器，只隐藏其他元素的话，打印出来永远只有
+     * **可见的那一屏** —— 这正是"其他格式打出来是半截"的原因。
+     * 所以这里把打印根**以及它的整条祖先链**都打上标记，在 @media print 里
+     * 一并解开高度与溢出限制，让文档按整篇重新排版。
+     */
     function printIsolated(root) {
       const previous = document.getElementById(ISOLATION_ID);
       if (previous && previous.parentNode) previous.parentNode.removeChild(previous);
 
       root.setAttribute(PRINTABLE_ATTR, '');
+      // 祖先链：从根的父节点一路标到 body，打印时全部解除裁剪
+      const chain = [];
+      for (let el = root.parentElement; el && el !== document.body; el = el.parentElement) {
+        el.setAttribute(CHAIN_ATTR, '');
+        chain.push(el);
+      }
       const style = document.createElement('style');
       style.id = ISOLATION_ID;
       style.textContent =
+        '@page{size:A4;margin:12mm}' +
         '@media print{' +
         'body *{visibility:hidden !important;}' +
-        '[' + PRINTABLE_ATTR + '],[' + PRINTABLE_ATTR + '] *{visibility:visible !important;}' +
-        // 打印根铺满页面，并解开自身的高度/溢出限制（否则只打出一屏）
-        '[' + PRINTABLE_ATTR + ']{position:absolute !important;left:0 !important;top:0 !important;' +
-        'width:100% !important;height:auto !important;max-height:none !important;overflow:visible !important;' +
-        'margin:0 !important;padding:0 !important;border:0 !important;box-shadow:none !important;}' +
+        '[' + PRINTABLE_ATTR + '],[' + PRINTABLE_ATTR + '] *,' +
+        '[' + CHAIN_ATTR + '],[' + CHAIN_ATTR + '] *{visibility:visible !important;}' +
+        // 打印根：铺满页面、去掉一切盒装饰
+        '[' + PRINTABLE_ATTR + ']{position:static !important;width:auto !important;height:auto !important;' +
+        'max-height:none !important;max-width:none !important;overflow:visible !important;' +
+        'margin:0 !important;padding:0 !important;border:0 !important;box-shadow:none !important;' +
+        'background:#fff !important;transform:none !important;}' +
+        // ★ 祖先链：解开定高与滚动裁剪 —— 不写这段，其他格式永远只打出可见一屏
+        '[' + CHAIN_ATTR + ']{position:static !important;width:auto !important;height:auto !important;' +
+        'max-height:none !important;max-width:none !important;overflow:visible !important;' +
+        'display:block !important;margin:0 !important;padding:0 !important;border:0 !important;' +
+        'background:#fff !important;flex:none !important;}' +
+        'html,body{height:auto !important;max-height:none !important;overflow:visible !important;background:#fff !important;}' +
         '[' + PRINTABLE_ATTR + '] *{overflow:visible !important;max-height:none !important;}' +
-        // 内嵌文档框（PDF 查看器 / Office 渲染）撑满整页，避免"窄面板缩到 A4 中间"
+        // 内嵌文档框（Office 渲染 / PDF 兜底）撑满整页
         '[' + PRINTABLE_ATTR + '] iframe{width:100% !important;height:250mm !important;border:0 !important;}' +
+        'tr,img,table{page-break-inside:avoid;}' +
         '}';
       document.head.appendChild(style);
 
@@ -185,6 +211,8 @@ window.__ModuleLoader__.load({
         if (done) return;
         done = true;
         root.removeAttribute(PRINTABLE_ATTR);
+        const marked = document.querySelectorAll('[' + CHAIN_ATTR + ']');
+        for (let i = 0; i < marked.length; i += 1) marked[i].removeAttribute(CHAIN_ATTR);
         if (style.parentNode) style.parentNode.removeChild(style);
         window.removeEventListener('afterprint', cleanup);
       };

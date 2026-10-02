@@ -1280,7 +1280,6 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
     tray = createTray(buildMenuActions());
     rebuildMenus();
 
-    // 自动更新：等应用完全可用后再启动，避免与 DSH 冷启动争抢资源。
     // 自动更新：**无条件启动**（2026-10-02 改）。
     //
     // ⚠️ 这段原来关在 `if (dshReady)` 里，理由是"DSH 没起来时用户有更紧急的问题要处理"。

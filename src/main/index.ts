@@ -662,6 +662,45 @@ function registerIpc(): void {
   // 实测打印出来顶部还带着应用工具栏、四周大片留白（窄面板被缩到 A4 上）。
   // 所以 PDF / 图片由主进程把**文件本身**装进隐藏窗口交给系统打印：
   // 满版、能选页/缩放/双面/另存 PDF，与用户在 macOS 里直接打印该文件一致。
+  /** 需要先转 PDF 再打印的 Office 文档扩展名。 */
+  const OFFICE_EXT = new Set([
+    '.doc', '.docx', '.odt', '.rtf',
+    '.xls', '.xlsx', '.ods', '.csv',
+    '.ppt', '.pptx', '.odp',
+  ]);
+
+  /**
+   * 用随包的 libreoffice-kit 把 Office 文档转成 PDF（临时文件）。
+   *
+   * 为什么放在主进程：渲染层没有文件系统能力；而且引擎必须从**真实路径**调用 ——
+   * asar 里的文件没有执行位，kit 会抛 'Installed LibreOfficeKit executable is not
+   * executable'（这就是 1.0.39 之前 Office 预览一直坏的原因，见 electron-builder.yml）。
+   */
+  async function convertOfficeToPdf(file: string): Promise<{ ok: boolean; output: string; message?: string }> {
+    const fsMod = await import('fs');
+    const pathMod = await import('path');
+    const { execFile } = await import('child_process');
+    const { promisify } = await import('util');
+    const run = promisify(execFile);
+
+    const nodeBin = pathMod.join(legalModeHome(app.getPath('userData')), 'office-runtime', 'bin', 'node');
+    const nmDir = dshNodeModulesDir(bundledDshBin(app.isPackaged, app.getAppPath(), process.resourcesPath));
+    if (!nmDir) return { ok: false, output: '', message: 'Office 转换器未就绪' };
+    const cli = pathMod.join(nmDir, '@deepseek-ai', 'libreoffice-kit', 'lib', 'cli.js');
+    if (!fsMod.existsSync(nodeBin) || !fsMod.existsSync(cli)) {
+      return { ok: false, output: '', message: 'Office 转换器未就绪' };
+    }
+    const outDir = fsMod.mkdtempSync(pathMod.join(app.getPath('temp'), 'dsh-print-'));
+    const output = pathMod.join(outDir, 'converted.pdf');
+    try {
+      await run(nodeBin, [cli, 'convert', '--input', file, '--output', output], { timeout: 120_000 });
+      if (!fsMod.existsSync(output)) return { ok: false, output: '', message: 'Office 转换未产出文件' };
+      return { ok: true, output };
+    } catch (error) {
+      return { ok: false, output: '', message: error instanceof Error ? error.message : 'Office 转换失败' };
+    }
+  }
+
   const PRINTABLE_EXT = new Set([
     '.pdf', '.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.svg',
   ]);
@@ -688,15 +727,24 @@ function registerIpc(): void {
 
   /** 在隐藏窗口里把文件交给系统打印，完成后销毁窗口。 */
   async function printFileInHiddenWindow(file: string): Promise<{ ok: boolean; message?: string }> {
-    if (!PRINTABLE_EXT.has(path.extname(file).toLowerCase())) {
+    const ext = path.extname(file).toLowerCase();
+    if (!PRINTABLE_EXT.has(ext)) {
       return { ok: false, message: '这类文件请在预览区里打印' };
+    }
+    // Office 文档：先用同目录的 libreoffice-kit 转成 PDF，再按 PDF 打印 ——
+    // 直接打印预览区会把整个应用界面打出去（实测），转 PDF 才是满版且内容正确。
+    let target = file;
+    if (OFFICE_EXT.has(ext)) {
+      const pdf = await convertOfficeToPdf(file);
+      if (!pdf.ok) return { ok: false, message: pdf.message ?? 'Office 转换失败' };
+      target = pdf.output;
     }
     const win = new BrowserWindow({
       show: false,
       webPreferences: { plugins: true, contextIsolation: true, nodeIntegration: false },
     });
     try {
-      await win.loadURL(pathToFileURL(file).toString());
+      await win.loadURL(pathToFileURL(target).toString());
       // 等 PDF 查看器把首页渲染出来再调打印，否则可能打出空白页
       await new Promise((resolve) => setTimeout(resolve, 500));
       const ok = await new Promise<boolean>((resolve) => {

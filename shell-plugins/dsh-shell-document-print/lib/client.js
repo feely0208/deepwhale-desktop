@@ -223,7 +223,9 @@ window.__ModuleLoader__.load({
     }
 
     /** 主进程能直接打印的文件类型（PDF 与图片；Office 文档交给预览区打印）。 */
-    const HOST_PRINTABLE = /\.(pdf|png|jpe?g|webp|gif|bmp|svg)$/i;
+    // PDF/图片直接打印；Office 文档由主进程先转 PDF 再打印（转 PDF 才是满版、
+    // 且不会把应用界面打出去 —— 直接打印预览区实测会打出整个界面）。
+    const HOST_PRINTABLE = /\.(pdf|png|jpe?g|webp|gif|bmp|svg|docx?|xlsx?|pptx?|odt|ods|odp|rtf|csv)$/i;
 
     /**
      * ① 首选：让主进程把**文件本身**装进隐藏窗口交给系统打印。

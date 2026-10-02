@@ -62,4 +62,10 @@ contextBridge.exposeInMainWorld('dsh', {
   // 自己找回话文件（不信任前端传路径），返回 { ok, message? }。
   sessionAction: (payload: { kind: string; sessionId: string; title?: string }) =>
     ipcRenderer.invoke('session:action', payload),
+
+  // ---- 文档预览的「打印」（PDF / 图片走主进程打印**文件本身**）----
+  // 由随包客户端插件 @deepwhale-cn/dsh-shell-document-print 调用。
+  // 渲染层只转交预览面板给出的路径，主进程自己校验它确实是本机一个可打印文件
+  // （并纠正 /mac/... 这类省掉 /Users 前缀的显示形态），不做任何回读。
+  printDocument: (payload: { path: string }) => ipcRenderer.invoke('document:print', payload),
 });

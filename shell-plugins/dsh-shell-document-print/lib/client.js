@@ -105,17 +105,25 @@ window.__ModuleLoader__.load({
      * 它后面），因此自下而上遇到的第一个高度过半的祖先就是预览面板。
      */
     function findPreviewRoot(startEl) {
+      // ① 有 iframe（PDF / Office）：取「离 iframe 最近、再往上就会包住工具栏」的那个祖先
+      //    —— 它就是文档画布。这样打印范围天然**不含工具栏**（实测原来会把工具栏一起打出来）。
+      const frames = findFrames(document.body);
+      for (let i = 0; i < frames.length; i += 1) {
+        let node = frames[i];
+        while (node.parentElement && node.parentElement !== document.body) {
+          if (node.parentElement.contains(startEl)) break;   // 再往上会包住按钮/工具栏
+          node = node.parentElement;
+        }
+        return node;
+      }
+      // ② 无 iframe（Markdown / 文本）：退回「第一个高度过半的祖先」
       let el = startEl;
-      let fallback = null;
       while (el && el !== document.body && el !== document.documentElement) {
         const r = el.getBoundingClientRect();
-        if (r.height >= window.innerHeight * 0.45 && r.width >= window.innerWidth * 0.15) {
-          fallback = el;
-          break;
-        }
+        if (r.height >= window.innerHeight * 0.45 && r.width >= window.innerWidth * 0.15) return el;
         el = el.parentElement;
       }
-      return fallback;
+      return null;
     }
 
     /** 预览区里**可见且够大**的 iframe。 */
@@ -162,8 +170,13 @@ window.__ModuleLoader__.load({
         '@media print{' +
         'body *{visibility:hidden !important;}' +
         '[' + PRINTABLE_ATTR + '],[' + PRINTABLE_ATTR + '] *{visibility:visible !important;}' +
+        // 打印根铺满页面，并解开自身的高度/溢出限制（否则只打出一屏）
         '[' + PRINTABLE_ATTR + ']{position:absolute !important;left:0 !important;top:0 !important;' +
-        'width:100% !important;height:auto !important;max-height:none !important;overflow:visible !important;}' +
+        'width:100% !important;height:auto !important;max-height:none !important;overflow:visible !important;' +
+        'margin:0 !important;padding:0 !important;border:0 !important;box-shadow:none !important;}' +
+        '[' + PRINTABLE_ATTR + '] *{overflow:visible !important;max-height:none !important;}' +
+        // 内嵌文档框（PDF 查看器 / Office 渲染）撑满整页，避免"窄面板缩到 A4 中间"
+        '[' + PRINTABLE_ATTR + '] iframe{width:100% !important;height:250mm !important;border:0 !important;}' +
         '}';
       document.head.appendChild(style);
 
@@ -181,16 +194,44 @@ window.__ModuleLoader__.load({
       window.print();
     }
 
-    function doPrint(event) {
+    /** 主进程能直接打印的文件类型（PDF 与图片；Office 文档交给预览区打印）。 */
+    const HOST_PRINTABLE = /\.(pdf|png|jpe?g|webp|gif|bmp|svg)$/i;
+
+    /**
+     * ① 首选：让主进程把**文件本身**装进隐藏窗口交给系统打印。
+     *
+     * 为什么 PDF 一定要走这条：PDF 在预览里是 Chromium 的**扩展查看器**
+     * （chrome-extension:// 跨源），渲染层拿不到它的 contentWindow，只能退回
+     * "打印预览区" —— 结果就是照片里那样：窄面板缩到 A4 上，顶部还带着工具栏、
+     * 四周大片留白。交给主进程打印文件本身则是满版，且能选页/缩放/另存 PDF。
+     */
+    function tryHostPrint(props) {
+      const api = typeof window === 'object' && window ? window.dsh : null;
+      if (!api || typeof api.printDocument !== 'function') return false;
+      const file = props && typeof props.absolutePath === 'string' ? props.absolutePath : '';
+      if (!file || !HOST_PRINTABLE.test(file)) return false;
+      api
+        .printDocument({ path: file })
+        .then((result) => {
+          if (result && result.ok === false && result.message) showToast('打印：' + result.message);
+        })
+        .catch((error) => {
+          showToast('打印失败：' + (error && error.message ? error.message : String(error)));
+        });
+      return true;
+    }
+
+    function doPrint(event, props) {
       const button = event && event.currentTarget;
+      if (tryHostPrint(props)) return;      // ① 文件本身（PDF/图片，满版）
       const root = findPreviewRoot(button) || findPreviewRoot(event && event.target);
       if (!root) {
         showToast('没有找到可打印的预览区域');
         return;
       }
       try {
-        if (tryPrintFrames(root)) return;   // 打印文档本身（体验最好）
-        printIsolated(root);                // 否则只打印预览区
+        if (tryPrintFrames(root)) return;   // ② 同源 iframe：打印文档本身
+        printIsolated(root);                // ③ 否则只打印文档画布
       } catch (error) {
         showToast('打印失败：' + (error && error.message ? error.message : String(error)));
       }
@@ -217,7 +258,7 @@ window.__ModuleLoader__.load({
      * props 里带 owner 的 `absolutePath`（被预览文件的宿主机绝对路径）——
      * 本插件不用它（打印不需要路径），但保留在签名里以备后续做「导出 PDF」。
      */
-    function PrintAction() {
+    function PrintAction(props) {
       ensureStyle();
       return react.createElement(
         'button',
@@ -226,7 +267,7 @@ window.__ModuleLoader__.load({
           className: 'dsh-print-action',
           title: '打印当前预览的文档',
           'aria-label': '打印',
-          onClick: doPrint,
+          onClick: (event) => doPrint(event, props),
         },
         react.createElement(PrintIcon, null),
         react.createElement('span', null, '打印'),

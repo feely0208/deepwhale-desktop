@@ -14,6 +14,8 @@ import { clipboard } from 'electron';
 import * as http from 'http';
 import * as fs from 'fs';
 import * as path from 'path';
+import { homedir } from 'os';
+import { pathToFileURL } from 'url';
 import { Store } from './store';
 import { ServiceManager } from './service-manager';
 import { ensureLegalModeSetup, legalModeHome, legalModePayloadDir, migrateLegacyHomeOnce } from './legal-mode';
@@ -653,6 +655,75 @@ function registerIpc(): void {
   // ---- 会话右键菜单：在访达中打开 / 打开所在文件夹 / 复制文件路径 / 复制会话 ID / 反馈问题 ----
   // 由随包客户端插件 @deepwhale-cn/dsh-shell-session-actions 调用。前端只给会话 ID，
   // 会话文件在主进程里按 ID 扫出来（见 sessionFileOf），返回 { ok, message? }。
+  // ---- 文档预览的「打印」（PDF / 图片）----
+  //
+  // 为什么不让渲染层直接 window.print()：PDF 在预览里是 Chromium 的**扩展查看器**
+  // （chrome-extension:// 跨源），拿不到 contentWindow，只能退回"打印预览区" ——
+  // 实测打印出来顶部还带着应用工具栏、四周大片留白（窄面板被缩到 A4 上）。
+  // 所以 PDF / 图片由主进程把**文件本身**装进隐藏窗口交给系统打印：
+  // 满版、能选页/缩放/双面/另存 PDF，与用户在 macOS 里直接打印该文件一致。
+  const PRINTABLE_EXT = new Set([
+    '.pdf', '.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.svg',
+  ]);
+
+  /**
+   * 把预览面板给出的路径解析成本机上真实存在的可打印文件。
+   *
+   * 面板显示的路径可能是 `/mac/Desktop/...` 这种**省掉 /Users 前缀**的形态，
+   * 因此逐个候选试探；只接受**确实存在的普通文件**，不信任前端。
+   */
+  function resolvePrintableFile(raw: string): string | null {
+    const candidates = [raw, path.join('/', raw.replace(/^\/+/, ''))];
+    if (raw.startsWith('/')) candidates.push(path.join(homedir(), raw.slice(1)));
+    if (raw.startsWith('/')) candidates.push(path.join('/Users', raw.slice(1)));
+    for (const candidate of candidates) {
+      try {
+        if (fs.statSync(candidate).isFile()) return candidate;
+      } catch {
+        // 下一个候选
+      }
+    }
+    return null;
+  }
+
+  /** 在隐藏窗口里把文件交给系统打印，完成后销毁窗口。 */
+  async function printFileInHiddenWindow(file: string): Promise<{ ok: boolean; message?: string }> {
+    if (!PRINTABLE_EXT.has(path.extname(file).toLowerCase())) {
+      return { ok: false, message: '这类文件请在预览区里打印' };
+    }
+    const win = new BrowserWindow({
+      show: false,
+      webPreferences: { plugins: true, contextIsolation: true, nodeIntegration: false },
+    });
+    try {
+      await win.loadURL(pathToFileURL(file).toString());
+      // 等 PDF 查看器把首页渲染出来再调打印，否则可能打出空白页
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      const ok = await new Promise<boolean>((resolve) => {
+        win.webContents.print({ silent: false, printBackground: true }, (success) => resolve(success));
+      });
+      return ok ? { ok: true } : { ok: false, message: '打印已取消' };
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : String(error) };
+    } finally {
+      // 用户在系统打印面板里点了"打印"后立即销毁窗口会打断任务，留一点余量
+      setTimeout(() => {
+        if (!win.isDestroyed()) win.destroy();
+      }, 2000);
+    }
+  }
+
+  ipcMain.handle(
+    'document:print',
+    async (_e, payload: { path?: string }): Promise<{ ok: boolean; message?: string }> => {
+      const raw = typeof payload?.path === 'string' ? payload.path.trim() : '';
+      if (raw.length === 0) return { ok: false, message: '缺少文件路径' };
+      const resolved = resolvePrintableFile(raw);
+      if (!resolved) return { ok: false, message: '这个文件不在本机，无法直接打印' };
+      return await printFileInHiddenWindow(resolved);
+    },
+  );
+
   ipcMain.handle(
     'session:action',
     async (

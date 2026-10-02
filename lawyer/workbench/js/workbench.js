@@ -370,12 +370,14 @@
     var trialActive = !!(L.isTrialActive && L.isTrialActive());
     var days = (L.trialDays && L.trialDays()) || 0;
     var st = (L.state && L.state()) || {};
-    var sku = (L.skuInfo && L.skuInfo(st.sku)) || {};
+    // ⚠️ skuInfo() **不收参数、返回的是字符串**（如 "A款 · 自备 API Key"）。
+    //    第一版我按对象用（sku.name），于是「版本」永远显示 "—"（用户实测发现）。
+    var skuName = (L.skuInfo && L.skuInfo()) || "";
     var exp = (st.activate && st.activate.exp) || "";
     var status = activated ? "已激活" : (trialActive ? ("试用中 · 剩余 " + days + " 天") : "未授权 / 已到期");
     var color = activated ? "#3fbf6a" : (trialActive ? "#e0a83f" : "#e07070");
     var line = activated
-      ? ((sku.name || "—") + (exp ? (" · 至 " + exp) : ""))
+      ? ((skuName || "—") + (exp ? (" · 至 " + exp) : ""))
       : "试用期结束后需激活才能继续使用";
     return "<div class='set-card glow' style='--acc:#2fa36b'>" +
       "<div class='set-head'><span class='set-ico'></span><strong>授权与激活</strong></div>" +
@@ -393,7 +395,8 @@
     var L = window.License || {};
     var st = (L.state && L.state()) || {};
     var act = st.activate || null;
-    var sku = (L.skuInfo && L.skuInfo(st.sku)) || {};
+    // ⚠️ 同上：skuInfo() 返回字符串，不是对象
+    var skuName = (L.skuInfo && L.skuInfo()) || "";
     var activated = !!(L.isActivated && L.isActivated());
     var trialActive = !!(L.isTrialActive && L.isTrialActive());
     var days = (L.trialDays && L.trialDays()) || 0;
@@ -406,7 +409,7 @@
     var statusColor = activated ? "#3fbf6a" : (trialActive ? "#e0a83f" : "#e07070");
     var rows = [
       ["授权状态", "<b style='color:" + statusColor + "'>" + status + "</b>"],
-      ["版本", (activated && sku.name) ? sku.name : "—"],
+      ["版本", (activated && skuName) ? skuName : "—"],
       ["到期日", (activated && act && act.exp) ? act.exp : "—"],
       ["手机号", (activated && act && act.phone) ? mask(act.phone) : "—"],
       ["本机机器码", machine ? ("<code style='font-size:12px'>" + machine + "</code>") : "（本环境取不到）"],
@@ -425,7 +428,9 @@
       "<table class='table'><tbody>" + rows.map(function (r) {
         return "<tr><td style='width:120px;opacity:.7'>" + r[0] + "</td><td>" + r[1] + "</td></tr>";
       }).join("") + "</tbody></table>" +
-      "<div class='tl-meta' style='margin-top:12px'>手机号只显示前 3 后 4 位；授权数据仅保存在本机，不上传。</div>" +
+      // 用户明确要求：**不要写"手机号只显示前 3 后 4 位"** —— 那是给自己添堵，
+      // 只留"数据在本地不上传"这句就好。
+      "<div class='tl-meta' style='margin-top:12px'>授权数据仅保存在本机，不上传。</div>" +
       "<div style='display:flex;gap:8px;justify-content:flex-end;margin-top:14px'>" +
       "<button class='btn btn-primary btn-sm' id='lic-info-open'>" +
       (activated ? "查看 / 变更授权" : "去激活") + "</button></div></div>";

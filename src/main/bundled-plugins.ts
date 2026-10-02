@@ -39,6 +39,10 @@ const BUNDLED_PLUGINS: BundledPlugin[] = [
   // 正因为它以 bundle 行的形式被 loader 挂载，@deepseek-ai/dsh-client-modules
   // 才会扫到本包的 dsh.client 声明，把 ./client 下发给浏览器。
   { name: '@deepwhale-cn/dsh-shell-session-actions', dir: 'dsh-shell-session-actions' },
+  // 右侧「文档预览」工具栏的「打印」按钮。官方只在 Excel 预览里有打印，
+  // PDF / Word / PPT / Markdown / 文本 / 图片都没有 —— 本插件往
+  // `sidebar.right.tab.document.actions` 插槽加一项，补上这块（2026-10-02）。
+  { name: '@deepwhale-cn/dsh-shell-document-print', dir: 'dsh-shell-document-print' },
 ];
 
 /** 注入结果。 */

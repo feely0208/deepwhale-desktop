@@ -1,0 +1,14 @@
+# @deepwhale-cn/dsh-shell-document-print 的组合层
+#
+# profile 在 dsh.profile.bundles 里列出本包后，这一层把插件挂进组合。
+#
+# 约定（官方 verify-cordis-config 强制）：每个具名行都必须能从本包自己的
+# 作用域解析。这里 name 写的就是本包已发布的包名 —— 加载器按这个 specifier 导入，
+# 所以它必须与 package.json 的 name 完全一致。
+#
+# 宿主半边（lib/index.js）本身是空的：真正的功能在客户端半边（lib/client.js），
+# 因为本包在 package.json 里声明了 dsh.client，加载器挂载本行时会同时把
+# `./client` 出口作为客户端插件提供给浏览器（见 @deepseek-ai/dsh-client-modules）。
+- insert:
+    - id: shell-document-print
+      name: '@deepwhale-cn/dsh-shell-document-print'

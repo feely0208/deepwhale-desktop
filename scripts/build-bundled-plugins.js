@@ -165,6 +165,16 @@ async function main() {
   fs.cpSync(localShellPlugin, path.join(outDir, 'dsh-shell-session-actions'), { recursive: true });
   console.log('[bundled-plugins]   → dsh-shell-session-actions（本地源码）');
 
+  // 右侧「文档预览」工具栏的「打印」按钮（2026-10-02）。
+  // 与上面同理：源码在 shell-plugins/ 下随仓库提交，这里只负责拷进产物 ——
+  // 漏了这一步，CI 打出来的包就没有这个按钮（本机能用、用户装了没有）。
+  const localPrintPlugin = path.join(__dirname, '..', 'shell-plugins', 'dsh-shell-document-print');
+  if (!fs.existsSync(path.join(localPrintPlugin, 'cordis.patch.yml'))) {
+    throw new Error(`缺少本地插件源码：${localPrintPlugin}（应随仓库提交，不是构建产物）`);
+  }
+  fs.cpSync(localPrintPlugin, path.join(outDir, 'dsh-shell-document-print'), { recursive: true });
+  console.log('[bundled-plugins]   → dsh-shell-document-print（本地源码）');
+
   // 到这里才算全部成功 —— 替换目标目录（先删旧的再改名，同分区内是瞬时的）
   fs.rmSync(finalDir, { recursive: true, force: true });
   fs.renameSync(outDir, finalDir);

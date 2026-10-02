@@ -1,0 +1,23 @@
+{
+  "name": "@deepwhale-cn/dsh-shell-document-print",
+  "version": "1.0.0",
+  "description": "深鲸桌面：给右侧「文档预览」工具栏加一个「打印」按钮 —— 打印当前预览的文件（PDF / Word / Excel / PPT / Markdown / 文本 / 图片），纯渲染层实现，不依赖主进程。",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": ["@deepseek-ai/dsh-client-runtime"],
+      "platform": "web",
+      "immediately": true
+    }
+  }
+}

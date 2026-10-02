@@ -569,10 +569,15 @@ function buildMenuActions(): TrayMenuActions {
 }
 
 function rebuildMenus(): void {
+  // 应用菜单（macOS 顶栏/窗口菜单栏）：完整 macOS 结构（应用/文件/编辑/窗口/帮助）
+  //
+  // ⚠️ 这一行**不能**放在 `if (!tray) return` 之后（2026-10-02 修）：
+  //    托盘创建失败（图标缺失、菜单栏异常）时，原写法会连应用菜单一起跳过，
+  //    于是 Electron 显示**自带的英文默认模板** —— 用户看到"菜单怎么变英文了"，
+  //    却完全找不到原因。菜单是所有功能的唯一中文入口，必须与托盘解耦。
+  Menu.setApplicationMenu(Menu.buildFromTemplate(buildAppMenuTemplate(buildMenuActions())));
   if (!tray) return;
   applyMenu(tray, buildMenuActions());
-  // 应用菜单（macOS 顶栏/窗口菜单栏）：完整 macOS 结构（应用/文件/编辑/窗口/帮助）
-  Menu.setApplicationMenu(Menu.buildFromTemplate(buildAppMenuTemplate(buildMenuActions())));
 }
 
 /**
@@ -1270,7 +1275,17 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
       // 否则窗口只会加载裸地址、拿到 401 认证页（见 restorePersistedTokenUrl 的说明）。
       if (dshTokenUrl === '') dshTokenUrl = await restorePersistedTokenUrl();
       if (dshTokenUrl !== '') refreshMobileAddressFile();
-      await mainWin.loadURL(dshTokenUrl || `http://127.0.0.1:${store.get('port')}`);
+      // ⚠️ loadURL 是会 reject 的（本地故障日志里出现过
+      //    `Error: (-3) loading 'http://127.0.0.1:3095/'`：首次加载被中止）。
+      //    原来这一行抛出后，会**跳过紧随其后的托盘与应用菜单创建** ——
+      //    界面最终靠后续重载兜底显示出来了，但菜单永远停在 Electron 的英文默认模板，
+      //    表现成"GUI 好好的、只有菜单变英文了"，极难定位。
+      //    加载本身有重载兜底，这里只记录、不向上抛。
+      try {
+        await mainWin.loadURL(dshTokenUrl || `http://127.0.0.1:${store.get('port')}`);
+      } catch (e) {
+        console.warn('[main] 首次加载界面失败（后续重载兜底）：', e);
+      }
     } else {
       await showStartingPage(mainWin, true);
     }

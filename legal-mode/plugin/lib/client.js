@@ -116,7 +116,31 @@ window.__ModuleLoader__.load({
 		}
 		/** Renders nothing: the plugin only drives the desktop deep link. */
 		function WorkbenchOverlay({ useSessions }) {
-			useLawyerAppLaunch(useSessions(legalSessionsKey));
+			const key = useSessions(legalSessionsKey);
+			// 2026-10-03 新增：点「法律模式」预设卡片 → 直接拉起律师端。
+			// 背景：这张卡片已经是「新任务默认」时，点它状态没有变化 ——
+			// 会话 watcher 看不到新会话、预设 watcher 也看不到默认值变化，
+			// 于是用户「点卡片」完全没有反应（用户原话：点预设里这个卡片就该弹出来）。
+			// 这里补一个点击钩子：命中「法律模式」卡片就打开，其余行为不变。
+			(0, react.useEffect)(() => {
+				const onClick = (ev) => {
+					try {
+						const t = ev && ev.target;
+						if (!t || typeof t.closest !== "function") return;
+						// 卡片：按钮或可点容器；文本里同时出现「法律模式」与 legal-mode 才认。
+						const card = t.closest('button, [role="button"], [data-agent-preset], li, article, section');
+						const box = card || t;
+						const text = (box.textContent || "").slice(0, 300);
+						const html = (box.outerHTML || "").slice(0, 600);
+						if (text.indexOf("法律模式") >= 0 && /legal[-_ ]?mode/i.test(html)) {
+							openLawyerApp();
+						}
+					} catch (e) {}
+				};
+				document.addEventListener("click", onClick, true);
+				return () => document.removeEventListener("click", onClick, true);
+			}, []);
+			useLawyerAppLaunch(key);
 			return null;
 		}
 		/** Dictionaries registered under the plugin's locale namespace. */

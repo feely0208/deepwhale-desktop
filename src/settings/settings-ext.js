@@ -473,9 +473,74 @@
     } catch (e) { /* 订阅失败不影响按钮 */ }
   }
 
+  /* ---------- 侧栏「设置」按钮右侧：下载进度条（常驻可见）----------
+   * 2026-10-03 加。用户要求原话：「就是一个下载过程的进度条可视化，
+   * 要不要百分比都无所谓，只要能看到」；位置指定在「设置按钮的右方空白处」。
+   * 设置页里那一条只在打开设置页时可见 —— 谁也不会开着设置页等下载，
+   * 所以侧栏这条才是真正"常驻可见"的那个。
+   * ⚠️ 只加进度条，不加百分比（用户说无所谓），避免挤占侧栏。 */
+  function maybeInjectSidebarProgress() {
+    if (document.getElementById('dsh-ext-dl')) return;
+    var els = document.querySelectorAll('button, [role="button"], a, div, span');
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i];
+      if (el.children.length > 0) continue;
+      var t = (el.textContent || '').trim();
+      if (t !== '设置') continue;
+      var host = el;
+      for (var k = 0; k < 3 && host.parentElement; k++) host = host.parentElement;
+      if (host.querySelector && host.querySelector('#dsh-ext-dl')) return;
+      var wrap = document.createElement('span');
+      wrap.id = 'dsh-ext-dl';
+      wrap.style.cssText = 'display:none;align-items:center;margin-left:auto;padding-left:10px;flex:none;';
+      var track = document.createElement('span');
+      track.style.cssText = 'display:inline-block;width:72px;height:6px;border-radius:3px;background:rgba(128,128,128,.25);overflow:hidden;';
+      var fill = document.createElement('span');
+      fill.id = 'dsh-ext-dl-fill';
+      fill.style.cssText = 'display:block;width:0%;height:100%;border-radius:3px;background:#05648B;transition:width .2s;';
+      track.appendChild(fill);
+      wrap.appendChild(track);
+      host.appendChild(wrap);
+      try { host.style.display = 'flex'; host.style.alignItems = 'center'; } catch (e) {}
+      return;
+    }
+  }
+
+  /* ---------- 更新状态订阅：同时驱动「设置页版本行」与「侧栏」两条进度条 ---------- */
+  function startUpdateProgressWatch() {
+    if (window.__dshExtUpdateWatch) return;
+    window.__dshExtUpdateWatch = true;
+    try {
+      if (window.dsh && window.dsh.onUpdateState) {
+        window.dsh.onUpdateState(function (st) {
+          var downloading = !!(st && (st.phase === 'downloading' || st.phase === 'downloaded'));
+          var pct = st && typeof st.percent === 'number' ? st.percent : (st && st.phase === 'downloaded' ? 100 : 0);
+          // 侧栏条：只有进度，没有文字
+          var side = document.getElementById('dsh-ext-dl');
+          if (side) {
+            side.style.display = downloading ? 'inline-flex' : 'none';
+            var sf = document.getElementById('dsh-ext-dl-fill');
+            if (sf) sf.style.width = pct + '%';
+          }
+          // 设置页版本行那条：带文字
+          var box = document.getElementById('dsh-ext-update-progress');
+          if (box) {
+            box.style.display = downloading ? 'inline-flex' : 'none';
+            var bf = document.getElementById('dsh-ext-update-progress-fill');
+            if (bf) bf.style.width = pct + '%';
+            var bl = document.getElementById('dsh-ext-update-progress-label');
+            if (bl) bl.textContent = st && st.phase === 'downloaded' ? '已下载好，去安装' : ('正在下载 ' + pct + '%');
+          }
+        });
+      }
+    } catch (e) { /* 订阅失败不影响其它功能 */ }
+  }
+
   /* ---------- 观察设置页挂载 ---------- */
   function maybeInject() {
     maybeInjectShellVersion();
+    maybeInjectSidebarProgress();
+    startUpdateProgressWatch();
     if (document.getElementById(NAV_PREFIX + 'pet')) return; // 本挂载周期已注入
     var navList = findNavList();
     if (navList) inject(navList);

@@ -209,6 +209,19 @@ export class UpdateManager {
         percent: (next as { percent?: number }).percent,
         message: next.message,
       };
+      // 2026-10-03：Dock 徽标（应用级，不依赖任何页面/窗口是否可见）。
+      // 用户要求「就是一个下载过程的进度条可视化，要不要百分比都无所谓，只要能看到」，
+      // 而设置页那条只有开着设置页才看得到 —— 徽标补足"任何时刻都看得见"。
+      try {
+        const pct = typeof payload.percent === 'number' ? payload.percent : null;
+        if (next.phase === 'downloading' && pct !== null) {
+          app.dock?.setBadge(`${pct}%`);
+        } else if (next.phase !== 'downloading') {
+          app.dock?.setBadge('');
+        }
+      } catch {
+        /* 非 macOS 或不可用 */
+      }
       for (const w of BrowserWindow.getAllWindows()) {
         if (!w.isDestroyed()) w.webContents.send('shell:update-state', payload);
       }

@@ -139,8 +139,14 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: lawyer-mac
+          # ⚠️ 2026-10-03 修：必须带上更新清单 lawyer-latest-mac.yml 和 dmg。
+          #    原来只有 *.zip —— 于是 Release 里没有清单，sync-downloads 拉不到，
+          #    CDN 上的 lawyer-latest-mac.yml 永远停在手工补传的那一版，
+          #    用户那份律师端永远发现不了新版本（0.1.9 就这么卡住的）。
           path: |
             lawyer/dist/*.zip
+            lawyer/dist/*.dmg
+            lawyer/dist/lawyer-latest*.yml
           if-no-files-found: error
 
   build-win:

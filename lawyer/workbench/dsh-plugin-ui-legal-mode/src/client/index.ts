@@ -65,11 +65,25 @@ export function apply(ctx: ClientContext): void {
   }
   const removeButton = (): void => { const b = document.getElementById('dsh-legal-mode-float'); if (b) b.remove() }
 
+  // 2026-10-03 修：会话投影里的 agentPreset 现在是 {"ver","seq","val"} 对象，
+  // 而这里原来直接和字符串比较（agentPreset === 'legal-mode'）→ 永远 false，
+  // 「会话命中」这条路径从来没生效过（只剩 defaultHit 在撑）。
+  // 桌面壳那边同款 bug 已修（legal-mode/plugin/lib/client.js）。
+  const LEGAL_PRESET_VALUES = ['legal', 'legal-mode']
+  const presetValue = (v: unknown): unknown =>
+    v && typeof v === 'object' ? (v as { val?: unknown }).val : v
   const check = async (): Promise<void> => {
     try {
       const s = sessions?.list?.getSnapshot?.()
       const ids = s?.ids || []
-      const sessionHit = !!(s && ids.some((id) => s?.byId?.[id]?.agentPreset === 'legal-mode'))
+      const sessionHit = !!(
+        s &&
+        ids.some((id) =>
+          LEGAL_PRESET_VALUES.includes(
+            String(presetValue(s?.byId?.[id]?.agentPreset) ?? '')
+          )
+        )
+      )
       let defaultHit = false
       try {
         const res = await (api as { agentPresets?: { list?: (p: object) => Promise<unknown> } })?.agentPresets?.list?.({}) as any

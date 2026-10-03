@@ -196,7 +196,11 @@ function main() {
   const args = parseArgs(process.argv.slice(2));
   const shell = args.shell;
   const lawyer = args.lawyer;
-  const lawyerTag = args['lawyer-tag'] ?? `v${shell}`;
+  // ⚠️ 默认值必须是律师端自己的 tag 约定 `lawyer-v<版本>`。
+  //    原来是 `v${shell}`（壳的 tag）——律师端早改成独立 release 了，默认值留着
+  //    就会在"忘了传 --lawyer-tag"时静默生成 404 链接（2026-10-03 又踩了一次：
+  //    Pages 的链接校验直接把发布拦下来了，5 个律师端下载地址全部 404）。
+  const lawyerTag = args['lawyer-tag'] ?? `lawyer-v${lawyer}`;
   const suite = args.suite ?? shell;
   /** 套装的平台数（新增 macOS Intel 后为 4；不传则不动页面上的"· N 个平台"）。 */
   const suitePlatforms = args['suite-platforms'];

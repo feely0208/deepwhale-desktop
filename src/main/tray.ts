@@ -145,10 +145,36 @@ export function buildAppMenuTemplate(a: TrayMenuActions): MenuItemConstructorOpt
 
 /** 创建托盘 */
 export function createTray(actions: TrayMenuActions): Tray {
-  const icon = nativeImage.createFromPath(path.join(__dirname, '../assets/icons/tray.png'));
-  // 模板图：macOS 自动根据菜单栏浅/深色渲染
-  icon.setTemplateImage(true);
-  const tray = new Tray(icon.isEmpty() ? nativeImage.createEmpty() : icon);
+  // 2026-10-03 修：托盘图标**绝不允许为空**。
+  //
+  // 旧写法是 `new Tray(icon.isEmpty() ? nativeImage.createEmpty() : icon)` ——
+  // 图片一旦加载失败就退化成空图，而空图在 Windows 上表现为
+  // 「托盘里看不见、但进程确实在」：用户既点不到「检查更新…」也点不到「退出」，
+  // 关窗口又是最小化到托盘，于是彻底无路可走（有 Windows 用户实测反馈，
+  // 还导致新安装包装不进去 —— 因为旧进程退不出来）。
+  //
+  // 现在按优先级回退，只要有一张能看见的图就绝不空着。
+  const candidates = [
+    path.join(__dirname, '../assets/icons/tray.png'),
+    path.join(__dirname, '../assets/icons/icon.png'),
+    path.join(__dirname, '../assets/icons/icon.ico'),
+    path.join(process.resourcesPath || '', 'icon.ico'),
+  ];
+  let icon = nativeImage.createEmpty();
+  for (const candidate of candidates) {
+    try {
+      const img = nativeImage.createFromPath(candidate);
+      if (!img.isEmpty()) {
+        icon = img;
+        break;
+      }
+    } catch {
+      /* 试下一个 */
+    }
+  }
+  // 模板图只对 macOS 有意义（让图标自适应菜单栏浅/深色）；Windows 上是无操作。
+  if (process.platform === 'darwin') icon.setTemplateImage(true);
+  const tray = new Tray(icon);
   tray.setToolTip('DeepWhale Desktop');
   applyMenu(tray, actions);
   tray.on('double-click', () => actions.showMainWindow());

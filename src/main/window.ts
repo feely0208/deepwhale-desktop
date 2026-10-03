@@ -53,10 +53,29 @@ export function createMainWindow(options: MainWindowOptions): BrowserWindow {
   win.webContents.on('did-finish-load', () => options.onPageReady(win));
 
   // 关窗口：默认最小化到托盘而非退出（真正退出时放行）
+  let toldAboutTray = false;
   win.on('close', (e) => {
     if (options.closeToTray && !options.isQuitting()) {
       e.preventDefault();
       win.hide();
+      // 2026-10-03 新增：第一次隐藏时告诉用户程序去哪了。
+      // 起因：有 Windows 用户托盘图标不可见 —— 关窗之后既找不到窗口、
+      // 也点不到「退出」，连新安装包都替换不进去（旧进程退不出来）。
+      // 一句通知 + 明确告诉退出位置，能避免"以为卡死"。
+      if (!toldAboutTray) {
+        toldAboutTray = true;
+        try {
+          const electron = require('electron') as typeof import('electron');
+          if (electron.Notification.isSupported()) {
+            new electron.Notification({
+              title: '深鲸桌面仍在后台运行',
+              body: '已最小化到托盘。右键托盘图标可退出；也可在设置页里彻底退出后台。',
+            }).show();
+          }
+        } catch {
+          /* 通知失败不影响关窗流程 */
+        }
+      }
     }
   });
 

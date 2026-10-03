@@ -1623,8 +1623,16 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
               const row = document.getElementById('dsh-ext-update-progress');
               const rowLabel = document.getElementById('dsh-ext-update-progress-label');
               const rowR = row ? row.getBoundingClientRect() : null;
+              // 2026-10-03（1.0.47）：用户要求进度条"铺满到便捷框"且"加粗"，
+              // 这里把条与所在行的几何一起带出来，便于断言"真的铺满了"。
+              const trackEl = s ? s.querySelector('span') : null;
+              const trackR = trackEl ? trackEl.getBoundingClientRect() : null;
+              const hostRow = s && s.parentElement ? s.parentElement.getBoundingClientRect() : null;
               return JSON.stringify({
                 count: document.querySelectorAll('#dsh-ext-dl').length,
+                trackW: trackR ? Math.round(trackR.width) : -1,
+                trackH: trackR ? Math.round(trackR.height) : -1,
+                gapRight: hostRow && trackR ? Math.round(hostRow.right - trackR.right) : -1,
                 display: s ? s.style.display : 'missing',
                 fillWidth: f ? f.style.width : 'missing',
                 text: t ? t.textContent : 'missing',
@@ -1639,6 +1647,7 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
             const p2 = JSON.parse(probe2) as {
               count: number; display: string; fillWidth: string; text: string;
               rect: { x: number; y: number; w: number; h: number } | null;
+              trackW: number; trackH: number; gapRight: number;
               vw: number; vh: number; settingsRowVisible: boolean; settingsRowText: string;
             };
             if (p2.display === 'missing') {
@@ -1652,6 +1661,16 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
               process.exitCode = 1;
             } else if (!p2.rect || p2.rect.w <= 0 || p2.rect.h <= 0) {
               console.error('[smoke] 侧栏进度条尺寸为 0：' + JSON.stringify(p2.rect));
+              process.exitCode = 1;
+            } else if (p2.trackH < 10) {
+              // 用户实机验收提的："进度条要适当宽大些"（原来 8px 太细）
+              console.error('[smoke] 侧栏进度条太细（' + String(p2.trackH) + 'px），用户看不见');
+              process.exitCode = 1;
+            } else if (p2.trackW < 120) {
+              // 用户实机验收提的："要在设置后面铺满到便捷框"（原来固定 64px）
+              console.error(
+                '[smoke] 侧栏进度条没有铺满（宽 ' + String(p2.trackW) + 'px，应 >=120px；右侧间隙 ' + String(p2.gapRight) + 'px）',
+              );
               process.exitCode = 1;
             } else if (!p2.text.includes('42%')) {
               console.error('[smoke] 侧栏进度条没显示百分比文字：' + p2.text);
@@ -1668,7 +1687,11 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
               console.error('[smoke] 设置页版本行的进度没跟上：label=' + p2.settingsRowText);
               process.exitCode = 1;
             } else {
-              console.log('[smoke] 侧栏下载进度条可见：' + JSON.stringify(p2.rect) + ' 文字=' + p2.text);
+              console.log(
+                '[smoke] 侧栏下载进度条可见：' + JSON.stringify(p2.rect) +
+                  ' 条=' + String(p2.trackW) + '×' + String(p2.trackH) +
+                  ' 距行右缘=' + String(p2.gapRight) + 'px 文字=' + p2.text,
+              );
             }
 
             // 下载结束（或中断）后必须自己消失，不留残影

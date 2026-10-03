@@ -488,7 +488,12 @@
    *
    * 与设置页版本行那条的分工：那条只在设置页开着时可见，谁也不会开着设置页等下载；
    * 侧栏这条才是"任何时候都看得见"的那个。Dock 徽标继续作为兜底。 */
-  var SIDE_BAR_MIN_ROW = 150; // 行宽小于此值视为侧栏折叠 → 藏掉文字只留条
+  var SIDE_BAR_MIN_ROW = 150; // 行宽小于此值视为侧栏折叠 → 藏掉文字，只留条让它铺满
+  // 2026-10-03 用户实机验收后的视觉要求（1.0.47）：
+  //   「进度条要在设置后面铺满到便捷框（留适当空隙即可）而且进度条要适当宽大些」
+  //   → 条不再固定 64px，而是吃满「设置」右侧到便捷框之间的剩余宽度；高度 8 → 12px。
+  var SIDE_BAR_TRACK_H = 12;  // 条高（原 8px，太细看不见）
+  var SIDE_BAR_GAP_PX = 9;    // 与「设置」文字、与右侧便捷框之间的空隙
 
   function rectVisible(el) {
     var r = el.getBoundingClientRect();
@@ -523,29 +528,45 @@
     }
     var row = anchor.btn.parentElement || anchor.label.parentElement;
     if (!row) return;
-    // 折叠态兜底：行太窄就再往上找一层容器（宁可位置偏一点，也要让它看得见）
-    if (rectVisible(row) && row.getBoundingClientRect().width < 120 && row.parentElement) {
+    // ⚠️ 2026-10-03（1.0.47 实测修正）：DSH 侧栏「设置」的真实结构是
+    //     label → div(display:contents) → button.VOzbGW_trigger(≈70px, **overflow:hidden**)
+    //                                    → div(≈70px) → div.VOzbGW_triggerRow(≈260px)
+    //   插在按钮里会被 overflow 裁掉 —— 打包态冒烟实测只量到 62px（用户要的"铺满"根本出不来）。
+    //   所以宿主要**上浮到够宽的那一层**（triggerRow），条才有空间铺满。
+    for (var up = 0; up < 4 && row.parentElement; up++) {
+      var w = row.getBoundingClientRect().width;
+      if (w >= SIDE_BAR_MIN_ROW) break;
       row = row.parentElement;
     }
 
     var wrap = document.createElement('span');
     wrap.id = 'dsh-ext-dl';
+    // flex:1 → 吃满「设置」右侧的剩余宽度，一直顶到便捷框前（左右各留 GAP）
     wrap.style.cssText =
-      'display:none;align-items:center;gap:7px;margin-left:10px;flex:none;font-size:12px;line-height:1;';
+      'display:none;align-items:center;gap:7px;' +
+      'margin-left:' + SIDE_BAR_GAP_PX + 'px;margin-right:' + SIDE_BAR_GAP_PX + 'px;' +
+      'flex:1 1 auto;min-width:0;font-size:12px;line-height:1;';
     var track = document.createElement('span');
+    // 条吃满 wrap 的全部宽度（百分比数字改成叠在条上，不再挤占空间）
     track.style.cssText =
-      'display:inline-block;width:64px;height:8px;border-radius:4px;background:rgba(128,128,128,.28);overflow:hidden;flex:none;';
+      'position:relative;display:block;flex:1 1 auto;min-width:60px;height:' + SIDE_BAR_TRACK_H + 'px;' +
+      'border-radius:' + Math.round(SIDE_BAR_TRACK_H / 2) + 'px;background:rgba(128,128,128,.28);overflow:hidden;';
     var fill = document.createElement('span');
     fill.id = 'dsh-ext-dl-fill';
     fill.style.cssText =
-      'display:block;width:0%;height:100%;border-radius:4px;background:#14A5B8;transition:width .2s;';
+      'display:block;width:0%;height:100%;border-radius:' + Math.round(SIDE_BAR_TRACK_H / 2) +
+      'px;background:#14A5B8;transition:width .2s;';
     track.appendChild(fill);
     var txt = document.createElement('span');
     txt.id = 'dsh-ext-dl-text';
-    txt.style.cssText = 'white-space:nowrap;color:#14A5B8;font-weight:600;opacity:.95;';
+    // 叠在条右端：白字 + 细描边，青蓝填充与灰色轨道上都看得清
+    txt.style.cssText =
+      'position:absolute;right:6px;top:50%;transform:translateY(-50%);white-space:nowrap;' +
+      'font-size:10px;font-weight:700;letter-spacing:.2px;color:#fff;' +
+      'text-shadow:0 0 2px rgba(0,0,0,.5);pointer-events:none;';
     txt.textContent = '下载中 0%';
+    track.appendChild(txt);
     wrap.appendChild(track);
-    wrap.appendChild(txt);
     row.appendChild(wrap);
 
     try {
@@ -553,7 +574,7 @@
       row.style.alignItems = 'center';
     } catch (e) { /* 行样式动不了也不影响条本身 */ }
     try {
-      // 侧栏折叠（行放不下文字）时只留条，避免挤坏布局
+      // 侧栏折叠（行放不下文字）时只留条 —— 条会自己铺满剩余宽度，不挤坏布局
       if (rectVisible(row) && row.getBoundingClientRect().width < SIDE_BAR_MIN_ROW) {
         txt.style.display = 'none';
       }

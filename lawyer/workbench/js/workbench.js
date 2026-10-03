@@ -388,6 +388,25 @@
       "</div></div>";
   }
 
+  // —— 系统设置里的「关于与更新」卡片（2026-10-03）——
+  // 同上：**加法，不是替换**。设置页原有卡片一个都不动，这里只多一张卡、两个按钮。
+  // 两个按钮分别走 preload 暴露的 __checkUpdate / __quitApp（主进程 shell:check-update / shell:quit）；
+  // 「彻底退出后台」的二次确认在主进程弹（默认「取消」），这里不再自己弹一次。
+  function aboutUpdateSetCard() {
+    return "<div class='set-card glow' style='--acc:#4f8cff'>" +
+      "<div class='set-head'><span class='set-ico'>🔄</span><strong>关于与更新</strong></div>" +
+      "<div class='set-body'>" +
+      "<div class='tl-meta' style='line-height:1.8;margin-bottom:8px'>" +
+      "「检查更新」会立刻向更新服务器查询新版本，结果由弹窗提示。" +
+      "「彻底退出后台」会连同后台进程一起结束，需要重新启动应用。" +
+      "</div>" +
+      "<div style='display:flex;gap:8px;flex-wrap:wrap'>" +
+      "<button class='btn btn-primary btn-sm' data-check-update>检查更新</button>" +
+      "<button class='btn btn-ghost btn-sm' data-quit-app>彻底退出后台</button>" +
+      "</div>" +
+      "</div></div>";
+  }
+
   /** 授权详情：点按钮才展开，不占设置页版面 */
   function openLicenseInfo() {
     var old = document.getElementById("lic-info-modal");
@@ -593,6 +612,7 @@
           "<div class='tl-meta' style='margin-top:8px'>日志是否提供给我们，完全由你决定。" +
           "提供可显著加快定位速度；不提供也不影响我们按既定流程为你排查。</div>") +
         licenseSetCard() +
+        aboutUpdateSetCard() +
         "</div>";
     } else if (key === "profile") {
       const name = meName();
@@ -697,6 +717,19 @@
     // 授权详情：设置页那张「授权与激活」卡上的按钮（点开才展开，不影响本页其它卡片）
     const licInfo = el.content.querySelector("[data-lic-info]");
     if (licInfo) licInfo.addEventListener("click", function () { openLicenseInfo(); });
+    // 关于与更新：两个按钮（桥未就绪时只提示，不抛错）
+    const ckUpd = el.content.querySelector("[data-check-update]");
+    if (ckUpd) ckUpd.addEventListener("click", function () {
+      if (!window.__checkUpdate) { toast("更新模块未就绪", "error"); return; }
+      toast("正在检查更新…");
+      window.__checkUpdate().catch(function () { toast("检查更新失败", "error"); });
+    });
+    const quitApp = el.content.querySelector("[data-quit-app]");
+    if (quitApp) quitApp.addEventListener("click", function () {
+      if (!window.__quitApp) { toast("退出模块未就绪", "error"); return; }
+      // 二次确认框由主进程弹（默认「取消」），这里直接交给它
+      window.__quitApp().catch(function () { toast("退出失败", "error"); });
+    });
     // 授权状态变化时**就地刷新那张卡**（用户停在设置页上激活时，卡片不能还是旧的）
     // ⚠️ 必须只注册一次：这段代码在**每次渲染**都会跑，直接 addEventListener 会越积越多。
     if (!window.__legalLicenseChangedBound) {

@@ -65,6 +65,11 @@ contextBridge.exposeInMainWorld('__lawyerCheck', (machine) => ipcRenderer.invoke
 
 // 打开外部链接（系统默认浏览器），供"打开官网核验"等用
 contextBridge.exposeInMainWorld('__openExternal', (url) => ipcRenderer.invoke('shell:openExternal', url));
+// —— 设置页「关于与更新」两个按钮 ——
+// 检查更新：与「帮助 → 检查更新…」同一个 checkNow（主进程里等它跑完）
+contextBridge.exposeInMainWorld('__checkUpdate', () => ipcRenderer.invoke('shell:check-update'));
+// 彻底退出后台：主进程会先弹确认框（默认「取消」），确认后才 app.quit()
+contextBridge.exposeInMainWorld('__quitApp', () => ipcRenderer.invoke('shell:quit'));
 // 唤回深鲸桌面端（DeepWhale Desktop）窗口
 contextBridge.exposeInMainWorld('__focusDSH', () => ipcRenderer.invoke('dsh:focus'));
 

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -418,6 +418,30 @@ ipcMain.handle('shell:openExternal', async (_ev, url) => {
     try { require('electron').shell.openExternal(url); return { ok: true }; } catch (e) { return { ok: false, msg: String(e) }; }
   }
   return { ok: false, msg: '非法链接' };
+});
+
+// —— 设置页两个按钮：检查更新 / 彻底退出后台（2026-10-03）——
+// 与「帮助 → 检查更新…」完全同源（都调 lib/update.checkNow()），不另起一套更新逻辑。
+// 退出比菜单项更容易误点：macOS 上关掉窗口并不结束进程，所以这里必须先问一次，
+// 默认按钮是「取消」（defaultId/cancelId 都是 1），避免回车直接退出。
+ipcMain.handle('shell:check-update', async () => {
+  await require('./lib/update').checkNow();
+  return { ok: true };
+});
+ipcMain.handle('shell:quit', async () => {
+  const opts = {
+    type: 'question',
+    buttons: ['彻底退出', '取消'],
+    defaultId: 1,
+    cancelId: 1,
+    message: '要彻底退出深鲸·律师端吗？',
+    detail: '退出后后台进程会一并结束，需要重新启动应用。',
+  };
+  const win = (__workbenchWin && !__workbenchWin.isDestroyed()) ? __workbenchWin : null;
+  const { response } = win ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts);
+  if (response !== 0) return { ok: false };
+  app.quit();
+  return { ok: true };
 });
 
 // —— 唤回深鲸桌面端（DeepWhale Desktop）窗口到前台 ——

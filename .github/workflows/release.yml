@@ -338,10 +338,17 @@ jobs:
           notes = notes.strip('\n') + '\n'
           open('/tmp/release-notes.md', 'w', encoding='utf-8').write(notes)
           PY
-          gh release delete --repo "$GITHUB_REPOSITORY" "$TAG" --yes 2>/dev/null || true
-          gh release create --repo "$GITHUB_REPOSITORY" "$TAG" --draft \
-            --title "DeepWhale Desktop $TAG" \
-            --notes-file /tmp/release-notes.md
+          # ⚠️ 2026-10-03 修：原来无条件 `gh release delete` 再重建草稿 ——
+          #    一旦重跑这个 job，**已经公开发布的版本会被删掉重建成草稿**（用户链接瞬间失效）。
+          #    改成：已存在就只覆盖资产与说明，绝不改它的 draft/latest 状态。
+          if gh release view --repo "$GITHUB_REPOSITORY" "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG 已存在 → 只覆盖资产，不删除、不降级为草稿"
+            gh release edit --repo "$GITHUB_REPOSITORY" "$TAG" --notes-file /tmp/release-notes.md
+          else
+            gh release create --repo "$GITHUB_REPOSITORY" "$TAG" --draft \
+              --title "DeepWhale Desktop $TAG" \
+              --notes-file /tmp/release-notes.md
+          fi
           # 上传全部产物（排除 electron-builder 的调试文件）
           gh release upload --repo "$GITHUB_REPOSITORY" "$TAG" $(find dist-assets -type f ! -name 'builder-debug.yml') --clobber
         env:
@@ -377,7 +384,16 @@ jobs:
           mkdir -p obs-desktop
           for f in dist-assets/DeepWhale-Desktop-*; do
             [ -f "$f" ] || continue
-            case "$f" in *.blockmap|*.zip) continue;; esac
+            case "$f" in
+              *.blockmap) continue;;
+              # ⚠️ 2026-10-03 修：**mac 的两个 zip 必须传**。
+              #    原来这里把 .zip 一并跳过，理由是"官网不提供该格式" —— 但 electron-updater
+              #    在 macOS 上读的正是 latest-mac.yml 里指的 zip：CDN 上没有它，
+              #    用户能"检查到更新"、下载阶段却 403 失败（2026-10-03 实测藏了一周）。
+              #    Windows/Linux 仍然跳过（它们走 exe/AppImage/deb，zip 纯占体积）。
+              *.zip)
+                case "$f" in *-arm64.zip|*-x64.zip) : ;; *) continue;; esac;;
+            esac
             cp "$f" obs-desktop/
           done
           # 更新清单（体积只有几百字节，但决定"用户能不能收到更新"）

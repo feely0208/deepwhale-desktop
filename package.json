@@ -1,7 +1,7 @@
 {
   "name": "deepwhale-desktop",
   "productName": "DeepWhale Desktop",
-  "version": "1.0.45",
+  "version": "1.0.46",
   "description": "深鲸桌面（DeepWhale Desktop）：把 DeepSeek Harness（DSH）Web UI 装进 Electron 原生窗口的跨平台桌面壳，附带背景皮肤、帧动画桌面宠物与用量/额度面板",
   "main": "dist/main/index.js",
   "author": "feely0208 <feely0208@gmail.com>",
@@ -34,7 +34,9 @@
     "release:mac": "node scripts/release-mac.js",
     "check:links": "node scripts/check-homepage-links.js",
     "check:runtime": "node scripts/dsh-runtime-version.js --check",
-    "test:patch-selfheal": "node scripts/test-patch-selfheal.js"
+    "test:patch-selfheal": "node scripts/test-patch-selfheal.js",
+    "test:pet": "npm run build && electron scripts/test-pet-actions.js",
+    "dist:test": "npm run build && electron-builder --mac --config.directories.output=release-test"
   },
   "dependencies": {
     "electron-updater": "^6.8.9",

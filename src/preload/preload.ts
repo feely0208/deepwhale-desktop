@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld('dsh', {
   petDragEnd: () => ipcRenderer.send('pet:drag-end'),
   petContextMenu: () => ipcRenderer.send('pet:context-menu'),
   petSpriteInfo: (name: string) => ipcRenderer.invoke('pet:sprite-info', name),
+  /** 冲刺划水：让宠物窗口按方向滑出去半个屏幕（主进程做缓动 + 边界限制） */
+  petDash: (direction: number) => ipcRenderer.send('pet:dash', direction),
 
   // ---- 用量面板 ----
   usageRefresh: () => ipcRenderer.send('usage:refresh'),

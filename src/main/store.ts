@@ -36,6 +36,8 @@ export interface Settings {
    * 之后用户自己关掉就尊重他的选择（标记已在，不再强制）。
    */
   lanAccessMigrated: boolean;
+  /** 宠物帧率一次性迁移（老默认 130ms 太慢，已改为 80ms） */
+  petFrameMigrated: boolean;
   /**
    * 外网访问地址（用户自建的隧道/反向代理），例如 `https://xxx.example.org`。
    * 留空则「手机连接」只显示局域网地址。默认空 —— 不能替用户假设他有隧道。
@@ -112,6 +114,7 @@ const DEFAULTS: Settings = {
   lanAccess: true,
   // 一次性迁移标记：升级上来的用户文件里存着旧的 false，第一次读到要强制改成 true
   lanAccessMigrated: false,
+  petFrameMigrated: false,
   // 外网地址默认空 —— 不能替用户假设他配了隧道
   publicUrl: '',
   // 默认不往桌面放文件；用户点过「写到桌面文件」之后才开启
@@ -123,7 +126,7 @@ const DEFAULTS: Settings = {
   customCssEnabled: false,
   petVisible: true,
   petGif: 'AI小助理',
-  petFrameMs: 130,
+  petFrameMs: 80,
   petScale: 1,
   clickThrough: false,
   closeToTray: true,
@@ -161,6 +164,14 @@ export class Store {
       if (!this.data.lanAccessMigrated) {
         this.data.lanAccess = true;
         this.data.lanAccessMigrated = true;
+      }
+      // 一次性迁移：宠物帧率老默认 130ms/帧（约 7fps）播起来一顿一顿的（用户实测反馈）。
+      // 只有"还停在老默认值"的用户才升级；自己调过的一律尊重。
+      if (!this.data.petFrameMigrated) {
+        if (this.data.petFrameMs === 130 || this.data.petFrameMs > 110) {
+          this.data.petFrameMs = 80;
+        }
+        this.data.petFrameMigrated = true;
       }
     } catch {
       // 首次运行或文件损坏：使用默认值

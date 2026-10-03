@@ -1,0 +1,117 @@
+{
+  "displayName": "青色大肥鱼",
+  "cellWidth": 200,
+  "cellHeight": 200,
+  "columns": 12,
+  "rows": [
+    {
+      "state": "idle",
+      "row": 0,
+      "frames": 12,
+      "speed": 1.0
+    },
+    {
+      "state": "swimming",
+      "row": 1,
+      "frames": 12,
+      "speed": 0.8
+    },
+    {
+      "state": "waving",
+      "row": 2,
+      "frames": 10,
+      "speed": 0.9
+    },
+    {
+      "state": "jumping",
+      "row": 3,
+      "frames": 12,
+      "speed": 0.8
+    },
+    {
+      "state": "flip",
+      "row": 4,
+      "frames": 12,
+      "speed": 0.7
+    },
+    {
+      "state": "diving",
+      "row": 5,
+      "frames": 10,
+      "speed": 0.9
+    },
+    {
+      "state": "dash",
+      "row": 6,
+      "frames": 12,
+      "speed": 0.55
+    },
+    {
+      "state": "running-right",
+      "row": 7,
+      "frames": 12,
+      "speed": 0.65
+    },
+    {
+      "state": "running-left",
+      "row": 8,
+      "frames": 12,
+      "speed": 0.65
+    },
+    {
+      "state": "walking-right",
+      "row": 9,
+      "frames": 10,
+      "speed": 0.85
+    },
+    {
+      "state": "walking-left",
+      "row": 10,
+      "frames": 10,
+      "speed": 0.85
+    },
+    {
+      "state": "standing",
+      "row": 11,
+      "frames": 10,
+      "speed": 1.0
+    },
+    {
+      "state": "ball",
+      "row": 12,
+      "frames": 10,
+      "speed": 0.95
+    },
+    {
+      "state": "waiting",
+      "row": 13,
+      "frames": 8,
+      "speed": 1.15
+    },
+    {
+      "state": "sleeping",
+      "row": 14,
+      "frames": 8,
+      "speed": 1.45
+    },
+    {
+      "state": "review",
+      "row": 15,
+      "frames": 8,
+      "speed": 1.05
+    },
+    {
+      "state": "look",
+      "row": 16,
+      "frames": 10,
+      "speed": 1.0
+    },
+    {
+      "state": "failed",
+      "row": 17,
+      "frames": 6,
+      "speed": 1.25
+    }
+  ],
+  "sideView": true
+}

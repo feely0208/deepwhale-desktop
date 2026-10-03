@@ -56,7 +56,7 @@
       '    <label class="dsh-ext-check"><input type="checkbox" id="dsh-ext-pet-visible" /> 显示宠物</label>' +
       '    <label class="dsh-ext-check"><input type="checkbox" id="dsh-ext-pet-clickthrough" /> 穿透点击（可点到宠物后面的内容）</label>' +
       '    <div class="dsh-ext-row">动画帧率：<b id="dsh-ext-pet-fps-val">130ms/帧</b></div>' +
-      '    <input type="range" class="dsh-ext-range" id="dsh-ext-pet-frame" min="60" max="300" step="10" />' +
+      '    <input type="range" class="dsh-ext-range" id="dsh-ext-pet-frame" min="40" max="300" step="5" />' +
       '    <div class="dsh-ext-row">宠物大小：<b id="dsh-ext-pet-scale-val">100%</b></div>' +
       '    <input type="range" class="dsh-ext-range" id="dsh-ext-pet-scale" min="0.6" max="2" step="0.1" />' +
       '    <div class="dsh-ext-btns">' +
@@ -473,64 +473,128 @@
     } catch (e) { /* 订阅失败不影响按钮 */ }
   }
 
-  /* ---------- 侧栏「设置」按钮右侧：下载进度条（常驻可见）----------
-   * 2026-10-03 加。用户要求原话：「就是一个下载过程的进度条可视化，
-   * 要不要百分比都无所谓，只要能看到」；位置指定在「设置按钮的右方空白处」。
-   * 设置页里那一条只在打开设置页时可见 —— 谁也不会开着设置页等下载，
-   * 所以侧栏这条才是真正"常驻可见"的那个。
-   * ⚠️ 只加进度条，不加百分比（用户说无所谓），避免挤占侧栏。 */
+  /* ---------- 侧栏「设置」右侧：下载进度（常驻可见，带百分比）----------
+   * 2026-10-03 加。用户要求「下载过程可视化，放在设置按钮右方空白处」。
+   *
+   * ★ 1.0.46 加固。起因：1.0.45 上线后用户反馈「你看更新，只是图标有进度条，
+   *   设置旁边并没有显示……图标栏那么小一般他们不会关注到的」。
+   *   实测（冒烟探针）确认：条**插上了、也能跟着进度走**，但只有 6px 高、没有文字、
+   *   且只在下载那几秒出现 —— 用户根本注意不到。所以本轮改三件事：
+   *   ① 带百分比文字（"下载中 67%"）—— 一根细条给不了"确定感"；
+   *   ② 条加高加亮（8px / 青蓝 #14A5B8）；
+   *   ③ 定位收紧：只认**可点**的那个「设置」（设置面板自己的标题也是叶子节点、
+   *      文字同样是「设置」，靠"第一个匹配"会插错地方），且只认可见的候选；
+   *      找不到就记一条日志、什么都不插（绝不乱插到别的标题上）。
+   *
+   * 与设置页版本行那条的分工：那条只在设置页开着时可见，谁也不会开着设置页等下载；
+   * 侧栏这条才是"任何时候都看得见"的那个。Dock 徽标继续作为兜底。 */
+  var SIDE_BAR_MIN_ROW = 150; // 行宽小于此值视为侧栏折叠 → 藏掉文字只留条
+
+  function rectVisible(el) {
+    var r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  }
+
+  /** 找侧栏那个「设置」按钮（可点 + 可见），排除设置面板自己的同名标题。 */
+  function findSidebarSettingsAnchor() {
+    var all = document.querySelectorAll('button, [role="button"], a, span, div');
+    for (var i = 0; i < all.length; i++) {
+      var el = all[i];
+      if (el.children.length > 0) continue;
+      if ((el.textContent || '').trim() !== '设置') continue;
+      var btn = el.closest ? el.closest('button,[role="button"],a') : null;
+      if (!btn) continue; // 设置面板的标题不是可点元素 → 排除
+      // 窗口隐藏（最小化到托盘）时布局尺寸不可信，此时不做可见性判断
+      if (document.visibilityState === 'visible' && (!rectVisible(btn) || !rectVisible(el))) continue;
+      return { label: el, btn: btn };
+    }
+    return null;
+  }
+
   function maybeInjectSidebarProgress() {
     if (document.getElementById('dsh-ext-dl')) return;
-    var els = document.querySelectorAll('button, [role="button"], a, div, span');
-    for (var i = 0; i < els.length; i++) {
-      var el = els[i];
-      if (el.children.length > 0) continue;
-      var t = (el.textContent || '').trim();
-      if (t !== '设置') continue;
-      var host = el;
-      for (var k = 0; k < 3 && host.parentElement; k++) host = host.parentElement;
-      if (host.querySelector && host.querySelector('#dsh-ext-dl')) return;
-      var wrap = document.createElement('span');
-      wrap.id = 'dsh-ext-dl';
-      wrap.style.cssText = 'display:none;align-items:center;margin-left:auto;padding-left:10px;flex:none;';
-      var track = document.createElement('span');
-      track.style.cssText = 'display:inline-block;width:72px;height:6px;border-radius:3px;background:rgba(128,128,128,.25);overflow:hidden;';
-      var fill = document.createElement('span');
-      fill.id = 'dsh-ext-dl-fill';
-      fill.style.cssText = 'display:block;width:0%;height:100%;border-radius:3px;background:#05648B;transition:width .2s;';
-      track.appendChild(fill);
-      wrap.appendChild(track);
-      host.appendChild(wrap);
-      try { host.style.display = 'flex'; host.style.alignItems = 'center'; } catch (e) {}
+    var anchor = findSidebarSettingsAnchor();
+    if (!anchor) {
+      if (!window.__dshExtSidebarWarned) {
+        window.__dshExtSidebarWarned = true;
+        console.warn('[dsh-ext] 未找到侧栏「设置」按钮，下载进度未注入（不影响其它功能）');
+      }
       return;
     }
+    var row = anchor.btn.parentElement || anchor.label.parentElement;
+    if (!row) return;
+    // 折叠态兜底：行太窄就再往上找一层容器（宁可位置偏一点，也要让它看得见）
+    if (rectVisible(row) && row.getBoundingClientRect().width < 120 && row.parentElement) {
+      row = row.parentElement;
+    }
+
+    var wrap = document.createElement('span');
+    wrap.id = 'dsh-ext-dl';
+    wrap.style.cssText =
+      'display:none;align-items:center;gap:7px;margin-left:10px;flex:none;font-size:12px;line-height:1;';
+    var track = document.createElement('span');
+    track.style.cssText =
+      'display:inline-block;width:64px;height:8px;border-radius:4px;background:rgba(128,128,128,.28);overflow:hidden;flex:none;';
+    var fill = document.createElement('span');
+    fill.id = 'dsh-ext-dl-fill';
+    fill.style.cssText =
+      'display:block;width:0%;height:100%;border-radius:4px;background:#14A5B8;transition:width .2s;';
+    track.appendChild(fill);
+    var txt = document.createElement('span');
+    txt.id = 'dsh-ext-dl-text';
+    txt.style.cssText = 'white-space:nowrap;color:#14A5B8;font-weight:600;opacity:.95;';
+    txt.textContent = '下载中 0%';
+    wrap.appendChild(track);
+    wrap.appendChild(txt);
+    row.appendChild(wrap);
+
+    try {
+      row.style.display = 'flex';
+      row.style.alignItems = 'center';
+    } catch (e) { /* 行样式动不了也不影响条本身 */ }
+    try {
+      // 侧栏折叠（行放不下文字）时只留条，避免挤坏布局
+      if (rectVisible(row) && row.getBoundingClientRect().width < SIDE_BAR_MIN_ROW) {
+        txt.style.display = 'none';
+      }
+    } catch (e) { /* 忽略 */ }
   }
 
   /* ---------- 更新状态订阅：同时驱动「设置页版本行」与「侧栏」两条进度条 ---------- */
+  function renderUpdateProgress(st) {
+    var downloading = !!(st && (st.phase === 'downloading' || st.phase === 'downloaded'));
+    var downloaded = !!(st && st.phase === 'downloaded');
+    var pct = st && typeof st.percent === 'number' ? st.percent : (downloaded ? 100 : 0);
+
+    // 侧栏条：条 + 百分比文字
+    var side = document.getElementById('dsh-ext-dl');
+    if (side) {
+      side.style.display = downloading ? 'inline-flex' : 'none';
+      var sf = document.getElementById('dsh-ext-dl-fill');
+      if (sf) sf.style.width = pct + '%';
+      var stx = document.getElementById('dsh-ext-dl-text');
+      if (stx) stx.textContent = downloaded ? '已下好，重启生效' : '下载中 ' + pct + '%';
+    }
+    // 设置页版本行那条：带文字
+    var box = document.getElementById('dsh-ext-update-progress');
+    if (box) {
+      box.style.display = downloading ? 'inline-flex' : 'none';
+      var bf = document.getElementById('dsh-ext-update-progress-fill');
+      if (bf) bf.style.width = pct + '%';
+      var bl = document.getElementById('dsh-ext-update-progress-label');
+      if (bl) bl.textContent = downloaded ? '已下载好，去安装' : '正在下载 ' + pct + '%';
+    }
+  }
+
   function startUpdateProgressWatch() {
     if (window.__dshExtUpdateWatch) return;
     window.__dshExtUpdateWatch = true;
     try {
       if (window.dsh && window.dsh.onUpdateState) {
         window.dsh.onUpdateState(function (st) {
-          var downloading = !!(st && (st.phase === 'downloading' || st.phase === 'downloaded'));
-          var pct = st && typeof st.percent === 'number' ? st.percent : (st && st.phase === 'downloaded' ? 100 : 0);
-          // 侧栏条：只有进度，没有文字
-          var side = document.getElementById('dsh-ext-dl');
-          if (side) {
-            side.style.display = downloading ? 'inline-flex' : 'none';
-            var sf = document.getElementById('dsh-ext-dl-fill');
-            if (sf) sf.style.width = pct + '%';
-          }
-          // 设置页版本行那条：带文字
-          var box = document.getElementById('dsh-ext-update-progress');
-          if (box) {
-            box.style.display = downloading ? 'inline-flex' : 'none';
-            var bf = document.getElementById('dsh-ext-update-progress-fill');
-            if (bf) bf.style.width = pct + '%';
-            var bl = document.getElementById('dsh-ext-update-progress-label');
-            if (bl) bl.textContent = st && st.phase === 'downloaded' ? '已下载好，去安装' : ('正在下载 ' + pct + '%');
-          }
+          // 兜底：万一注入时机没赶上（或侧栏后来才渲染出来），下载一开始就把条补上
+          maybeInjectSidebarProgress();
+          renderUpdateProgress(st);
         });
       }
     } catch (e) { /* 订阅失败不影响其它功能 */ }

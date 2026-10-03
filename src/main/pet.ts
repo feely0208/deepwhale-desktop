@@ -18,6 +18,11 @@ export class PetWindow {
   private dragOffset: { x: number; y: number } | null = null;
   /** 打包内置宠物（app.asar 内，只读） */
   private readonly builtinPetsDir = path.join(__dirname, '../assets/pets');
+  /** 冲刺滑行的动画定时器 */
+  private dashTimer: NodeJS.Timeout | null = null;
+  /** 宠物素材文件监视（素材一变自动重载，改图不用重启/切宠物） */
+  private spriteWatcher: fs.FSWatcher | null = null;
+  private spriteWatchTimer: NodeJS.Timeout | null = null;
 
   constructor(private store: Store) {}
 
@@ -32,7 +37,15 @@ export class PetWindow {
 
   /**
    * 确保内置宠物（app.asar 内）已就位到用户宠物目录。
-   * 幂等：只在用户目录缺某个内置宠物时才补；已存在则不动（保护用户自定义/修改）。
+   *
+   * ⚠️ 2026-10-03 踩坑：原来"已存在就完全不动"，导致**内置宠物永远更新不了** ——
+   *    用户机器上留着一份旧副本（旧 manifest：没有 sideView、没有翻跟头、帧率也旧），
+   *    新版本启动后读的还是那份旧的，表现为"新功能全都没生效"
+   *    （用户实测：拖到左边不掉头、看不到翻跟头）。
+   *    现在改成**按文件新旧同步**：缺文件、或内置文件比用户目录里的新 → 覆盖；
+   *    用户自己改过（mtime 更新）或自己加的宠物 → 一律不动。
+   *    "想自定义内置宠物就复制一份改名"——这条写进 README 的宠物说明。
+   *
    * 不用 fs.cpSync —— 它在 Electron 的 asar 虚拟文件系统下不可靠（asar 内目录无法被
    * cpSync 递归拷贝，导致内置宠物 spritesheet/manifest 拷不出来，宠物只显示 'pet' 占位）。
    * 改为 readdirSync + mkdirSync + copyFileSync 逐文件递归复制（三者 asar 均支持）。
@@ -41,14 +54,18 @@ export class PetWindow {
     try {
       const dir = this.userPetsDir();
       fs.mkdirSync(dir, { recursive: true });
+      let copied = 0;
       for (const entry of fs.readdirSync(this.builtinPetsDir, { withFileTypes: true })) {
         const src = path.join(this.builtinPetsDir, entry.name);
         const dest = path.join(dir, entry.name);
-        if (fs.existsSync(dest)) continue; // 已存在则不覆盖
-        if (entry.isDirectory()) copyDirSync(src, dest);
-        else fs.copyFileSync(src, dest);
+        if (entry.isDirectory()) {
+          copied += syncDirIfNewer(src, dest) ? 1 : 0;
+        } else if (shouldCopy(src, dest)) {
+          fs.copyFileSync(src, dest);
+          copied += 1;
+        }
       }
-      console.log('[pet] 已确保用户宠物目录:', dir);
+      console.log(`[pet] 用户宠物目录已就位: ${dir}${copied ? `（本次更新了 ${String(copied)} 项内置宠物）` : ''}`);
     } catch (e) {
       console.error('[pet] 初始化宠物目录失败:', e);
     }
@@ -130,6 +147,7 @@ export class PetWindow {
     win.on('closed', () => {
       this.win = null;
     });
+    this.watchCurrentPet();
 
     return win;
   }
@@ -160,6 +178,55 @@ export class PetWindow {
           : { src: this.petFileUrl(file) }
         : {},
     });
+    this.watchCurrentPet();
+  }
+
+  /**
+   * 冲刺划水：把宠物窗口朝 direction（+1 右 / -1 左）缓动滑出去约半个屏幕。
+   *
+   * 为什么放在主进程：宠物是独立小窗，渲染层改不了自己的位置；而"真的窜出去"
+   * 正是用户要的观感（"滑水能不能直接窜半个屏幕"），顺带避免和"按位置调头"起冲突 ——
+   * 冲完落到另一半，朝向判定自然变成面向屏幕中间。
+   * 贴边时会自动反向，保证每次都能窜出去一段；滑完不做任何朝向假设，交给渲染层按新位置判定。
+   */
+  dash(direction: number): void {
+    const win = this.window;
+    if (!win) return;
+    const dir = direction === 1 ? 1 : -1;
+    const b = win.getBounds();
+    const { workArea } = screen.getDisplayMatching(b);
+    const maxX = workArea.x + workArea.width - b.width;
+    const travel = Math.round(workArea.width * 0.5);
+    let targetX = b.x + dir * travel;
+    if (targetX < workArea.x || targetX > maxX) {
+      targetX = b.x - dir * travel; // 贴边了就反向窜，别原地不动
+    }
+    targetX = Math.max(workArea.x, Math.min(maxX, targetX));
+    const startX = b.x;
+    const dx = targetX - startX;
+    if (Math.abs(dx) < 40) return; // 实在没地方去就算了
+
+    const DURATION = 760;
+    const t0 = Date.now();
+    if (this.dashTimer) clearInterval(this.dashTimer);
+    // 缓出（起步快、收尾滑停），像真的冲出去再滑住
+    this.dashTimer = setInterval(() => {
+      const w = this.window;
+      if (!w) {
+        this.stopDash();
+        return;
+      }
+      const p = Math.min(1, (Date.now() - t0) / DURATION);
+      const ease = 1 - (1 - p) * (1 - p);
+      const cb = w.getBounds();
+      w.setPosition(Math.round(startX + dx * ease), cb.y);
+      if (p >= 1) this.stopDash();
+    }, 16);
+  }
+
+  private stopDash(): void {
+    if (this.dashTimer) clearInterval(this.dashTimer);
+    this.dashTimer = null;
   }
 
   /** 应用宠物配置（帧率/大小）：更新窗口尺寸并重载 */
@@ -173,6 +240,39 @@ export class PetWindow {
     const b = win.getBounds();
     win.setBounds({ x: b.x + b.width - w, y: b.y + b.height - h, width: w, height: h });
     this.reload();
+  }
+
+  /**
+   * 盯着"当前宠物"的素材文件：一变就重载宠物窗口。
+   *
+   * 为什么要它：素材是在宠物窗口加载时读一次并常驻内存的，改完素材必须手动
+   * "切一下宠物"或重启才生效 —— 我们自己迭代素材时被这个绊了好几次
+   * （用户实测："水花是肉眼见大，划水还是之前一样"，就是因为没重载）。
+   * 用 fs.watch（macOS 支持 recursive），300ms 去抖，只认当前宠物名下的变化。
+   */
+  private watchCurrentPet(): void {
+    const name = this.store.get('petGif');
+    try {
+      if (this.spriteWatcher) {
+        this.spriteWatcher.close();
+        this.spriteWatcher = null;
+      }
+      if (!name) return;
+      const dir = this.userPetsDir();
+      this.spriteWatcher = fs.watch(dir, { recursive: true }, (_ev, filename) => {
+        const f = filename ? String(filename) : '';
+        // 只看当前宠物自己的文件；其它宠物/无关文件不动
+        if (f && !f.startsWith(name)) return;
+        if (this.spriteWatchTimer) clearTimeout(this.spriteWatchTimer);
+        this.spriteWatchTimer = setTimeout(() => {
+          this.spriteWatchTimer = null;
+          console.log('[pet] 监测到素材变化，自动重载:', f || name);
+          this.reload();
+        }, 300);
+      });
+    } catch (e) {
+      console.error('[pet] 素材监视启动失败（不影响使用）:', e);
+    }
   }
 
   /** 是否为帧动画宠物（目录内含 manifest.json） */
@@ -242,6 +342,7 @@ export class PetWindow {
   /** 注册宠物相关 IPC（应用启动时调用一次） */
   registerIpc(): void {
     ipcMain.on('pet:drag-start', () => {
+      this.stopDash(); // 用户上手拖了，冲刺立刻让位
       const win = this.window;
       if (!win) return;
       const cursor = screen.getCursorScreenPoint();
@@ -262,6 +363,14 @@ export class PetWindow {
 
     ipcMain.on('pet:context-menu', () => {
       this.showContextMenu();
+    });
+
+    // 冲刺划水：宠物页报上"往哪边冲"，主进程把窗口缓动滑过去半个屏幕。
+    // 为什么必须主进程移：宠物是独立小窗，渲染层动不了自己的位置；而且"真的窜出去"
+    // 正是用户要的观感，顺带避免和"按位置调头"打架（冲完落到另一边，朝向判定自然
+    // 变成面向屏幕中间）。
+    ipcMain.on('pet:dash', (_e, direction: number) => {
+      this.dash(direction);
     });
 
     ipcMain.on('pet:select-pet', (_e, name: string | null) => {
@@ -354,4 +463,44 @@ function copyDirSync(src: string, dest: string): void {
     if (entry.isDirectory()) copyDirSync(s, d);
     else fs.copyFileSync(s, d);
   }
+}
+
+/** 目标不存在、或内置文件比目标新（>1s 容差）→ 需要复制 */
+function shouldCopy(src: string, dest: string): boolean {
+  try {
+    const s = fs.statSync(src);
+    let d: fs.Stats;
+    try {
+      d = fs.statSync(dest);
+    } catch {
+      return true; // 目标缺失
+    }
+    return s.mtimeMs > d.mtimeMs + 1000;
+  } catch {
+    return false; // 源读不到（asar 异常）就别动
+  }
+}
+
+/** 按文件新旧同步一个内置宠物目录；返回是否真的更新过 */
+function syncDirIfNewer(src: string, dest: string): boolean {
+  let changed = false;
+  fs.mkdirSync(dest, { recursive: true });
+  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+    const s = path.join(src, entry.name);
+    const d = path.join(dest, entry.name);
+    if (entry.isDirectory()) {
+      changed = syncDirIfNewer(s, d) || changed;
+    } else if (shouldCopy(s, d)) {
+      fs.copyFileSync(s, d);
+      // 保持时间戳，避免"内置比目标新"的判断每次都成立
+      try {
+        const st = fs.statSync(s);
+        fs.utimesSync(d, st.atime, st.mtime);
+      } catch {
+        /* 时间戳设置失败无所谓 */
+      }
+      changed = true;
+    }
+  }
+  return changed;
 }

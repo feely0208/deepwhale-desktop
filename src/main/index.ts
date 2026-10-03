@@ -1557,13 +1557,182 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
           } catch (e) {
             console.error('[smoke] settings-ext 检查失败:', e);
           }
+
+          // ── 侧栏「设置」右侧下载进度条：定位探针 + 通路探针 + 硬断言 ───────
+          // 起因（2026-10-03 用户反馈）：下载时 Dock 图标有进度，侧栏「设置」旁边什么也没有。
+          // 实测结论：1.0.45 的条**插上了、也跟得上进度**，但只有 6px 高、无文字，
+          // 用户根本注意不到。所以断言必须落在"尺寸 / 文字 / 位置"这些用户真能感知的量上 ——
+          // 只断言"节点存在"是不够的：细到看不见、被挤出视口时节点照样在。
+          try {
+            const probe = await mainWin!.webContents.executeJavaScript(`(() => {
+              const desc = (el) => {
+                if (!el) return 'null';
+                const cls = (el.className && typeof el.className === 'string') ? el.className.trim().split(/\\s+/).slice(0, 2).join('.') : '';
+                return el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') + (cls ? '.' + cls : '');
+              };
+              const chain = (el, n) => { const out = []; let p = el; for (let i = 0; i < n && p; i++) { out.push(desc(p)); p = p.parentElement; } return out.join(' < '); };
+              const rect = (el) => { const r = el.getBoundingClientRect(); return { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) }; };
+              const cands = [...document.querySelectorAll('button,[role="button"],a,div,span')]
+                .filter((e) => e.children.length === 0 && e.textContent.trim() === '设置');
+              const side = document.getElementById('dsh-ext-dl');
+              const label = cands[0] ?? null;
+              const anc = [];
+              if (label) {
+                let p = label.parentElement;
+                for (let i = 0; i < 4 && p; i++) {
+                  const cs = getComputedStyle(p);
+                  anc.push(desc(p) + ' ' + JSON.stringify(rect(p)) + ' display=' + cs.display + ' overflow=' + cs.overflow);
+                  p = p.parentElement;
+                }
+              }
+              const navEl = document.querySelector('nav');
+              return JSON.stringify({
+                vp: { w: innerWidth, h: innerHeight },
+                nCands: cands.length,
+                cands: cands.slice(0, 6).map((e) => ({ at: desc(e), chain: chain(e, 4), rect: rect(e), clickable: !!e.closest('button,[role="button"],a') })),
+                labelAncestors: anc,
+                sidebarNav: navEl ? rect(navEl) : null,
+                side: side ? { chain: chain(side, 4), display: side.style.display, rect: rect(side) } : null,
+              });
+            })()`);
+            console.log('[smoke] sidebar-probe:', probe);
+
+            mainWin!.webContents.send('shell:update-state', { phase: 'downloading', percent: 42, message: '正在下载 42%' });
+            await new Promise((r) => setTimeout(r, 500));
+            const probe2 = await mainWin!.webContents.executeJavaScript(`(() => {
+              const s = document.getElementById('dsh-ext-dl');
+              const f = document.getElementById('dsh-ext-dl-fill');
+              const t = document.getElementById('dsh-ext-dl-text');
+              const r = s ? s.getBoundingClientRect() : null;
+              const row = document.getElementById('dsh-ext-update-progress');
+              const rowLabel = document.getElementById('dsh-ext-update-progress-label');
+              const rowR = row ? row.getBoundingClientRect() : null;
+              return JSON.stringify({
+                count: document.querySelectorAll('#dsh-ext-dl').length,
+                display: s ? s.style.display : 'missing',
+                fillWidth: f ? f.style.width : 'missing',
+                text: t ? t.textContent : 'missing',
+                rect: r ? { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) } : null,
+                vw: innerWidth,
+                vh: innerHeight,
+                settingsRowVisible: !!(rowR && rowR.width > 0 && rowR.height > 0),
+                settingsRowText: rowLabel ? rowLabel.textContent : 'missing',
+              });
+            })()`);
+            console.log('[smoke] sidebar-probe2:', probe2);
+            const p2 = JSON.parse(probe2) as {
+              count: number; display: string; fillWidth: string; text: string;
+              rect: { x: number; y: number; w: number; h: number } | null;
+              vw: number; vh: number; settingsRowVisible: boolean; settingsRowText: string;
+            };
+            if (p2.display === 'missing') {
+              console.error('[smoke] 侧栏「设置」旁的下载进度条没被注入（用户会"看不到下载中"）');
+              process.exitCode = 1;
+            } else if (p2.count !== 1) {
+              console.error('[smoke] 侧栏下载进度条重复注入：count=' + String(p2.count));
+              process.exitCode = 1;
+            } else if (p2.display === 'none') {
+              console.error('[smoke] 下载中（42%）时侧栏进度条仍是隐藏的');
+              process.exitCode = 1;
+            } else if (!p2.rect || p2.rect.w <= 0 || p2.rect.h <= 0) {
+              console.error('[smoke] 侧栏进度条尺寸为 0：' + JSON.stringify(p2.rect));
+              process.exitCode = 1;
+            } else if (!p2.text.includes('42%')) {
+              console.error('[smoke] 侧栏进度条没显示百分比文字：' + p2.text);
+              process.exitCode = 1;
+            } else if (
+              p2.rect.x < 0 || p2.rect.y < 0 ||
+              p2.rect.x + p2.rect.w > p2.vw || p2.rect.y + p2.rect.h > p2.vh
+            ) {
+              console.error('[smoke] 侧栏进度条超出窗口，用户看不见：' + JSON.stringify(p2.rect) + ' 视口 ' + String(p2.vw) + 'x' + String(p2.vh));
+              process.exitCode = 1;
+            } else if (!p2.settingsRowText.includes('42%')) {
+              // 设置页那一行只在"设置页开着"时可见（冒烟此时停在宠物面板），
+              // 所以只断言它的文字被驱动了；可见性由侧栏那条兜底。
+              console.error('[smoke] 设置页版本行的进度没跟上：label=' + p2.settingsRowText);
+              process.exitCode = 1;
+            } else {
+              console.log('[smoke] 侧栏下载进度条可见：' + JSON.stringify(p2.rect) + ' 文字=' + p2.text);
+            }
+
+            // 下载结束（或中断）后必须自己消失，不留残影
+            mainWin!.webContents.send('shell:update-state', { phase: 'idle', message: '' });
+            await new Promise((r) => setTimeout(r, 400));
+            const afterIdle = await mainWin!.webContents.executeJavaScript(
+              `(() => { const s = document.getElementById('dsh-ext-dl'); return s ? s.style.display : 'missing'; })()`,
+            );
+            if (afterIdle !== 'none') {
+              console.error('[smoke] 下载结束后侧栏进度条没隐藏：' + String(afterIdle));
+              process.exitCode = 1;
+            }
+          } catch (e) {
+            console.error('[smoke] 侧栏进度条检查失败:', e);
+            process.exitCode = 1;
+          }
+
+          // ── 内置宠物「青色大肥鱼」：就位了没 + 在宠物窗口里真的画出来了没 ──────
+          // 起因（2026-10-03 用户要求）：再加一条自家 logo 的青色鲸鱼宠物。
+          // 断言分两段：① asar 里的内置宠物有没有被复制到用户宠物目录；
+          // ② 宠物窗口的 canvas 里有没有**真的画出不透明像素**（只断言文件存在，
+          //    会出现"图在、但窗口一片空白"这种最难查的故障）。
+          try {
+            const whaleDir = path.join(pet!.userPetsDir(), '青色大肥鱼');
+            const manifestPath = path.join(whaleDir, 'manifest.json');
+            const sheetPath = path.join(whaleDir, 'spritesheet.png');
+            if (!fs.existsSync(manifestPath) || !fs.existsSync(sheetPath)) {
+              console.error('[smoke] 内置宠物「青色大肥鱼」没复制到用户宠物目录：' + whaleDir);
+              process.exitCode = 1;
+            } else {
+              const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) as {
+                rows?: { state?: string; frames?: number }[];
+              };
+              const states = (manifest.rows ?? []).map((r) => r.state ?? '');
+              for (const want of ['idle', 'waving', 'jumping', 'standing', 'ball', 'running-left', 'running-right']) {
+                if (!states.includes(want)) {
+                  console.error('[smoke] 「青色大肥鱼」缺少动作：' + want + '（现有：' + states.join(',') + '）');
+                  process.exitCode = 1;
+                }
+              }
+              store.set('petGif', '青色大肥鱼');
+              const petWin = pet!.create();
+              store.set('petVisible', true);
+              pet!.reload();
+              await new Promise((r) => setTimeout(r, 2500));
+              const drawn = await petWin.webContents.executeJavaScript(`(() => {
+                const c = document.getElementById('sprite-pet');
+                if (!c) return JSON.stringify({ err: 'no canvas' });
+                const ctx = c.getContext('2d');
+                const d = ctx.getImageData(0, 0, c.width, c.height).data;
+                let opaque = 0;
+                for (let i = 3; i < d.length; i += 4) if (d[i] > 24) opaque++;
+                return JSON.stringify({ w: c.width, h: c.height, hidden: c.hidden, opaque });
+              })()`);
+              console.log('[smoke] whale-pet:', drawn);
+              const dp = JSON.parse(drawn) as { w?: number; h?: number; hidden?: boolean; opaque?: number; err?: string };
+              if (dp.err) {
+                console.error('[smoke] 宠物窗口里没有 canvas：' + dp.err);
+                process.exitCode = 1;
+              } else if (dp.hidden) {
+                console.error('[smoke] 宠物窗口的 canvas 还是 hidden（选择器没生效）');
+                process.exitCode = 1;
+              } else if ((dp.opaque ?? 0) < 2000) {
+                console.error('[smoke] 「青色大肥鱼」在宠物窗口里几乎没画出东西：不透明像素=' + String(dp.opaque));
+                process.exitCode = 1;
+              } else {
+                console.log('[smoke] 「青色大肥鱼」已就位并画出：' + String(dp.w) + '×' + String(dp.h) + ' 不透明像素 ' + String(dp.opaque));
+              }
+            }
+          } catch (e) {
+            console.error('[smoke] 青色大肥鱼宠物检查失败:', e);
+            process.exitCode = 1;
+          }
         })();
       }, 2500);
 
       setTimeout(() => {
         console.log('[smoke] ok');
         app.quit();
-      }, 8000);
+      }, 15000);
     }
   });
 

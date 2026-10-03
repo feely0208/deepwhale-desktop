@@ -3,7 +3,9 @@ node_modules/
 
 # 构建产物
 dist/
-release/
+# 所有本地打包输出目录（release/、release-test/、release-候选2/ …）
+# 用通配符是为了防止"新起一个名字就漏进版本库"——今天就差点把 850MB 的测试包提交上去
+release*/
 
 # 本机 npm 缓存（若配置在项目内）
 .npm-cache/

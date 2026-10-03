@@ -120,6 +120,12 @@ export class PetWindow {
       webPreferences: {
         contextIsolation: true,
         nodeIntegration: false,
+        // ⚠️ 2026-10-03 修（Windows 用户实测：宠物冻在原地、动作全不触发、点击也不冲刺）：
+        //    Windows 的 Chromium 遮挡检测比 macOS 激进得多 —— 一个透明、无焦点、置顶的
+        //    小窗口很容易被判成"被遮挡"，渲染进程随即被降频，requestAnimationFrame
+        //    几乎不再回调 → 精灵停在某一帧、悬停/点击都不再有反应。
+        //    这里关掉该窗口的后台节流（配合 index.ts 的 disable-backgrounding-occluded-windows）。
+        backgroundThrottling: false,
         preload: path.join(__dirname, '../preload/preload.js'),
       },
     });
@@ -166,6 +172,21 @@ export class PetWindow {
   toggle(): void {
     if (this.window?.isVisible()) this.hide();
     else this.show();
+  }
+
+  /**
+   * 光标进入/离开宠物（渲染进程通过 `pet:hover` 上报）。
+   *
+   * 穿透点击开着时，窗口默认把鼠标事件全放给桌面 —— 用户会以为"宠物坏了"：
+   * 悬停不出动作、点击不冲刺。这里改成**只在光标真的压在宠物身上时**才接收事件，
+   * 兼顾"不挡住桌面操作"和"宠物可交互"。
+   *
+   * ⚠️ 依赖 `setIgnoreMouseEvents(true, { forward: true })` 会把 mousemove 转发给渲染进程，
+   *    所以即使处于穿透态，pointerenter/leave 依然能收到（这是这个方案成立的前提）。
+   */
+  setHovering(hovering: boolean): void {
+    if (!this.store.get('clickThrough')) return;
+    this.window?.setIgnoreMouseEvents(!hovering, { forward: true });
   }
 
   reload(): void {

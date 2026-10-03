@@ -48,6 +48,7 @@
   var hoverTimer = null;
   var holdTimer = null;
   var rafId = null;
+  var watchdogId = null;   // rAF 被平台节流时的兜底定时器（见 startLoop）
   var hovered = false;
   var dragging = false;
   var sideView = false;          // manifest.sideView：侧面视角的宠物才随位置翻转
@@ -214,27 +215,42 @@
   }
 
   /** 用真实时间累积推进帧：掉帧时补步，不会越走越偏 */
+  var lastAdvanceAt = 0;
+  function advance(now) {
+    if (!lastTs) lastTs = now;
+    var dt = now - lastTs;
+    lastTs = now;
+    if (dt > 200) dt = 200;           // 窗口被挂起后回来不要"快进"
+    accMs += dt;
+    var dur = frameDuration();
+    var frames = (curRow && curRow.frames) || 1;
+    var advanced = false;
+    while (accMs >= dur) {
+      accMs -= dur;
+      frameIdx = (frameIdx + 1) % frames;
+      advanced = true;
+    }
+    if (advanced || fadeFrom) drawSpriteFrame();
+    lastAdvanceAt = now;
+  }
+
   function startLoop() {
     if (rafId !== null) return;
     lastTs = 0;
-    var tick = function (ts) {
-      if (!lastTs) lastTs = ts;
-      var dt = ts - lastTs;
-      lastTs = ts;
-      if (dt > 200) dt = 200;           // 窗口被挂起后回来不要"快进"
-      accMs += dt;
-      var dur = frameDuration();
-      var frames = (curRow && curRow.frames) || 1;
-      var advanced = false;
-      while (accMs >= dur) {
-        accMs -= dur;
-        frameIdx = (frameIdx + 1) % frames;
-        advanced = true;
-      }
-      if (advanced || fadeFrom) drawSpriteFrame();
+    rafId = requestAnimationFrame(function tick(ts) {
+      advance(typeof ts === 'number' ? ts : performance.now());
       rafId = requestAnimationFrame(tick);
-    };
-    rafId = requestAnimationFrame(tick);
+    });
+    // ⚠️ 2026-10-03 兜底（Windows 用户实测宠物"冻住"）：
+    //    Windows 的遮挡检测可能把 rAF 节流到几乎不回调，精灵就停在某一帧。
+    //    定时器不受这个节流影响；一旦发现 rAF 掉队（>120ms 没推进），
+    //    就用同一套真实时间逻辑补上，保证动作总能往前走。
+    if (watchdogId === null) {
+      watchdogId = setInterval(function () {
+        var now = performance.now();
+        if (now - lastAdvanceAt > 120) advance(now);
+      }, 80);
+    }
   }
 
   /* ================= 动作调度 ================= */
@@ -333,12 +349,15 @@
 
   petEl.addEventListener('pointerenter', function () {
     hovered = true;
+    // 穿透模式下告诉主进程"光标在宠物身上了" → 临时接收鼠标事件（否则点不动它）
+    if (window.dsh && typeof window.dsh.petHover === 'function') window.dsh.petHover(true);
     if (!isSprite) return;
     if (performance.now() < dashUntil) return;   // 冲刺中：别打断
     startHoverCycle();
   });
   petEl.addEventListener('pointerleave', function () {
     hovered = false;
+    if (window.dsh && typeof window.dsh.petHover === 'function') window.dsh.petHover(false);
     stopHoverCycle();
     // ⚠️ 冲刺时窗口会滑走，光标必然离开窗口 → 这里**不能**把动作切回 idle，
     //    否则冲刺动画刚开头就被掐断（用户实测："划水还是之前一样"，只看到滑动）。

@@ -11,7 +11,7 @@
  *
  * 用临时 userData + 很小的调度间隔，几秒内跑完，不影响用户正在用的应用。
  */
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
 const fs = require('fs');
 const path = require('path');
 
@@ -189,6 +189,28 @@ async function main() {
   const hasDashBridge = await win.webContents.executeJavaScript('typeof window.dsh.petDash === "function"');
   if (hasDashBridge) ok('渲染层能请求冲刺（window.dsh.petDash 已暴露）');
   else bad('window.dsh.petDash 没暴露 —— 点了不会窜');
+
+  // 悬停上报桥：穿透点击开着时，主进程靠它把"光标在宠物身上"临时解除穿透，
+  // 否则用户悬停不出动作、点击也不冲刺（Windows 用户实测的"宠物坏了"）。
+  const hasHoverBridge = await win.webContents.executeJavaScript('typeof window.dsh.petHover === "function"');
+  if (hasHoverBridge) ok('渲染层能上报悬停（使穿透模式下宠物仍可点）');
+  else bad('window.dsh.petHover 没暴露 —— 穿透模式下宠物点不动');
+  // ⚠️ contextBridge 暴露的 window.dsh 是冻结对象，没法在渲染层劫持它做探针 ——
+  //    所以直接在**主进程**监听 pet:hover，验证"鼠标进出真的传到了主进程"（端到端）。
+  const hoverEvents = [];
+  const hoverSpy = (_e, v) => hoverEvents.push(v);
+  ipcMain.on('pet:hover', hoverSpy);
+  await win.webContents.executeJavaScript(`(() => {
+    const el = document.getElementById('pet');
+    if (!el) return 'no #pet';
+    el.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }));
+    el.dispatchEvent(new PointerEvent('pointerleave', { bubbles: true }));
+    return 'ok';
+  })()`);
+  await new Promise((r) => setTimeout(r, 300));
+  ipcMain.removeListener('pet:hover', hoverSpy);
+  if (hoverEvents.join(',') === 'true,false') ok('鼠标进出宠物会报到主进程（穿透模式据此临时开放点击）');
+  else bad('悬停上报没到主进程：' + JSON.stringify(hoverEvents));
   const dashState = await win.webContents.executeJavaScript('window.__petDebug.dash()');
   if (dashState === 'dash') ok('点击默认动作 = 冲刺划水');
   else bad('点击默认动作不是冲刺，实际=' + dashState);

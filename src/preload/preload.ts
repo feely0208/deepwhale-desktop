@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('dsh', {
   petSpriteInfo: (name: string) => ipcRenderer.invoke('pet:sprite-info', name),
   /** 冲刺划水：让宠物窗口按方向滑出去半个屏幕（主进程做缓动 + 边界限制） */
   petDash: (direction: number) => ipcRenderer.send('pet:dash', direction),
+  petHover: (hovering: boolean) => ipcRenderer.send('pet:hover', hovering),
 
   // ---- 用量面板 ----
   usageRefresh: () => ipcRenderer.send('usage:refresh'),

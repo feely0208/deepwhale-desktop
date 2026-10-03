@@ -40,6 +40,7 @@ import { profileDirOf } from './profile';
 import { UpdateManager } from './update-manager';
 import type { UpdateState } from './update-manager';
 import { installCrashGuard, crashLogDir, appendCrashLog } from './crash-guard';
+import { repairWindowsShortcuts } from './windows-shortcut';
 
 /** 冒烟测试模式：自动启动、打印关键事件、8 秒后退出（供 CI/自动化验证） */
 const SMOKE = !!process.env.DSH_DESKTOP_SMOKE;
@@ -913,6 +914,8 @@ function registerIpc(): void {
     store.set('clickThrough', enabled);
     pet?.window?.setIgnoreMouseEvents(enabled, { forward: true });
   });
+  // 光标进入/离开宠物：穿透模式下"只在宠物身上才可点"（见 PetManager.setHovering）
+  ipcMain.on('pet:hover', (_e, hovering: boolean) => pet?.setHovering(!!hovering));
   ipcMain.on('pet:open-folder', () => pet?.openPetsFolder());
 
   // ---- 宠物工坊 ----
@@ -1063,7 +1066,20 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
   await win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(startingPageHtml(failed)));
 }
 
+  // ⚠️ 2026-10-03：Windows 的 Chromium 遮挡检测很激进 —— 透明 + 无焦点 + 置顶的宠物窗口
+  //    经常被判成"被遮挡"，渲染进程被降频，requestAnimationFrame 几乎不再回调：
+  //    用户看到的是"宠物冻住、动作全不触发、点击也不冲刺"（Windows 用户实测）。
+  //    关掉"被遮挡即后台化"，配合 pet.ts 里该窗口的 backgroundThrottling:false。
+  app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
+
   app.whenReady().then(async () => {
+    // Windows：自愈被更新搞歪的桌面/开始菜单快捷方式（只在 win32 + 打包态执行）。
+    //    用户实测：自动更新后桌面快捷方式被指到 %TEMP%\…\old-install\，而普通用户
+    //    不会去开始菜单重建 → 必须在启动时自动修（见 windows-shortcut.ts 的注释）。
+    void repairWindowsShortcuts({ isPackaged: app.isPackaged }).catch((e) => {
+      console.warn('[win-shortcut] 自愈失败（已忽略）:', e instanceof Error ? e.message : String(e));
+    });
+
     // ⚠️ 首次启动判断必须在**任何 store.set()/save() 之前**取值：
     //    settings.json 由本应用在保存设置时创建，所以"本次启动前它不存在"
     //    就等价于"全新安装"。老用户升级时该文件早已存在 → 永不显示引导。
@@ -1720,6 +1736,38 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
                 process.exitCode = 1;
               } else {
                 console.log('[smoke] 「青色大肥鱼」已就位并画出：' + String(dp.w) + '×' + String(dp.h) + ' 不透明像素 ' + String(dp.opaque));
+              }
+
+              // —— Windows 实测的"宠物冻住"回归断言（2026-10-03）——
+              // ① 该窗口必须关掉后台节流：透明置顶窗口在 Windows 上容易被判成"被遮挡"，
+              //    一旦节流，requestAnimationFrame 几乎不回调，宠物就停在某一帧、
+              //    悬停点击全无反应（用户就是这么反馈的）。
+              // ② 采样两次帧号，必须真的在往前走 —— 直接验"动没动"，而不是只看配置。
+              const bgThrottling =
+                typeof (petWin.webContents as unknown as { getBackgroundThrottling?: () => boolean })
+                  .getBackgroundThrottling === 'function'
+                  ? (petWin.webContents as unknown as { getBackgroundThrottling: () => boolean }).getBackgroundThrottling()
+                  : null;
+              if (bgThrottling === true) {
+                console.error('[smoke] 宠物窗口仍开着后台节流（Windows 上会冻住不动）');
+                process.exitCode = 1;
+              } else {
+                console.log('[smoke] 宠物窗口后台节流：' + String(bgThrottling));
+              }
+              const frameA = await petWin.webContents.executeJavaScript(
+                'window.__petDebug ? window.__petDebug.info().frame : -1',
+              );
+              await new Promise((r) => setTimeout(r, 700));
+              const frameB = await petWin.webContents.executeJavaScript(
+                'window.__petDebug ? window.__petDebug.info().frame : -1',
+              );
+              if (frameA === frameB && frameA !== -1) {
+                console.error(
+                  '[smoke] 宠物动效没在走：700ms 内帧号没变（frame=' + String(frameA) + '，用户会看到"冻住"）',
+                );
+                process.exitCode = 1;
+              } else {
+                console.log('[smoke] 宠物动效在走：' + String(frameA) + ' → ' + String(frameB));
               }
             }
           } catch (e) {

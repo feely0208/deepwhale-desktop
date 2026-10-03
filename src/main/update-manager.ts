@@ -512,9 +512,14 @@ export class UpdateManager {
         ['立即重启', '退出时自动安装'],
       );
       if (choice === 0) {
-        // isSilent=false：显示安装界面；isForceRunAfter=true：装完自动启动
+        // ⚠️ 2026-10-03 改成**静默**安装（isSilent=true）：
+        //    原来传 false 会弹 NSIS 完整安装向导；配合 nsis.allowToChangeInstallationDirectory
+        //    一旦目录被改成默认值/临时目录，桌面快捷方式就跟着指歪（Windows 用户实测：
+        //    快捷方式被指到 %TEMP%\...\old-install\，而且普通用户根本不会去开始菜单找）。
+        //    静默安装会复用注册表里登记的安装目录 → 快捷方式重建正确；
+        //    isForceRunAfter=true 保持不变：装完自动启动。
         setImmediate(() => {
-          autoUpdater.quitAndInstall(false, true);
+          autoUpdater.quitAndInstall(true, true);
         });
       }
       // 选"退出时自动安装"：无需额外动作（autoInstallOnAppQuit 已开启），

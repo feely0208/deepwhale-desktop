@@ -38,7 +38,8 @@
     "test:pet": "npm run build && electron scripts/test-pet-actions.js",
     "dist:test": "npm run build && electron-builder --mac --config.directories.output=release-test",
     "check:cdn": "node scripts/check-cdn-artifacts.js",
-    "manifest:rewrite": "node scripts/rewrite-update-manifest.js"
+    "manifest:rewrite": "node scripts/rewrite-update-manifest.js",
+    "test:win-shortcut": "npm run build && node scripts/test-win-shortcut.js"
   },
   "dependencies": {
     "electron-updater": "^6.8.9",

@@ -51,13 +51,21 @@ jobs:
           # 三类产物都要同步。此前只同步 DeepWhale-Desktop-*，律师端与套装
           # 一直是手工上传的 —— 这就是「官网与 GitHub 长期不一致」的根因。
           # 逐个 pattern 拉取：某个 tag 下没有该类资产时只提示、不失败。
-          for PAT in 'DeepWhale-Desktop-*' 'DeepWhale-Lawyer-*' 'DeepWhale-Suite-*'; do
+          # ⚠️ 2026-10-03 修：更新清单（latest*.yml / lawyer-latest*.yml）也要拉！
+          #    它们是 electron-updater 的更新源。原来只拉 DeepWhale-* 安装包，
+          #    清单压根没下来 —— 于是 CDN 上的清单永远停在手工补传的那一版，
+          #    用户收不到自动更新（桌面端 1.0.38/1.0.39 与律师端 0.1.9 都踩过）。
+          #    每一次 release 各带自己的清单，所以这里按 tag 拉是安全的。
+          for PAT in 'DeepWhale-Desktop-*' 'DeepWhale-Lawyer-*' 'DeepWhale-Suite-*' \
+                     'latest*.yml' 'lawyer-latest*.yml'; do
             echo "→ 拉取 ${PAT}"
             gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir obs-upload \
               --pattern "$PAT" --clobber || echo "  （该 tag 下没有匹配 $PAT 的资产，跳过）"
           done
-          # 去掉 electron-builder 的调试/元数据文件
-          rm -f obs-upload/*.blockmap obs-upload/*.yml
+          # 去掉 electron-builder 的调试/元数据文件。
+          # ⚠️ 不要删 *.yml：那里面有 latest*.yml / lawyer-latest*.yml 更新清单，
+          #    删掉就等于把自动更新链路掐了（原来这条 rm 就是这么写的）。
+          rm -f obs-upload/*.blockmap
           COUNT=$(find obs-upload -type f | wc -l | tr -d ' ')
           echo "共取到 $COUNT 个资产"
           # 一个都没取到说明 tag 填错了 —— 这时静默「成功」最危险，
@@ -108,6 +116,8 @@ jobs:
           # 若拿整个下载目录去 CDN 上找，会对着本就不该存在的文件报 403 —— 
           # 于是出现"上传全部成功、验证却失败"的假失败（实测踩过：
           # 5 个文件全部 ✅ 上传，却因为两个桌面端 .zip 不在 CDN 上而报错）。
-          done < <(cd obs-upload && ls -1 | grep -vE '\.blockmap$|^latest.*\.yml$|^DeepWhale-Desktop-.*\.zip$')
+          # 只跳过确实不该上传的：blockmap 与桌面端 .zip（官网不提供，且 sync-to-obs 会排除）。
+          # 更新清单必须验证 —— 它是"用户能不能收到更新"的唯一依据。
+          done < <(cd obs-upload && ls -1 | grep -vE '\.blockmap$|^DeepWhale-Desktop-.*\.zip$')
           test "$fail" -eq 0 || { echo "::error::有 $fail 个文件经 CDN 取不到"; exit 1; }
           echo "✅ 全部可经 CDN 下载"

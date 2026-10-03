@@ -292,6 +292,14 @@ jobs:
           test "$missing" -eq 0 || { echo "::error::有 $missing 个平台产物缺失，拒绝发布"; exit 1; }
           echo "✅ 四平台产物齐备"
 
+      # ⚠️ 2026-10-03 新增：mac 的 arm64 / x64 是两个 job，各生成一份 latest-mac.yml，
+      #    download-artifact 合并时后传的覆盖先传的 → 清单里只剩一个架构，
+      #    Apple 芯片用户会被推 x64 包。这里用"目录里实际存在的 zip"把缺失架构补回来，
+      #    并按真实产物重算 sha512/size（顺带兜住任何构建后改动产物的情形）。
+      - name: 校正 mac 更新清单（补双臂 + 重算哈希）
+        working-directory: .
+        run: node scripts/rewrite-update-manifest.js --manifest dist-assets/latest-mac.yml --dir dist-assets --ensure-both-arch
+
       - name: 创建 Draft Release 并上传全部附件
         run: |
           # 用模板表达式取标签名（环境变量 GITHUB_REF_NAME 在某些场景为空，会导致建出 untagged 草稿）
@@ -384,3 +392,18 @@ jobs:
           D=$((END-START)); [ "$D" -eq 0 ] && D=1
           SZ=$(du -sm obs-desktop | cut -f1)
           echo "✅ 桌面端已同步到 OBS：${SZ} MB / ${D}s / $((SZ/D)) MB/s"
+
+      # ⚠️ 2026-10-03 新增：同步完立刻核对 CDN —— 清单里引用的文件必须真的能下。
+      #    只核对桌面端（--scope desktop）：律师端有它自己的发布流程，
+      #    免得"律师端清单旧"这种无关问题连带把桌面发版判失败。
+      - name: 核对 CDN 上的更新清单与产物（不通过即失败）
+        working-directory: .
+        run: |
+          set -e
+          for i in 1 2 3; do
+            if node scripts/check-cdn-artifacts.js --scope desktop; then exit 0; fi
+            echo "::warning::第 $i 次 CDN 核对未通过，20 秒后重试"
+            sleep 20
+          done
+          echo "::error::CDN 产物核对连续 3 次失败"
+          exit 1

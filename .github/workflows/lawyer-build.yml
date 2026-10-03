@@ -135,6 +135,14 @@ jobs:
           done
           rm -f dist/*.blockmap dist/builder-debug.yml
 
+      # ⚠️ 2026-10-03 修：上面用 ditto 把 zip **重新打了一遍**（塞了「首次使用请双击我」），
+      #    zip 字节数变了，但 electron-builder 生成的 lawyer-latest-mac.yml 还是重打前的哈希
+      #    → 实测清单写 144,407,164 而实际 144,866,154，用户自动更新**下载完校验失败**。
+      #    这里按实际产物重算 sha512/size，再上传。
+      - name: 重建更新清单（zip 被 ditto 重打过，哈希必须跟着变）
+        working-directory: .
+        run: node scripts/rewrite-update-manifest.js --manifest lawyer/dist/lawyer-latest-mac.yml --dir lawyer/dist
+
       - name: 上传 macOS 产物
         uses: actions/upload-artifact@v4
         with:

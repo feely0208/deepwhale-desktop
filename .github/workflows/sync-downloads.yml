@@ -95,6 +95,23 @@ jobs:
           SZ=$(du -sm obs-upload | cut -f1)
           echo "✅ 已同步到 OBS：${SZ} MB / ${D}s / $((SZ/D)) MB/s"
 
+      # ⚠️ 2026-10-03 新增：核对"清单里引用的文件"在 CDN 上真的能下、大小对得上、架构齐。
+      #    以前验收只看清单里的 version 那一行 —— 那一步一直是绿的，却藏了两个坑：
+      #    ① macOS 的 latest-mac.yml 指向 zip 而 CDN 上没有 zip（403）：用户点更新必失败；
+      #    ② 两份 per-arch 清单互相覆盖，只剩 x64，Apple 芯片用户被推错包。
+      #    挂了这一步之后，这类问题会在发版时就红着失败，而不是等用户报错。
+      - name: 核对 CDN 更新清单与产物（不通过即失败）
+        working-directory: .
+        run: |
+          set -e
+          for i in 1 2 3; do
+            if node scripts/check-cdn-artifacts.js; then exit 0; fi
+            echo "::warning::第 $i 次 CDN 核对未通过，20 秒后重试"
+            sleep 20
+          done
+          echo "::error::CDN 产物核对连续 3 次失败"
+          exit 1
+
       # 经 CDN 验证 —— 那才是用户真正走的路径。
       # ⚠️ 必须用 HEAD：用 `curl -o /dev/null` 会把每个安装包**整份下载回来**
       # 只为看一眼状态码，3.3 GB 白等十几分钟（实测踩过）。

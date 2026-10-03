@@ -47,6 +47,8 @@ const MANIFESTS =
 const MAC_REQUIRE_BOTH_ARCH = true;
 
 let failures = 0;
+/** 需要去 CDN 控制台刷新的 URL（源站已对、缓存未失效） */
+const purgeHints = [];
 const fail = (msg) => {
   failures += 1;
   console.error('  ❌ ' + msg);
@@ -99,7 +101,24 @@ async function checkFile(url, expectSize) {
   }
   const len = Number(res.headers['content-length'] ?? 0);
   if (expectSize && len && len !== expectSize) {
-    return { okFile: false, why: `清单写 ${expectSize}B，CDN 实际 ${len}B` };
+    // ⚠️ 2026-10-03：大文件（dmg/zip/exe…）在 CDN 上是 30 天缓存，重新上传同名文件后
+    //    缓存不会自动失效 —— 只打缓存会看到旧大小，误判成"没传上去"。
+    //    这里再打一次**源站**（带 cache-buster）：源站对了 = 只是缓存没刷，需要去控制台刷新 URL。
+    let originLen = 0;
+    try {
+      const busted = await request(`${url}${url.includes('?') ? '&' : '?'}cb=${Date.now()}`, 'HEAD');
+      originLen = Number(busted.headers['content-length'] ?? 0);
+    } catch (e) {
+      originLen = 0;
+    }
+    if (originLen && originLen === expectSize) {
+      return {
+        okFile: false,
+        why: `清单写 ${expectSize}B，源站已是新文件，但 CDN 缓存还是旧文件（${len}B）→ 去刷新这个 URL`,
+        needsPurge: true,
+      };
+    }
+    return { okFile: false, why: `清单写 ${expectSize}B，CDN 实际 ${len}B（源站 ${originLen || '未知'}）` };
   }
   return { okFile: true, size: len || expectSize || 0 };
 }
@@ -161,6 +180,7 @@ async function sha512Of(url) {
         ok(`${name} → ${f.url}  HTTP 200  ${(r.size / 1048576).toFixed(1)}MB${extra}`);
       } else {
         fail(`${name} → ${f.url}  ${r.why}  ← 用户走到这一步就会失败`);
+        if (r.needsPurge) purgeHints.push(`${BASE}/${f.url}`);
       }
     }
 
@@ -185,6 +205,10 @@ async function sha512Of(url) {
   const lawyerV = seenVersions.get('lawyer-latest-mac.yml');
   if (lawyerV) ok(`律师端清单版本：${lawyerV}`);
 
+  if (purgeHints.length) {
+    console.log('\n需要到 CDN 控制台「刷新预热 → URL 刷新」清缓存：');
+    for (const u of purgeHints) console.log('  · ' + u);
+  }
   console.log(failures === 0 ? '\n✅ CDN 产物核对通过' : `\n❌ CDN 产物核对失败 ${failures} 项`);
   process.exit(failures === 0 ? 0 : 1);
 })();

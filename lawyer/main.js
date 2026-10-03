@@ -898,6 +898,7 @@ function buildAppMenu() {
     {
       label: '帮助',
       submenu: [
+        { label: '检查更新…', click: () => require('./lib/update').checkNow() },
         { label: '深鲸官网', click: () => openExternal('https://deepwhale.org.cn') },
         { label: '下载与安装说明', click: () => openExternal('https://deepwhale.org.cn/download.html') },
         ...(isMac
@@ -912,6 +913,9 @@ function buildAppMenu() {
 
 app.whenReady().then(() => {
   buildAppMenu();
+  // 自动更新（0.1.8 起）：启动 15s 后自动检查 + 每 6 小时一次。
+  // mac 上未签名装不了更新，所以自动把 dmg 下好，只留「拖一下」。见 lib/update.js。
+  require('./lib/update').init();
   app.setAboutPanelOptions({
     applicationName: APP_DISPLAY_NAME,
     applicationVersion: app.getVersion(),

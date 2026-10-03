@@ -44,6 +44,21 @@ const FIRST_CHECK_DELAY_MS = 15_000;
 /** 之后每 6 小时一次。 */
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
+/**
+ * 下载/检查过程的日志。
+ * 2026-10-03 补：0.1.9 那次用户点了检查更新、dmg 也下好了，但**进度条没看见**，
+ * 而律师端当时【完全没有日志】—— 连"到底跑没跑、走到哪一步"都查不到。
+ * 诊断能力比功能本身更重要，先补上。
+ */
+const LOG_FILE = path.join(app.getPath('logs') || app.getPath('userData'), 'lawyer-update.log');
+function logUpdate(msg) {
+  try {
+    fs.appendFileSync(LOG_FILE, `[${new Date().toISOString()}] ${msg}\n`);
+  } catch {
+    /* 日志失败不影响更新 */
+  }
+}
+
 let promptOpen = false;
 let interactivePending = false;
 let snoozeUntil = 0;
@@ -70,6 +85,16 @@ function dmgName(version) {
 }
 
 function setDockProgress(value) {
+  // 2026-10-03 修：原来只往窗口上挂 setProgressBar —— 律师端常常没有窗口
+  //（菜单里点「检查更新…」时可能没有可见窗口），结果 132MB 下载全程【没有任何反馈】。
+  // Dock 徽标是应用级的，不依赖窗口，先保证它一定能看见。
+  try {
+    if (app.dock && typeof app.dock.setBadge === 'function') {
+      app.dock.setBadge(value >= 0 ? `${Math.round(value * 100)}%` : '');
+    }
+  } catch {
+    /* 非 macOS 或不可用 */
+  }
   for (const w of BrowserWindow.getAllWindows()) {
     try {
       w.setProgressBar(value);
@@ -85,8 +110,12 @@ async function downloadMacDmg(version, onProgress) {
   try {
     // 已下过就不重复下
     if (fs.existsSync(file) && fs.statSync(file).size > 1024 * 1024) return file;
+    logUpdate(`开始下载 ${dmgName(version)}`);
     const res = await fetch(`${FEED_BASE}/${dmgName(version)}`);
-    if (!res.ok || res.body === null) return null;
+    if (!res.ok || res.body === null) {
+      logUpdate(`下载失败：HTTP ${res.status}`);
+      return null;
+    }
     const total = Number(res.headers.get('content-length') || '0');
     const stream = fs.createWriteStream(file);
     let received = 0;
@@ -98,6 +127,7 @@ async function downloadMacDmg(version, onProgress) {
         const percent = Math.round((received / total) * 100);
         if (percent !== last) {
           last = percent;
+          if (percent % 10 === 0) logUpdate(`进度 ${percent}%`);
           if (typeof onProgress === 'function') onProgress(percent);
         }
       }
@@ -124,6 +154,7 @@ async function onAvailable(info) {
       // mac：Squirrel 装不了 → 替用户把 dmg 下好，只留"拖一下"
       const dmg = await downloadMacDmg(info.version, (percent) => setDockProgress(percent / 100));
       if (dmg) {
+        logUpdate(`下载完成：${dmg}`);
         const choice = await dialog.showMessageBox({
           type: 'info',
           title: '新版本已下载好',
@@ -260,6 +291,7 @@ async function check(interactive) {
 
 /** 供菜单/托盘调用：手动检查。 */
 function checkNow() {
+  logUpdate('用户手动点了「检查更新…」');
   return check(true);
 }
 

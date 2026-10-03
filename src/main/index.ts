@@ -763,6 +763,29 @@ function registerIpc(): void {
     }
   }
 
+  // ---- 设置页两个按钮（2026-10-03）----
+  // 与托盘菜单同源：检查更新 = tray.ts → onCheckUpdate → UpdateManager.checkNow()；
+  // 退出 = tray.ts → onQuit → app.quit()。按钮比菜单项更容易误点，所以退出先确认。
+  ipcMain.handle('shell:check-update', async (): Promise<{ ok: boolean }> => {
+    await updates?.checkNow();
+    return { ok: true };
+  });
+  ipcMain.handle('shell:quit', async (): Promise<{ ok: boolean }> => {
+    if (mainWin && !mainWin.isDestroyed()) {
+      const { response } = await dialog.showMessageBox(mainWin, {
+        type: 'question',
+        buttons: ['彻底退出', '取消'],
+        defaultId: 1,
+        cancelId: 1,
+        message: '要彻底退出 DeepWhale Desktop 吗？',
+        detail: '退出后后台进程会一并结束，需要重新启动应用。',
+      });
+      if (response !== 0) return { ok: false };
+    }
+    app.quit();
+    return { ok: true };
+  });
+
   ipcMain.handle(
     'document:print',
     async (_e, payload: { path?: string }): Promise<{ ok: boolean; message?: string }> => {

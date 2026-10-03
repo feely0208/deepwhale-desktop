@@ -201,6 +201,20 @@ export class UpdateManager {
   private setState(next: UpdateState): void {
     this.state = next;
     this.onStateChange?.(next);
+    // 2026-10-03：把更新状态广播给渲染层 —— 设置页版本号那一行用它画下载进度条。
+    // mac 上是「静默下载 285MB」，一路上不给任何反馈，用户会以为卡死。
+    try {
+      const payload = {
+        phase: next.phase,
+        percent: (next as { percent?: number }).percent,
+        message: next.message,
+      };
+      for (const w of BrowserWindow.getAllWindows()) {
+        if (!w.isDestroyed()) w.webContents.send('shell:update-state', payload);
+      }
+    } catch {
+      /* 广播失败不影响更新流程 */
+    }
   }
 
   /** 手动检查在途：用于在 update-not-available 时补一次反馈（见 wireEvents）。 */

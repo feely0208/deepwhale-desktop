@@ -217,3 +217,31 @@
   font-size: 13px;
   margin-bottom: 8px;
 }
+
+/* ---------- 版本行右侧：检查更新 / 彻底退出后台 / 下载进度（2026-10-03） ----------
+ * 起因：Windows 用户托盘图标不可见 → 「检查更新」「退出」当时只在托盘菜单里
+ * → 关窗最小化后无路可走（退不出后台、新安装包也装不上）。
+ * 把这两个动作放到设置页版本号那一行右侧，任何情况下都够得着。
+ * ⚠️ 别动 #dsh-ext-shell-version 本身：src/main/index.ts 的冒烟断言要读它。 */
+[data-slot="settings.general.item"] > div:has(> #dsh-ext-shell-version) {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+#dsh-ext-shell-actions { margin-left: auto; padding-left: 16px; }
+#dsh-ext-shell-actions button {
+  font: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid var(--dsw-alias-border-l4, rgba(0, 0, 0, 0.14));
+  background: transparent;
+  color: var(--dsw-alias-label-primary, inherit);
+  white-space: nowrap;
+}
+#dsh-ext-shell-actions button:hover {
+  background: var(--dsw-alias-interactive-bg-hover, rgba(0, 0, 0, 0.05));
+}

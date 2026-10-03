@@ -397,8 +397,80 @@
       tag.textContent = 'DeepWhale Desktop ' + v;
       el.appendChild(sep);
       el.appendChild(tag);
+      appendShellActions(el); // 见下方：检查更新 / 彻底退出后台 / 下载进度
       return;
     }
+  }
+
+  /* ---------- 版本号右侧：检查更新 + 彻底退出后台 + 下载进度 ----------
+   * 2026-10-03 新增。起因：一位 Windows 用户的托盘图标不可见（图标为空，
+   * 或被 Windows 折叠进「^」溢出区）—— 而「检查更新」「退出」当时**只**放在
+   * 托盘菜单里，于是关窗最小化后彻底无路可走：退不出后台，新安装包也装不上。
+   * 用户建议把这两个动作放在设置里版本号旁边（他一眼就能找到的地方）。
+   *
+   * 顺带补下载进度：mac 上是"静默下载 dmg"，285MB 一路上没有任何动静，
+   * 用户会以为卡死。进度条 + 百分比，心里踏实。
+   *
+   * 与主进程的通道：window.dshShell.*（由 src/preload/preload.ts 暴露）。 */
+  function appendShellActions(host) {
+    if (!host || host.querySelector('#dsh-ext-shell-actions')) return;
+    var box = document.createElement('span');
+    box.id = 'dsh-ext-shell-actions';
+    box.style.cssText = 'display:inline-flex;align-items:center;gap:8px;margin-left:auto;padding-left:16px;';
+
+    // 下载进度（默认隐藏；download-progress 事件到达才显示）
+    var bar = document.createElement('span');
+    bar.id = 'dsh-ext-update-progress';
+    bar.style.cssText = 'display:none;align-items:center;gap:6px;font-size:12px;opacity:.85;';
+    var track = document.createElement('span');
+    track.style.cssText = 'display:inline-block;width:96px;height:6px;border-radius:3px;background:rgba(128,128,128,.25);overflow:hidden;';
+    var fill = document.createElement('span');
+    fill.id = 'dsh-ext-update-progress-fill';
+    fill.style.cssText = 'display:block;width:0%;height:100%;border-radius:3px;background:#05648B;transition:width .2s;';
+    track.appendChild(fill);
+    var label = document.createElement('span');
+    label.id = 'dsh-ext-update-progress-label';
+    label.textContent = '正在下载…';
+    bar.appendChild(track);
+    bar.appendChild(label);
+
+    function mkBtn(text, id, action) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.id = id;
+      b.textContent = text;
+      b.style.cssText = 'font:inherit;font-size:12px;padding:3px 10px;border-radius:6px;cursor:pointer;border:1px solid rgba(128,128,128,.35);background:transparent;color:inherit;white-space:nowrap;';
+      b.addEventListener('click', function () {
+        try { action(); } catch (e) { /* 不让按钮异常影响设置页 */ }
+      });
+      return b;
+    }
+    box.appendChild(mkBtn('检查更新', 'dsh-ext-check-update', function () {
+      if (window.dsh && window.dsh.checkUpdate) window.dsh.checkUpdate();
+    }));
+    box.appendChild(mkBtn('彻底退出后台', 'dsh-ext-quit-app', function () {
+      if (window.dsh && window.dsh.quitApp) window.dsh.quitApp();
+    }));
+    box.appendChild(bar);
+    host.appendChild(box);
+
+    try {
+      if (window.dsh && window.dsh.onUpdateState) {
+        window.dsh.onUpdateState(function (st) {
+          var downloading = !!(st && (st.phase === 'downloading' || st.phase === 'downloaded'));
+          bar.style.display = downloading ? 'inline-flex' : 'none';
+          if (!downloading) return;
+          if (st.phase === 'downloaded') {
+            fill.style.width = '100%';
+            label.textContent = '已下载好，去安装';
+          } else {
+            var p = typeof st.percent === 'number' ? st.percent : 0;
+            fill.style.width = p + '%';
+            label.textContent = '正在下载 ' + p + '%';
+          }
+        });
+      }
+    } catch (e) { /* 订阅失败不影响按钮 */ }
   }
 
   /* ---------- 观察设置页挂载 ---------- */

@@ -68,4 +68,14 @@ contextBridge.exposeInMainWorld('dsh', {
   // 渲染层只转交预览面板给出的路径，主进程自己校验它确实是本机一个可打印文件
   // （并纠正 /mac/... 这类省掉 /Users 前缀的显示形态），不做任何回读。
   printDocument: (payload: { path: string }) => ipcRenderer.invoke('document:print', payload),
+
+  // ---- 设置页「检查更新 / 彻底退出后台 / 更新进度」（2026-10-03）----
+  // 起因：Windows 用户托盘图标不可见时，「检查更新」「退出」只放在托盘菜单里 → 无路可走。
+  checkUpdate: () => ipcRenderer.invoke('shell:check-update'),
+  quitApp: () => ipcRenderer.invoke('shell:quit'),
+  onUpdateState: (cb: (state: unknown) => void) => {
+    const listener = (_e: unknown, state: unknown): void => cb(state);
+    ipcRenderer.on('shell:update-state', listener);
+    return () => ipcRenderer.removeListener('shell:update-state', listener);
+  },
 });

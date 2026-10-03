@@ -27,7 +27,15 @@ window.__ModuleLoader__.load({
 		* @returns true when the id is one of {@link LEGAL_PRESET_IDS}.
 		*/
 		function isLegalPreset(id) {
-			return typeof id === "string" && LEGAL_PRESET_IDS.some((known) => known === id);
+			// 2026-10-03 修：会话投影里的 agentPreset 是 **{"ver","seq","val"} 对象**
+			// （DSH 升级后从裸字符串改成了这个结构），而这里原来只认字符串 →
+			// isLegalPreset 永远 false → "会话 watcher"从不触发。
+			// 症状：新会话选法律模式能拉起律师端（走预设 watcher），
+			//       但在 agent 预设选择器里把已有会话切到法律模式 —— 纹丝不动。
+			// 实测（本机会话投影）：standard 50 个 / legal-mode 1 个 / cordis 1 个，
+			// 即真实值是 "legal-mode"，本就在 LEGAL_PRESET_IDS 里，缺的只是解包。
+			const presetId = id && typeof id === "object" ? id.val : id;
+			return typeof presetId === "string" && LEGAL_PRESET_IDS.some((known) => known === presetId);
 		}
 		//#endregion
 		//#region src/client/lawyer-app.ts

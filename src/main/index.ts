@@ -1760,7 +1760,7 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
               // 直接读我们贴上去那个节点的父元素 —— 别再遍历找"叶子节点"：
               // 那行被我们加了子元素之后就不再是叶子，遍历会把它跳过（第一版就踩了这个）。
               const verRow = verEl && verEl.parentElement ? verEl.parentElement.textContent.trim() : '';
-              return JSON.stringify({ navPet: has('dsh-ext-nav-pet'), navUsage: has('dsh-ext-nav-usage'), navSkin: has('dsh-ext-nav-skin'), panel: has('dsh-ext-panel'), activated, petNavOn, petItems, themeItems, usageRows, verText, verRow });
+              return JSON.stringify({ navPet: has('dsh-ext-nav-pet'), navUsage: has('dsh-ext-nav-usage'), navSkin: has('dsh-ext-nav-skin'), panel: has('dsh-ext-panel'), privacy: !!document.getElementById('dsh-ext-privacy'), activated, petNavOn, petItems, themeItems, usageRows, verText, verRow });
             })()`);
             console.log('[smoke] settings-ext:', r);
             // ★ 断言落在用户看得见的地方：通用设置里「当前版本」旁边必须有壳版本号，
@@ -1787,7 +1787,30 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
                 );
                 process.exitCode = 1;
               } else {
+                if (!(parsed as { privacy?: boolean }).privacy) {
+                  console.error('[smoke] 设置页没有「本机运行 · 遥测与埋点默认关闭」说明（用户实测找不到）');
+                  process.exitCode = 1;
+                } else {
+                  console.log('[smoke] 设置页隐私说明已显示 ✓');
+                }
                 console.log('[smoke] 设置页已显示壳版本：' + parsed.verRow);
+                try {
+                  // 先切到「通用设置」（「当前版本」那行在这里，隐私说明挂在它下面）
+                  await mainWin!.webContents.executeJavaScript(`(async () => {
+                    const items = Array.from(document.querySelectorAll('div,span,li,button'));
+                    const nav = items.find((n) => n.children.length === 0 && (n.textContent || '').trim() === '通用设置');
+                    if (nav) (nav.closest('[role="button"],button,li,div') || nav).click();
+                    await new Promise((r) => setTimeout(r, 700));
+                    return true;
+                  })()`);
+                  await new Promise((r) => setTimeout(r, 500));
+                  const shot = await mainWin!.webContents.capturePage();
+                  fs.mkdirSync('/tmp/dsh-privacy-shot', { recursive: true });
+                  fs.writeFileSync('/tmp/dsh-privacy-shot/general.png', shot.toPNG());
+                  console.log('[smoke] 通用设置页截图：/tmp/dsh-privacy-shot/general.png');
+                } catch (e9) {
+                  console.warn('[smoke] 设置页截图失败:', e9);
+                }
               }
             } catch (e) {
               console.error('[smoke] 壳版本号断言无法解析结果:', e);

@@ -563,14 +563,46 @@
    */
   function renderPrivacyNote() {
     if (document.getElementById('dsh-ext-privacy')) return;
-    var row = document.getElementById('dsh-ext-version');
-    if (!row || !row.parentElement) return;
+    // ⚠️ 2026-10-04 修 bug：原实现锚定 `#dsh-ext-version`，但这个 id 在整个代码里**不存在**
+    //    （壳版本是拼进官方「当前版本」那行文字里的）→ 于是这条说明永远渲染不出来，
+    //    用户在设置页找不到它（用户实测："遥测在哪里，没看到啊"）。
+    //    现在改为：找到官方「当前版本」那一行（文本叶子节点），把说明插在它所在容器之后。
+    // 官方那行文字里含子元素（版本号是拼进去的），所以不能只找"纯文本叶子"，
+    // 要取"包含该文本、且后代里不再有包含它的元素"的那一层（最深命中）
+    var leaf = null;
+    var all = document.querySelectorAll('div, span, p, section, li');
+    for (var i = 0; i < all.length; i++) {
+      var n = all[i];
+      if ((n.textContent || '').indexOf('当前版本') < 0) continue;
+      var deeper = false;
+      for (var c = 0; c < n.children.length; c++) {
+        if ((n.children[c].textContent || '').indexOf('当前版本') >= 0) {
+          deeper = true;
+          break;
+        }
+      }
+      if (!deeper) {
+        leaf = n;
+        break;
+      }
+    }
+    if (!leaf) return;
+    var host = leaf;
+    for (var k = 0; k < 3 && host.parentElement; k++) {
+      host = host.parentElement;
+      try {
+        if (host.getBoundingClientRect().width > 200) break;
+      } catch (e) {
+        break;
+      }
+    }
+    if (!host.parentElement) return;
     var note = document.createElement('div');
     note.id = 'dsh-ext-privacy';
     note.style.cssText =
-      'margin-top:6px;font-size:11.5px;line-height:1.6;opacity:.62;';
+      'margin-top:7px;font-size:12px;line-height:1.7;opacity:.68;';
     note.textContent = '本机运行 · 不上传你的文件 · 遥测与埋点默认关闭';
-    row.parentElement.insertBefore(note, row.nextSibling);
+    host.parentElement.insertBefore(note, host.nextSibling);
   }
 
   function maybeInjectSidebarProgress() {

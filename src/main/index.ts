@@ -44,11 +44,40 @@ import { repairWindowsShortcuts } from './windows-shortcut';
 import { registerLocalFilesIpc } from './localfiles';
 import { notesFor } from './whatsnew';
 import {
+
+
   showUpdatePopup,
   showWhatsNewWindow,
   updatePopupState,
   registerUpdatePopupIpc,
 } from './update-popup';
+
+/**
+ * 「本机内文件」快捷键的解析（2026-10-04）
+ *
+ * 为什么做可配置：原来的 `Cmd+Shift+O` 与系统/其它软件冲突（用户实测）。
+ * 规格串形如 `Alt+Cmd+O`、`Alt+F`、`Ctrl+Alt+O`；`off`（或空）表示关闭。
+ * 无 Shift 需求时不写 Shift 即代表"必须不按"——避免误触。
+ */
+const DEFAULT_LOCAL_FILES_SHORTCUT = 'Alt+Cmd+O';
+
+function parseShortcut(spec: string):
+  | { key: string; alt: boolean; shift: boolean; ctrl: boolean; meta: boolean }
+  | null {
+  const raw = String(spec || '').trim();
+  if (!raw || raw.toLowerCase() === 'off') return null;
+  const parts = raw.split('+').map((p) => p.trim().toLowerCase());
+  const key = parts[parts.length - 1];
+  if (!key || parts.length < 2) return null;
+  const mods = new Set(parts.slice(0, -1));
+  return {
+    key,
+    alt: mods.has('alt') || mods.has('option') || mods.has('⌥'),
+    shift: mods.has('shift') || mods.has('⇧'),
+    ctrl: mods.has('ctrl') || mods.has('control') || mods.has('⌃'),
+    meta: mods.has('cmd') || mods.has('command') || mods.has('meta') || mods.has('⌘'),
+  };
+}
 
 /** 冒烟测试模式：自动启动、打印关键事件、8 秒后退出（供 CI/自动化验证） */
 const SMOKE = !!process.env.DSH_DESKTOP_SMOKE;
@@ -177,12 +206,29 @@ async function onPageReady(win: BrowserWindow): Promise<void> {
   }
   await injectSettingsExtension(win);
 
-  // 「本机内文件」：⌘⇧O（Windows/Linux：Ctrl+Shift+O）在任何会话里都能开 ——
-  // 用户明确要求"进行新会话时对比本机文件打不开可不行"，所以入口不能只靠开始面板。
+  // 「本机内文件」快捷键：**可配置**（用户实测 Cmd+Shift+O 与系统快捷键冲突）。
+  // 默认 Alt+Cmd+O；可在 帮助 →「本机内文件快捷键」里改，或直接写 settings.json 的
+  // localFilesShortcut（'Alt+Cmd+O' / 'Alt+F' / 'Ctrl+Alt+O' / 'off'）。
   // 用 before-input-event 而不是 globalShortcut：只在应用窗口聚焦时生效，不抢系统快捷键。
   win.webContents.on('before-input-event', (_e, input) => {
-    const mod = process.platform === 'darwin' ? input.meta : input.control;
-    if (mod && input.shift && String(input.key).toLowerCase() === 'o' && input.type === 'keyDown') {
+    if (input.type !== 'keyDown') return;
+    const spec = store.get('localFilesShortcut') || DEFAULT_LOCAL_FILES_SHORTCUT;
+    const want = parseShortcut(spec);
+    if (!want) return;
+    const pressed = {
+      key: String(input.key).toLowerCase(),
+      alt: !!input.alt,
+      shift: !!input.shift,
+      ctrl: !!input.control,
+      meta: !!input.meta,
+    };
+    if (
+      pressed.key === want.key &&
+      pressed.alt === want.alt &&
+      pressed.shift === want.shift &&
+      pressed.ctrl === want.ctrl &&
+      pressed.meta === want.meta
+    ) {
       void win.webContents
         .executeJavaScript('window.__dshLocalFiles && window.__dshLocalFiles.open(); true')
         .catch(() => {});
@@ -2482,15 +2528,18 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
               await mainWin!.webContents.executeJavaScript(
                 "document.getElementById('dsh-local-files-panel') && (document.getElementById('dsh-local-files-panel').style.display='none'); true",
               );
+              // 默认已改为 ⌥⌘O（用户实测 ⌘⇧O 与系统冲突）→ 这里按新默认发按键
+              const hotMods: Array<'meta' | 'alt' | 'control'> =
+                process.platform === 'darwin' ? ['meta', 'alt'] : ['control', 'alt'];
               mainWin!.webContents.sendInputEvent({
                 type: 'keyDown',
                 keyCode: 'O',
-                modifiers: process.platform === 'darwin' ? ['meta', 'shift'] : ['control', 'shift'],
+                modifiers: hotMods,
               });
               mainWin!.webContents.sendInputEvent({
                 type: 'keyUp',
                 keyCode: 'O',
-                modifiers: process.platform === 'darwin' ? ['meta', 'shift'] : ['control', 'shift'],
+                modifiers: hotMods,
               });
               await new Promise((r) => setTimeout(r, 700));
               const hot = await mainWin!.webContents.executeJavaScript(`(() => {
@@ -2502,7 +2551,7 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
                 console.error('[smoke] ⌘⇧O 没能打开「本机内文件」面板');
                 process.exitCode = 1;
               } else {
-                console.log('[smoke] ⌘⇧O 可在任意会话打开「本机内文件」✓');
+                console.log('[smoke] ⌥⌘O（可配置，默认值）可在任意会话打开「本机内文件」✓');
               }
             } catch (e) {
               console.warn('[smoke] 快捷键检查异常:', e);

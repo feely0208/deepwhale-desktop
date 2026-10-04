@@ -103,7 +103,8 @@
     textBox.appendChild(el('span', 'font-size:15px;font-weight:500;line-height:1.35;', '本机内文件'));
     textBox.appendChild(el('span', 'font-size:13px;opacity:.6;line-height:1.35;', '浏览这台电脑上的其他文件'));
 
-    var hint = el('span', 'flex:none;font-size:12px;opacity:.45;letter-spacing:.5px;', '⌘⇧O');
+    var hint = el('span', 'flex:none;font-size:12px;opacity:.45;letter-spacing:.5px;',
+      (state.shortcut || '') || '');   // 跟随「本机内文件快捷键」设置（改了就变）
 
     card.appendChild(icon);
     card.appendChild(textBox);
@@ -194,6 +195,7 @@
       if (roots) {
         state.home = roots.home || '';
         state.shortcuts = roots.shortcuts || [];
+        state.shortcut = roots.shortcut || '';
       }
     } catch (e) {
       /* 忽略：下面 navigate 会给出友好错误 */

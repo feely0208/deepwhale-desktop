@@ -22,6 +22,10 @@ export interface TrayMenuActions {
   onOpenLocalFiles?: () => void;
   /** 诊断与关于：版本/更新状态/日志路径，一键复制或打开日志（用户反馈问题时能直接给全信息） */
   onShowDiagnostics?: () => void;
+  /** 「本机内文件」快捷键的当前值（用于菜单单选态） */
+  localFilesShortcut?: string;
+  /** 改「本机内文件」快捷键（用户实测 Cmd+Shift+O 与系统冲突） */
+  onPickLocalFilesShortcut?: (spec: string) => void;
   /** 手机连接：显示「用手机打开」的地址（地址里已带 token，用户不用手打） */
   onMobileConnect?: () => void;
   /** 皮肤子菜单（主题/背景图片，由调用方构建） */
@@ -150,6 +154,16 @@ export function buildAppMenuTemplate(a: TrayMenuActions): MenuItemConstructorOpt
         { label: '本版更新内容…', click: () => a.onShowWhatsNew?.() },
         { label: '本机内文件…', click: () => a.onOpenLocalFiles?.() },
         { label: '诊断与关于…', click: () => a.onShowDiagnostics?.() },
+        {
+          label: '本机内文件快捷键',
+          submenu: [
+            { label: '⌥⌘O（默认，推荐）', type: 'radio' as const, checked: (a.localFilesShortcut || 'Alt+Cmd+O') === 'Alt+Cmd+O', click: () => a.onPickLocalFilesShortcut?.('Alt+Cmd+O') },
+            { label: '⌥F', type: 'radio' as const, checked: a.localFilesShortcut === 'Alt+F', click: () => a.onPickLocalFilesShortcut?.('Alt+F') },
+            { label: '⌃⌥O', type: 'radio' as const, checked: a.localFilesShortcut === 'Ctrl+Alt+O', click: () => a.onPickLocalFilesShortcut?.('Ctrl+Alt+O') },
+            { type: 'separator' as const },
+            { label: '关闭快捷键', type: 'radio' as const, checked: a.localFilesShortcut === 'off', click: () => a.onPickLocalFilesShortcut?.('off') },
+          ],
+        },
         { type: 'separator' as const },
         { label: '打开宠物目录…', click: () => a.onOpenPetsFolder?.() },
         { label: '打开自定义 CSS…', click: () => a.onOpenCustomCss() },

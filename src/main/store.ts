@@ -68,6 +68,11 @@ export interface Settings {
   skinPreset: 'none' | 'deepseek-blue';
   /** 用户是否**主动**选过皮肤（没选过时允许一次性开启默认辉光；选了就永久尊重） */
   skinPresetChosen?: boolean;
+  /**
+   * 「本机内文件」的快捷键。默认 `Alt+Cmd+O`（原来的 Cmd+Shift+O 与系统/其他软件冲突，
+   * 用户实测反馈）。取值形如 `'Alt+Cmd+O'`、`'Alt+F'`、`'off'`（关闭）。
+   */
+  localFilesShortcut?: string;
   /** 背景皮肤可见度（0.3~1，界面层透明度；越小图越透出） */
   skinOpacity: number;
   /** 是否启用 userData/custom.css 自定义样式 */

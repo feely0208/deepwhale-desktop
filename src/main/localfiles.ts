@@ -60,8 +60,27 @@ function normalizeDir(input: unknown): string | null {
   }
 }
 
+/** 当前「本机内文件」快捷键的展示文案（菜单改了就跟着变） */
+function shortcutLabel(): string {
+  try {
+    // 延迟 require，避免与 index.ts 形成循环依赖
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const spec: string = require('./store').store.get('localFilesShortcut') || 'Alt+Cmd+O';
+    if (!spec || spec === 'off') return '';
+    return spec
+      .replace(/Alt/g, '⌥')
+      .replace(/Cmd/g, '⌘')
+      .replace(/Ctrl/g, '⌃')
+      .replace(/Shift/g, '⇧')
+      .replace(/\+/g, '');
+  } catch {
+    return '⌥⌘O';
+  }
+}
+
 export function registerLocalFilesIpc(): void {
   ipcMain.handle('localfiles:roots', () => ({
+    shortcut: shortcutLabel(),
     home: app.getPath('home'),
     sep: path.sep,
     shortcuts: shortcuts(),

@@ -21,6 +21,8 @@ contextBridge.exposeInMainWorld('dsh', {
   localFilesList: (dir: string) => ipcRenderer.invoke('localfiles:list', dir),
   localFilesOpen: (target: string) => ipcRenderer.invoke('localfiles:open', target),
   localFilesReveal: (target: string) => ipcRenderer.invoke('localfiles:reveal', target),
+  /** 面板内预览：主进程读文件 → 图片/PDF 走 data URI、文本直出、Office 转 PDF（见 localfiles.ts） */
+  localFilesPreview: (target: string) => ipcRenderer.invoke('localfiles:preview', target),
 
   // ---- 用量面板 ----
   usageRefresh: () => ipcRenderer.send('usage:refresh'),

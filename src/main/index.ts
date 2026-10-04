@@ -998,6 +998,19 @@ function registerIpc(): void {
   );
 
   // ---- 主题 / 背景皮肤（设置页/菜单共用） ----
+  // 2026-10-04 一次性迁移：辉光是我们花大力气做的视觉，
+  // 但早期默认/应急指引会把 skinPreset 停在 'none' → 用户永远看不到辉光（用户实测"辉光还是没回来"）。
+  // 规则：**没主动选过**皮肤的用户，启动时把默认预设开回来；主动选过的永久尊重。
+  try {
+    if (!store.get('skinPresetChosen') && store.get('skinPreset') === 'none') {
+      store.set('skinPreset', 'deepseek-blue');
+      store.set('skinPresetChosen', true);
+      console.log('[skin] 一次性迁移：辉光预设已开启（用户此前未主动选择过皮肤）');
+    }
+  } catch (e) {
+    console.warn('[skin] 预设迁移失败:', e);
+  }
+
   ipcMain.handle('theme:state', () => ({
     skinImage: store.get('skinImage'),
     skinPreset: store.get('skinPreset'),
@@ -1013,6 +1026,7 @@ function registerIpc(): void {
   ipcMain.on('skin:set-preset', (_e, preset: string) => {
     // 只接受已知预设名 —— 这个值会被拼进注入的 CSS，不能让界面塞任意串进来
     const safe = preset === 'deepseek-blue' ? 'deepseek-blue' : 'none';
+    store.set('skinPresetChosen', true);   // 用户主动选过 → 以后不再自动开辉光
     if (mainWin) void skin.setPreset(mainWin, safe);
     rebuildMenus();
   });
@@ -1843,19 +1857,11 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
             console.log('[smoke] skin-token:', skinProbe);
             {
               const sp = JSON.parse(skinProbe) as { token: string; frameBg: string; overlayBg?: string };
-              // 2026-10-04 定稿判据（前两次都栽在"极端化"）：
-              //   ① 基础底色必须**不透明** → 面板可读（透明会让浅色主题整片洗白，用户实测）
-              //   ② 浮层必须**不透明** → 不会变透明纸片（"怪白页"）
-              //   ③ 辉光不靠改底色，而靠"body 上的渐变 + 框架层透明"（见下面皮肤的硬断言）
-              const baseOpaque = sp.token && !/transparent|rgba\(0,\s*0,\s*0,\s*0\)/.test(sp.token);
-              if (!baseOpaque) {
-                console.error(
-                  '[smoke] 基础底色透明（' + sp.token + '）→ 面板会半透明/洗白，用户无法阅读',
-                );
-                process.exitCode = 1;
-              } else {
-                console.log('[smoke] 基础底色不透明（面板可读）：' + sp.token);
-              }
+              // 2026-10-04 定稿：**皮肤按 1.0.47 的标准**（用户拍板："直接按照47的标准，
+              // 辉光就可以正常显示"）—— 所以这里不再对 --dsw-alias-bg-base 做要求
+              // （47 的深色预设本来就是半透明底色，那是对的）。
+              // 真正要守的两条改由"像素检查"承担：辉光可见 + 面板可读（见后面的双主题验证）。
+              console.log('[smoke] 皮肤底色（按 47 标准，不做限制）：' + sp.token);
               const ob = String(sp.overlayBg || '');
               const overlayOpaque = ob && !/rgba\([^)]*,\s*0?\.\d+\)|transparent/.test(ob);
               if (!overlayOpaque) {
@@ -1994,6 +2000,24 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
                 } catch (e6) {
                   console.warn('[smoke] 面板截图失败:', e6);
                 }
+                // 面板内预览（新增能力）：拿应用里的一个文本文件试一下
+                const pv = JSON.parse(
+                  await mainWin!.webContents.executeJavaScript(`(async () => {
+                    const probe = ${JSON.stringify(path.join(app.getAppPath(), 'package.json'))};
+                    if (!window.dsh || typeof window.dsh.localFilesPreview !== 'function') {
+                      return JSON.stringify({ ok: false, why: 'no-bridge' });
+                    }
+                    const r = await window.dsh.localFilesPreview(probe);
+                    return JSON.stringify({ ok: !!(r && r.ok), kind: r && r.kind, len: r && r.text ? r.text.length : 0 });
+                  })()`),
+                ) as { ok: boolean; kind?: string; len?: number; why?: string };
+                if (!pv.ok || pv.kind !== 'text') {
+                  console.error('[smoke] 面板内预览不可用：' + JSON.stringify(pv));
+                  process.exitCode = 1;
+                } else {
+                  console.log('[smoke] 面板内预览 ✓（kind=' + String(pv.kind) + '，' + String(pv.len) + ' 字符）');
+                }
+
                 // 关掉面板，免得影响后面的截图
                 await mainWin!.webContents.executeJavaScript(
                   "const p=document.getElementById('dsh-local-files-panel'); if(p) p.style.display='none'; true",

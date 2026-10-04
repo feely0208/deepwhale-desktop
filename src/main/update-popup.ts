@@ -25,6 +25,8 @@ interface PopupState {
 let popup: BrowserWindow | null = null;
 /** 手动打开（帮助菜单）时为 true：不显示进度区，只显示说明 */
 let notesOnly = false;
+/** 当前显示的版本（弹窗请求重试说明时要用） */
+let currentVersion = '';
 
 function popupFile(): string {
   return path.join(__dirname, '../update-popup/update-popup.html');
@@ -93,6 +95,7 @@ function push(msg: Record<string, unknown>): void {
 /** 下载开始：弹窗 + 推状态 + 推本版说明 */
 export async function showUpdatePopup(version: string, state: PopupState): Promise<void> {
   notesOnly = false;
+  currentVersion = version;
   const win = ensurePopup();
   place(win);
   win.show();
@@ -110,6 +113,7 @@ export async function showUpdatePopup(version: string, state: PopupState): Promi
 /** 帮助菜单「本版更新内容…」：只显示说明 */
 export async function showWhatsNewWindow(version: string): Promise<void> {
   notesOnly = true;
+  currentVersion = version;
   const win = ensurePopup();
   place(win);
   win.setSize(560, 620);
@@ -146,6 +150,18 @@ export interface UpdatePopupActions {
 
 export function registerUpdatePopupIpc(actions: UpdatePopupActions): void {
   ipcMain.on('popup:action', (_e, action: string) => {
+    if (action === 'refresh-notes') {
+      // 弹窗说"正在获取更新说明…"时，我们强制回源一次再推给它
+      void (async () => {
+        try {
+          const n = await notesFor(currentVersion);
+          push({ type: 'notes', version: currentVersion, title: n?.title, date: n?.date, items: n?.items ?? [] });
+        } catch (e) {
+          console.warn('[update-popup] 重试获取更新说明失败:', e);
+        }
+      })();
+      return;
+    }
     if (action === 'restart') {
       closeUpdatePopup();
       actions.onRestart();

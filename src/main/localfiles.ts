@@ -118,4 +118,46 @@ export function registerLocalFilesIpc(): void {
       return { ok: false, error: e instanceof Error ? e.message : String(e) };
     }
   });
+
+  // 面板内预览（2026-10-04 用户：官方的项目文件能直接在侧栏里预览，我们的只能另开页面）
+  // 做法：主进程读文件 → 图片/PDF 转 data URI、文本直出、Office 走我们自己的转换栈转 PDF。
+  // 为什么必须走主进程：面板跑在 http://127.0.0.1:<port> 的页面里，file:// 会被浏览器拦。
+  ipcMain.handle('localfiles:preview', async (_e, target: unknown) => {
+    try {
+      if (typeof target !== 'string' || !path.isAbsolute(target)) return { ok: false, error: '需要绝对路径' };
+      const p = path.resolve(target);
+      const st = fs.statSync(p);
+      if (!st.isFile()) return { ok: false, error: '不是文件' };
+      const ext = path.extname(p).toLowerCase();
+      const IMG = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg'];
+      const TXT = ['.txt', '.md', '.json', '.js', '.ts', '.log', '.csv', '.yml', '.yaml', '.html', '.css', '.py', '.sh'];
+      const OFFICE = ['.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt'];
+
+      if (IMG.includes(ext)) {
+        if (st.size > 24 * 1024 * 1024) return { ok: false, error: '图片太大（>24MB），请用系统程序打开' };
+        const mime = ext === '.svg' ? 'image/svg+xml' : ext === '.png' ? 'image/png' : ext === '.gif' ? 'image/gif' : ext === '.webp' ? 'image/webp' : ext === '.bmp' ? 'image/bmp' : 'image/jpeg';
+        return { ok: true, kind: 'image', dataUri: `data:${mime};base64,` + fs.readFileSync(p).toString('base64'), size: st.size };
+      }
+      if (ext === '.pdf') {
+        if (st.size > 60 * 1024 * 1024) return { ok: false, error: 'PDF 太大（>60MB），请用系统程序打开' };
+        return { ok: true, kind: 'pdf', dataUri: 'data:application/pdf;base64,' + fs.readFileSync(p).toString('base64'), size: st.size };
+      }
+      if (TXT.includes(ext)) {
+        const cap = 300 * 1024;
+        const buf = fs.readFileSync(p);
+        const truncated = buf.length > cap;
+        return { ok: true, kind: 'text', text: buf.subarray(0, cap).toString('utf-8'), truncated, size: st.size };
+      }
+      if (OFFICE.includes(ext)) {
+        // 复用 Office 预览的那条链路（物化后的转换栈）把文档转成 PDF，再塞进预览
+        const { convertOfficeToPdf } = await import('./office-preview');
+        const out = await convertOfficeToPdf(p);
+        if (!out.ok) return { ok: false, error: out.error || 'Office 预览不可用' };
+        return { ok: true, kind: 'pdf', dataUri: 'data:application/pdf;base64,' + fs.readFileSync(out.pdfPath as string).toString('base64'), size: st.size };
+      }
+      return { ok: false, error: '这种格式暂不支持在面板内预览，请用系统程序打开' };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
+  });
 }

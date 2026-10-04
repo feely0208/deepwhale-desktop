@@ -299,6 +299,30 @@
     pathRow.appendChild(copyBtn);
     panel.appendChild(pathRow);
 
+    // 预览区（2026-10-04 用户：官方能在侧栏内直接预览，我们也要）——
+    // 单击文件行就渲染在这里；双击仍然用系统程序打开
+    var preview = el('div', 'flex:none;display:none;flex-direction:column;gap:6px;' +
+      'margin:0 12px 8px;border-radius:10px;border:1px solid ' + P.border + ';overflow:hidden;');
+    preview.id = PANEL_ID + '-preview';
+    var pvHead = el('div', 'display:flex;align-items:center;gap:8px;padding:7px 10px;font-size:12px;' +
+      'border-bottom:1px solid ' + P.border + ';');
+    var pvName = el('span', 'flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;', '');
+    pvName.id = PANEL_ID + '-preview-name';
+    var pvClose = el('button', 'flex:none;border:0;background:transparent;color:' + P.dim + ';cursor:pointer;font-size:12px;', '关闭');
+    pvClose.addEventListener('click', function () {
+      preview.style.display = 'none';
+      preview.textContent = '';
+      preview.appendChild(pvHead);
+      preview.appendChild(pvBody);
+    });
+    pvHead.appendChild(pvName);
+    pvHead.appendChild(pvClose);
+    var pvBody = el('div', 'max-height:46vh;overflow:auto;background:' + (isDarkTheme() ? 'rgba(0,0,0,.25)' : 'rgba(0,0,0,.03)') + ';');
+    pvBody.id = PANEL_ID + '-preview-body';
+    preview.appendChild(pvHead);
+    preview.appendChild(pvBody);
+    panel.appendChild(preview);
+
     // 列表
     var list = el('div', 'flex:1 1 auto;overflow:auto;padding:2px 6px 14px;');
     list.id = PANEL_ID + '-list';
@@ -335,6 +359,9 @@
     if (!entry.dir) {
       row.appendChild(el('span', 'flex:none;font-size:11.5px;color:' + P.faint + ';', fmtSize(entry.size)));
     }
+    row.addEventListener('click', function () {
+      if (!entry.dir) void previewFile(entry);
+    });
     row.addEventListener('mouseenter', function () { row.style.background = P.hover; });
     row.addEventListener('mouseleave', function () { row.style.background = 'transparent'; });
     // 用户要求："双击文件夹就直接打开" —— 单击不动作，双击进入/打开
@@ -343,6 +370,63 @@
       else if (typeof dsh.localFilesOpen === 'function') dsh.localFilesOpen(entry.path);
     });
     return row;
+  }
+
+  /** 面板内预览：图片 / PDF / 文本 / Office（主进程转 PDF） */
+  async function previewFile(entry) {
+    var P = palette();
+    var box = document.getElementById(PANEL_ID + '-preview');
+    var body = document.getElementById(PANEL_ID + '-preview-body');
+    var nameEl = document.getElementById(PANEL_ID + '-preview-name');
+    if (!box || !body) return;
+    box.style.display = 'flex';
+    if (nameEl) nameEl.textContent = entry.name;
+    body.textContent = '';
+    body.appendChild(el('div', 'padding:14px;font-size:12.5px;color:' + P.dim + ';', '正在打开…'));
+
+    if (typeof dsh.localFilesPreview !== 'function') {
+      body.textContent = '';
+      body.appendChild(el('div', 'padding:14px;font-size:12.5px;color:' + P.dim + ';', '当前环境不支持预览，请双击用系统程序打开。'));
+      return;
+    }
+    var res;
+    try {
+      res = await dsh.localFilesPreview(entry.path);
+    } catch (e) {
+      res = { ok: false, error: String(e) };
+    }
+    body.textContent = '';
+    if (!res || !res.ok) {
+      var tip = el('div', 'padding:14px;font-size:12.5px;line-height:1.7;color:' + P.dim + ';');
+      tip.textContent = (res && res.error) || '无法预览';
+      var openBtn = el('button', 'margin:0 14px 14px;padding:6px 12px;border-radius:8px;cursor:pointer;' +
+        'border:1px solid ' + P.border + ';background:transparent;color:' + P.text + ';font-size:12.5px;', '用系统程序打开');
+      openBtn.addEventListener('click', function () {
+        if (typeof dsh.localFilesOpen === 'function') dsh.localFilesOpen(entry.path);
+      });
+      body.appendChild(tip);
+      body.appendChild(openBtn);
+      return;
+    }
+    if (res.kind === 'image') {
+      var img = document.createElement('img');
+      img.src = res.dataUri;
+      img.style.cssText = 'display:block;max-width:100%;margin:0 auto;';
+      body.appendChild(img);
+    } else if (res.kind === 'pdf') {
+      var frame = document.createElement('iframe');
+      frame.src = res.dataUri;
+      frame.style.cssText = 'display:block;width:100%;height:46vh;border:0;background:#fff;';
+      body.appendChild(frame);
+    } else if (res.kind === 'text') {
+      var pre = el('pre', 'margin:0;padding:12px;font-size:12px;line-height:1.6;white-space:pre-wrap;' +
+        'word-break:break-word;color:' + P.text + ';font-family:ui-monospace,SFMono-Regular,Menlo,monospace;',
+        res.text || '');
+      body.appendChild(pre);
+      if (res.truncated) {
+        body.appendChild(el('div', 'padding:0 12px 10px;font-size:11.5px;color:' + P.faint + ';', '（内容较长，仅显示前 300KB）'));
+      }
+    }
   }
 
   async function navigate(dir) {

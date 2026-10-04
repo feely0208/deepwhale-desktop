@@ -18,12 +18,23 @@
 
   var KIND_ICON = { feat: '✨', fix: '🛠', perf: '⚡', docs: '📘', security: '🔒' };
 
-  function renderItems(items) {
+  var askedRefresh = false;
+  function renderItems(items, version) {
     var ul = $('items');
     var empty = $('notes-empty');
     ul.textContent = '';
     if (!items || !items.length) {
+      // 2026-10-04 用户实测：这里原样写"本版暂无更新说明"，会被理解成"这版没改东西"。
+      // 实际可能只是还没取到（缓存/网络）——所以先重试一次，再给出可自查的去处。
+      if (!askedRefresh && version) {
+        askedRefresh = true;
+        empty.hidden = false;
+        empty.textContent = '正在获取本版更新说明…';
+        send('refresh-notes');
+        return;
+      }
       empty.hidden = false;
+      empty.textContent = '更新说明暂未获取到，可在「帮助 → 本版更新内容…」中查看。';
       return;
     }
     empty.hidden = true;
@@ -49,7 +60,7 @@
     } else if (msg.version) {
       $('title').textContent = '深鲸桌面 ' + msg.version;
     }
-    renderItems(msg.items);
+    renderItems(msg.items, msg.version);
   }
 
   function applyState(st) {

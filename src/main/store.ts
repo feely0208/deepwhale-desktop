@@ -66,6 +66,8 @@ export interface Settings {
    * 用 CSS 复刻的好处是**任意分辨率都清晰、零字节、不用下载**。
    */
   skinPreset: 'none' | 'deepseek-blue';
+  /** 用户是否**主动**选过皮肤（没选过时允许一次性开启默认辉光；选了就永久尊重） */
+  skinPresetChosen?: boolean;
   /** 背景皮肤可见度（0.3~1，界面层透明度；越小图越透出） */
   skinOpacity: number;
   /** 是否启用 userData/custom.css 自定义样式 */

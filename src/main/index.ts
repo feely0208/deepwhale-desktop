@@ -2630,12 +2630,17 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
                   if (it.submenu) walk(it.submenu.items);
                 }
               };
-              if (appMenu) walk(appMenu.items);
-              if (!labels.some((l) => l.indexOf('预览更新进度条') >= 0)) {
-                console.error('[smoke] 菜单里没有「预览更新进度条」入口');
+              const hasPreview = labels.some((l) => l.indexOf('预览更新进度条') >= 0);
+              // 预览进度条是开发/测试用的，用户菜单里不应该出现（用户实测反馈）
+              const devMenu = !app.isPackaged || process.env.DSH_DEV_MENU === '1';
+              if (devMenu && !hasPreview) {
+                console.error('[smoke] 开发菜单里缺「预览更新进度条」');
+                process.exitCode = 1;
+              } else if (!devMenu && hasPreview) {
+                console.error('[smoke] 用户菜单里出现了测试项「预览更新进度条」（应只在开发菜单）');
                 process.exitCode = 1;
               } else {
-                console.log('[smoke] 菜单里有「预览更新进度条」入口');
+                console.log('[smoke] 「预览更新进度条」仅在开发菜单 ✓（用户菜单里没有）');
               }
               if (!labels.some((l) => l.indexOf('本机内文件') >= 0)) {
                 console.error('[smoke] 菜单里没有「本机内文件…」入口（非空白会话下用户找不到入口）');

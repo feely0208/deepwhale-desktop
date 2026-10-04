@@ -14,7 +14,11 @@ export interface TrayMenuActions {
   onOpenPetsFolder?: () => void;
   /** 手动检查更新（有结果会如实告知，含"已是最新"与失败原因） */
   onCheckUpdate?: () => void;
-  /** 预览侧栏下载进度条（走与真实下载相同的状态通路，但纯假数据：不下载、不安装） */
+  /**
+   * 预览侧栏下载进度条（假数据，不下载不安装）——**开发/测试用**。
+   * 用户实测反馈：「这个怎么能体现在帮助菜单呢，这是我们测试时的东西」→
+   * 默认不进用户菜单，仅当 `DSH_DEV_MENU=1`（开发态自动为真）时才加。
+   */
   onPreviewUpdateProgress?: () => void;
   /** 打开「本版更新内容」窗口（用户要求：放帮助菜单里，别塞设置页） */
   onShowWhatsNew?: () => void;
@@ -24,6 +28,8 @@ export interface TrayMenuActions {
   onShowDiagnostics?: () => void;
   /** 「本机内文件」快捷键的当前值（用于菜单单选态） */
   localFilesShortcut?: string;
+  /** 是否显示开发/测试用菜单项（默认否；DSH_DEV_MENU=1 或开发态为真） */
+  showDevMenu?: boolean;
   /** 改「本机内文件」快捷键（用户实测 Cmd+Shift+O 与系统冲突） */
   onPickLocalFilesShortcut?: (spec: string) => void;
   /** 手机连接：显示「用手机打开」的地址（地址里已带 token，用户不用手打） */
@@ -62,7 +68,7 @@ export function buildMenuTemplate(a: TrayMenuActions): MenuItemConstructorOption
     { label: '检查更新…', click: () => a.onCheckUpdate?.() },
     // 进度条只在"正在下载更新"时出现 —— 升到最新版后用户根本没机会看它长什么样。
     // 这一项让用户随时能预览（走同一条 shell:update-state 通路，纯假数据）。
-    { label: '预览更新进度条', click: () => a.onPreviewUpdateProgress?.() },
+    ...(a.showDevMenu ? [{ label: '预览更新进度条（测试）', click: () => a.onPreviewUpdateProgress?.() }] : []),
     { type: 'separator' },
     { label: '退出', click: () => a.onQuit() },
   ];
@@ -170,7 +176,7 @@ export function buildAppMenuTemplate(a: TrayMenuActions): MenuItemConstructorOpt
         { type: 'separator' as const },
         { label: '手机连接…', click: () => a.onMobileConnect?.() },
         { label: '检查更新…', click: () => a.onCheckUpdate?.() },
-        { label: '预览更新进度条', click: () => a.onPreviewUpdateProgress?.() },
+        ...(a.showDevMenu ? [{ label: '预览更新进度条（测试）', click: () => a.onPreviewUpdateProgress?.() }] : []),
       ],
     },
   ];

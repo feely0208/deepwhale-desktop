@@ -246,15 +246,12 @@ export class UpdateManager {
         percent: (next as { percent?: number }).percent,
         message: next.message,
       };
-      // 2026-10-03：Dock 徽标（应用级，不依赖任何页面/窗口是否可见）。
       // 用户要求「就是一个下载过程的进度条可视化，要不要百分比都无所谓，只要能看到」，
       // 而设置页那条只有开着设置页才看得到 —— 徽标补足"任何时刻都看得见"。
       try {
         const pct = typeof payload.percent === 'number' ? payload.percent : null;
         if (next.phase === 'downloading' && pct !== null) {
-          app.dock?.setBadge(`${pct}%`);
         } else if (next.phase !== 'downloading') {
-          app.dock?.setBadge('');
         }
       } catch {
         /* 非 macOS 或不可用 */
@@ -427,14 +424,15 @@ export class UpdateManager {
           if (percent !== lastPercent) {
             lastPercent = percent;
             this.setState({ phase: 'downloading', percent, message: '正在下载新版本安装包…' });
-            // macOS 原生反馈：Dock 图标上画进度条。285MB 静默下载不给任何动静，
             // 用户会以为卡死。setProgressBar(-1) 清除。
+            // 2026-10-04 用户要求：**去掉 Dock 图标上的红色角标**（原本 setBadge('15%')），
+            // 只保留"图标下面的进度条"（setProgressBar）。侧栏那条进度条照旧。
             for (const w of BrowserWindow.getAllWindows()) w.setProgressBar(percent / 100);
           }
         }
       }
       await new Promise<void>((resolve) => stream.end(() => resolve()));
-      for (const w of BrowserWindow.getAllWindows()) w.setProgressBar(-1);   // 完成，清掉 Dock 进度
+      for (const w of BrowserWindow.getAllWindows()) w.setProgressBar(-1);
       return fs.existsSync(file) && fs.statSync(file).size > 1024 * 1024 ? file : null;
     } catch {
       return null;

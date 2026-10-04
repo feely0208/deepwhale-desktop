@@ -96,9 +96,23 @@ for (const target of TARGETS) {
   console.log(`  检查 ${target.file}（${target.note}）`);
 }
 
+// —— 测试项守卫（2026-10-04）——
+// 用户实测反馈：「预览更新进度条…这个怎么能体现在帮助菜单呢，这是我们测试时的东西」
+// 规则：开发/测试用的菜单项必须包在 showDevMenu 条件里，否则会出现在用户菜单里。
+try {
+  const traySrc = require('fs').readFileSync(require('path').join(__dirname, '..', 'src', 'main', 'tray.ts'), 'utf-8');
+  traySrc.split('\n').forEach((line, i) => {
+    if (line.includes('预览更新进度条') && !line.includes('showDevMenu')) {
+      problems.push('src/main/tray.ts:' + (i + 1) + '：测试项「预览更新进度条」没包在 showDevMenu 条件下，会进用户菜单');
+    }
+  });
+} catch (e) {
+  problems.push('无法读取 src/main/tray.ts 做测试项校验：' + String(e));
+}
+
 console.log('');
 if (problems.length === 0) {
-  console.log('✅ 通过：菜单项均为中文，且 role 都配了 label。');
+  console.log('✅ 通过：菜单项均为中文、role 都配了 label、测试项只在开发菜单。');
   process.exit(0);
 }
 console.log(`❌ 发现 ${problems.length} 处问题：`);

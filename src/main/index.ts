@@ -176,6 +176,18 @@ async function onPageReady(win: BrowserWindow): Promise<void> {
     await usage.applyPanel(win);
   }
   await injectSettingsExtension(win);
+
+  // 「本机内文件」：⌘⇧O（Windows/Linux：Ctrl+Shift+O）在任何会话里都能开 ——
+  // 用户明确要求"进行新会话时对比本机文件打不开可不行"，所以入口不能只靠开始面板。
+  // 用 before-input-event 而不是 globalShortcut：只在应用窗口聚焦时生效，不抢系统快捷键。
+  win.webContents.on('before-input-event', (_e, input) => {
+    const mod = process.platform === 'darwin' ? input.meta : input.control;
+    if (mod && input.shift && String(input.key).toLowerCase() === 'o' && input.type === 'keyDown') {
+      void win.webContents
+        .executeJavaScript('window.__dshLocalFiles && window.__dshLocalFiles.open(); true')
+        .catch(() => {});
+    }
+  });
   // 「本机内文件」：往「开始」面板补第三张卡片 + 面板 UI（见 src/localfiles/localfiles.js 的注释，
   // 为什么不是插件插槽：hero 的插槽是单占用，没有 list 槽可追加）
   try {
@@ -623,6 +635,19 @@ function buildMenuActions(): TrayMenuActions {
     onRefreshUsage: () => void usage.refresh(),
     onCheckUpdate: () => void updates?.checkNow(),
     onPreviewUpdateProgress: () => previewUpdateProgress(),
+    onOpenLocalFiles: () => {
+      try {
+        if (mainWin && !mainWin.isDestroyed()) {
+          if (!mainWin.isVisible()) mainWin.show();
+          mainWin.focus();
+          void mainWin.webContents.executeJavaScript(
+            'window.__dshLocalFiles && window.__dshLocalFiles.open(); true',
+          );
+        }
+      } catch (e) {
+        console.warn('[localfiles] 菜单打开失败:', e);
+      }
+    },
     onShowWhatsNew: () => {
       const ver = String(app.getVersion() || '').replace(/^v/, '');
       void showWhatsNewWindow(ver);
@@ -1937,6 +1962,37 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
               process.exitCode = 1;
             }
 
+            // —— ⌘⇧O：任何会话都能开「本机内文件」（用户明确要求，不能只靠开始面板）——
+            try {
+              await mainWin!.webContents.executeJavaScript(
+                "document.getElementById('dsh-local-files-panel') && (document.getElementById('dsh-local-files-panel').style.display='none'); true",
+              );
+              mainWin!.webContents.sendInputEvent({
+                type: 'keyDown',
+                keyCode: 'O',
+                modifiers: process.platform === 'darwin' ? ['meta', 'shift'] : ['control', 'shift'],
+              });
+              mainWin!.webContents.sendInputEvent({
+                type: 'keyUp',
+                keyCode: 'O',
+                modifiers: process.platform === 'darwin' ? ['meta', 'shift'] : ['control', 'shift'],
+              });
+              await new Promise((r) => setTimeout(r, 700));
+              const hot = await mainWin!.webContents.executeJavaScript(`(() => {
+                const panel = document.getElementById('dsh-local-files-panel');
+                return JSON.stringify({ open: !!panel && panel.style.display !== 'none' });
+              })()`);
+              const hj = JSON.parse(hot) as { open: boolean };
+              if (!hj.open) {
+                console.error('[smoke] ⌘⇧O 没能打开「本机内文件」面板');
+                process.exitCode = 1;
+              } else {
+                console.log('[smoke] ⌘⇧O 可在任意会话打开「本机内文件」✓');
+              }
+            } catch (e) {
+              console.warn('[smoke] 快捷键检查异常:', e);
+            }
+
             // —— 品牌标记：空白会话顶部应是「青色大肥鱼」（用户要求与弹窗/宠物统一）——
             try {
               const mark = await mainWin!.webContents.executeJavaScript(`(async () => {
@@ -1986,6 +2042,12 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
                 process.exitCode = 1;
               } else {
                 console.log('[smoke] 菜单里有「预览更新进度条」入口');
+              }
+              if (!labels.some((l) => l.indexOf('本机内文件') >= 0)) {
+                console.error('[smoke] 菜单里没有「本机内文件…」入口（非空白会话下用户找不到入口）');
+                process.exitCode = 1;
+              } else {
+                console.log('[smoke] 菜单里有「本机内文件…」入口');
               }
             } catch (e) {
               console.warn('[smoke] 菜单检查异常（不影响其它断言）:', e);

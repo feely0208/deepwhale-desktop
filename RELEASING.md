@@ -162,3 +162,20 @@ node scripts/bump-site-version.js \
 | 签名失败：`No identity found for signing` | 证书未导入 CI 所用钥匙串；检查 `CSC_LINK` / `CSC_NAME` 与证书有效期 |
 | 预检报 `CSC_IDENTITY_AUTO_DISCOVERY=false` | 该变量会禁用签名，正式发布时删除它 |
 | mac 打不出 x64 包 | CI 的 `macos-latest` 是 arm64，electron-builder 可交叉产出 x64；本地 Intel 机器只能出 x64 |
+
+
+## 🔒 安装器冻结项（改动即 CI 失败）
+
+2026-10-04 事故：Windows 用户自动更新后**整个应用消失**。根因是安装器配置
+（`oneClick:false` + 允许改安装目录 + appId 曾改名）。以下四项**永久冻结**，
+由 `scripts/check-installer-config.js` 在 CI 与本地打包时把关：
+
+| 项 | 值 | 为什么 |
+|---|---|---|
+| `appId` | `com.deepwhale.desktop` | NSIS 用它拼注册表键记安装目录，改名 = 老用户丢失安装位置 |
+| `nsis.oneClick` | `true` | electron-updater 的静默自动更新只支持一键安装器 |
+| `nsis.allowToChangeInstallationDirectory` | `false` | 允许改目录会让更新后路径漂移 |
+| `nsis.deleteAppDataOnUninstall` | `false` | 卸载不许删用户数据（会话 / 密钥）|
+
+> 结论：**要改这四项，先改 `scripts/check-installer-config.js` 并说明理由**，
+> 不允许绕过守卫直接改 YAML。

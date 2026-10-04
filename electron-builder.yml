@@ -1,3 +1,13 @@
+# ⚠️⚠️ 安装器配置为「冻结项」，改动前必读 ⚠️⚠️
+#   2026-10-04 事故：Windows 用户自动更新后应用整个消失（旧版被搬进 %TEMP% 又被清理）。
+#   根因：appId 改名 + oneClick:false + allowToChangeInstallationDirectory:true。
+#   以下四项被 scripts/check-installer-config.js 写死，改动会让 CI 直接失败：
+#     · appId = com.deepwhale.desktop（不许再改：NSIS 用它拼注册表键记安装目录）
+#     · nsis.oneClick = true（静默自动更新只支持一键安装器）
+#     · nsis.allowToChangeInstallationDirectory = false（固定默认目录）
+#     · nsis.deleteAppDataOnUninstall = false（卸载不许删用户数据）
+# 🔒 冻结项
+
 # electron-builder 三平台打包配置（macOS / Windows / Linux）
 #   - 产物命名带版本与架构：DeepWhale-Desktop-<version>-<arch>.dmg / ...-x64-Setup.exe
 #   - 发布目标为 GitHub Releases（draft 草稿，人工确认后公开）

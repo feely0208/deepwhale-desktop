@@ -2431,6 +2431,26 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
               console.warn('[smoke] 本机内文件面板检查异常:', e);
             }
 
+            // —— 安装器冻结项：打包态也校验一次（Windows 用户安装被破坏那次事故）——
+            try {
+              const conf = fs.readFileSync(path.join(app.getAppPath(), 'electron-builder.yml'), 'utf-8');
+              const must = [
+                ['oneClick: true', '一键安装器'],
+                ['allowToChangeInstallationDirectory: false', '固定安装目录'],
+                ['deleteAppDataOnUninstall: false', '卸载不删用户数据'],
+                ['appId: com.deepwhale.desktop', 'appId 冻结'],
+              ] as Array<[string, string]>;
+              const missing = must.filter(([k]) => conf.indexOf(k) < 0).map(([, n]) => n);
+              if (missing.length) {
+                console.error('[smoke] 安装器冻结项被改动：' + missing.join('、'));
+                process.exitCode = 1;
+              } else {
+                console.log('[smoke] 安装器冻结项齐备（一键安装 / 固定目录 / 不删数据 / appId 未变）✓');
+              }
+            } catch (e) {
+              console.warn('[smoke] 安装器冻结项检查跳过（开发态无该文件）:', e);
+            }
+
             // —— Office 预览链路（2026-10-04 修复）：硬判"物化产物 + 引擎执行位"，
             //    软判"真实转换"（需要 python-docx，环境没有就跳过）。
             //    背景：打包版一直报 "Installed LibreOfficeKit executable is not executable"

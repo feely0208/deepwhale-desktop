@@ -8,6 +8,9 @@
 #   scripts/dist-local.sh --mac --arm64 --x64   # 两个架构
 #   scripts/dist-local.sh --win --x64           # Windows
 set -euo pipefail
+
+# 🔒 安装器冻结项守卫：本地打包也拦一道（见 electron-builder.yml 顶部说明）
+node "$(dirname "$0")/check-installer-config.js"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 export ELECTRON_MIRROR="${ELECTRON_MIRROR:-https://npmmirror.com/mirrors/electron/}"

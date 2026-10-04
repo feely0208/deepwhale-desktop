@@ -1,3 +1,4 @@
+import { app } from 'electron';
 import * as fs from 'fs';
 import { profileDirOf } from './profile';
 import { removeOurInsertBlocks } from './legal-mode';
@@ -173,6 +174,117 @@ function ensureOfficePatchRows(
  * @param electronPath - 当前 Electron 可执行文件绝对路径。
  * @returns 是否写盘，以及 profile 是否还没就位。
  */
+/**
+ * 把 office 转换栈"物化"到**真实目录**（2026-10-04）——修「预览 docx 报
+ * "Installed LibreOfficeKit executable is not executable"」。
+ *
+ * 根因（待办-docx预览修复.md 已查实）：
+ *   `libreoffice-kit` 用 `require.resolve('<engine-pkg>/package.json')` 找引擎，
+ *   打包后拿到的是 **asar 内部路径**，而 asar 里所有文件是 0644（**没有执行位**），
+ *   于是自检 `status.mode & 0o111` 失败 → 打包版必挂、开发态正常。
+ *
+ * 做法：
+ *   1. 把 `libreoffice-kit`（纯 JS，小）连同它的依赖闭包**复制**到
+ *      `<home>/office-runtime/kit/node_modules/` —— 真实目录，可执行位不受 asar 影响
+ *   2. 平台引擎包（`libreoffice-kit-<platform>-<arch>`，140MB+）用**软链**指向
+ *      `app.asar.unpacked/...`（electron-builder 已把它解包，文件带执行位）
+ *   3. 配置里的 `cli` 指向这份真实路径
+ *   版本变化时整目录重建（避免旧 app 的路径残留）。
+ */
+function materializeOfficeKit(
+  home: string,
+  runtimeNodeModulesDir: string,
+  appVersion: string,
+): string | null {
+  const kitRoot = path.join(home, 'office-runtime', 'kit');
+  const modulesDir = path.join(kitRoot, 'node_modules');
+  const scopedDir = path.join(modulesDir, '@deepseek-ai');
+  const marker = path.join(kitRoot, '.version');
+  const cliRel = ['@deepseek-ai', 'libreoffice-kit', 'lib', 'cli.js'];
+
+  const srcScope = path.join(runtimeNodeModulesDir, '@deepseek-ai');
+  const srcKit = path.join(srcScope, 'libreoffice-kit');
+  if (!fs.existsSync(path.join(srcKit, 'lib', 'cli.js'))) return null;
+
+  // 版本变了就重建（否则旧 app 的绝对路径会留在软链里）
+  try {
+    const stamped = fs.existsSync(marker) ? fs.readFileSync(marker, 'utf-8').trim() : '';
+    if (stamped && stamped !== appVersion) {
+      fs.rmSync(kitRoot, { recursive: true, force: true });
+    }
+  } catch {
+    /* 读不到标记就当没建过 */
+  }
+
+  // 递归复制一个包（含它的 dependencies 闭包）——只复制 JS 包，代价很小
+  const copied = new Set<string>();
+  const copyPackage = (name: string): void => {
+    if (copied.has(name)) return;
+    copied.add(name);
+    const from = path.join(runtimeNodeModulesDir, name);
+    const to = path.join(modulesDir, name);
+    if (!fs.existsSync(from)) return;
+    try {
+      fs.mkdirSync(path.dirname(to), { recursive: true });
+      fs.cpSync(from, to, { recursive: true, dereference: false, force: true });
+    } catch (e) {
+      console.warn('[office] 复制依赖失败:', name, e);
+      return;
+    }
+    // 继续它的 dependencies（跳过 platform/optional，失败就算了）
+    try {
+      const pkg = JSON.parse(fs.readFileSync(path.join(from, 'package.json'), 'utf-8')) as {
+        dependencies?: Record<string, string>;
+      };
+      for (const dep of Object.keys(pkg.dependencies || {})) copyPackage(dep);
+    } catch {
+      /* 没 package.json 或不是 JSON，忽略 */
+    }
+  };
+
+  try {
+    // 1) JS 包 + 依赖闭包
+    copyPackage('@deepseek-ai/libreoffice-kit');
+    // 2) 平台引擎包：软链到解包目录（那里才有执行位）
+    let engines: string[] = [];
+    try {
+      engines = fs
+        .readdirSync(srcScope)
+        .filter((n) => n.startsWith('libreoffice-kit-') && n !== 'libreoffice-kit');
+    } catch {
+      engines = [];
+    }
+    for (const engine of engines) {
+      const linkPath = path.join(scopedDir, engine);
+      const asarPath = path.join(srcScope, engine);
+      // asar 内部路径 → 对应的解包真实路径
+      const unpacked = asarPath.includes('app.asar' + path.sep)
+        ? asarPath.replace('app.asar' + path.sep, 'app.asar.unpacked' + path.sep)
+        : asarPath;
+      const target = fs.existsSync(unpacked) ? unpacked : asarPath;
+      try {
+        fs.rmSync(linkPath, { recursive: true, force: true });
+        fs.mkdirSync(path.dirname(linkPath), { recursive: true });
+        fs.symlinkSync(target, linkPath, 'dir');
+      } catch (e) {
+        console.warn('[office] 引擎软链失败（退回复制）:', engine, e);
+        try {
+          fs.cpSync(target, linkPath, { recursive: true, force: true });
+        } catch (e2) {
+          console.warn('[office] 引擎复制也失败:', engine, e2);
+        }
+      }
+    }
+    fs.writeFileSync(marker, appVersion, 'utf-8');
+  } catch (e) {
+    console.warn('[office] 物化转换栈失败:', e);
+    return null;
+  }
+
+  const realCli = path.join(kitRoot, ...cliRel);
+  return fs.existsSync(realCli) ? realCli : null;
+}
+
 export function ensureOfficeSetup(
   home: string,
   payloadDir: string,
@@ -186,16 +298,20 @@ export function ensureOfficeSetup(
   if (runtimeNodeModulesDir === undefined) {
     return { changed: false, profilePending: false };
   }
-  const cliPath = path.join(
+  const asarCliPath = path.join(
     runtimeNodeModulesDir,
     '@deepseek-ai',
     'libreoffice-kit',
     'lib',
     'cli.js',
   );
-  if (!fs.existsSync(cliPath)) {
+  if (!fs.existsSync(asarCliPath)) {
     return { changed: false, profilePending: false };
   }
+  // ⚠️ 必须用"物化到真实目录"的那份 cli（asar 里的引擎没有执行位 → 打包版必挂）。
+  //    物化失败才退回 asar 路径（开发态/异常情况下至少还有一次机会）。
+  const cliPath =
+    materializeOfficeKit(home, runtimeNodeModulesDir, app.getVersion()) ?? asarCliPath;
 
   let changed = false;
   // 包装脚本写到【用户数据目录】，不写 App 包内（理由见 ensureWrapperNode 注释）

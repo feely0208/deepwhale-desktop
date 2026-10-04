@@ -1074,11 +1074,29 @@ function startingPageHtml(failed: boolean): string {
     ? 'DSH 服务启动失败。请检查设置中的 command 命令，或查看错误弹窗中的日志。'
     : '正在启动 DSH 服务，首次启动可能需要 30~60 秒…';
   const color = failed ? '#f87171' : '#38bdf8';
-  const icon = failed ? '⚠️' : '🐋';
+  // 启动页的标记也用「青色大肥鱼」（用户要求统一；之前是个 🐋 emoji）
+  // data: URL 页面读不到相对路径的本地图片，所以内联成 data URI（见 assets/brand/whale-mark-small.png）。
+  let brand = '';
+  try {
+    const p = path.join(__dirname, '../assets/brand/whale-mark-small.png');
+    brand = 'data:image/png;base64,' + fs.readFileSync(p).toString('base64');
+  } catch (e) {
+    console.warn('[start] 启动页品牌图读取失败（退回文字）:', e);
+  }
+  const mark = brand
+    ? `<img class="fish" src="${brand}" alt="" width="132" height="106" />`
+    : '';
+  const warn = failed ? '<div class="warn">⚠️</div>' : '';
   return `<!doctype html><html><head><meta charset="utf-8"><style>
     body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0d1424;color:#e8eefc;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
-    .box{text-align:center;padding:40px}.icon{font-size:56px}.title{font-size:26px;font-weight:700;margin:16px 0 10px}.msg{font-size:15px;color:${color}}
-  </style></head><body><div class="box"><div class="icon">${icon}</div><div class="title">DeepWhale Desktop</div><p class="msg">${msg}</p></div></body></html>`;
+    .box{text-align:center;padding:40px}
+    .fish{display:block;margin:0 auto 6px;filter:drop-shadow(0 10px 26px rgba(20,165,184,.55));animation:bob 4.5s ease-in-out infinite}
+    @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+    @media (prefers-reduced-motion: reduce){.fish{animation:none}}
+    .warn{font-size:40px;margin-bottom:8px}
+    .title{font-size:26px;font-weight:700;margin:10px 0 10px}
+    .msg{font-size:15px;color:${color}}
+  </style></head><body><div class="box">${warn}${mark}<div class="title">DeepWhale Desktop</div><p class="msg">${msg}</p></div></body></html>`;
 }
 
 /**
@@ -1960,6 +1978,98 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
             } catch (e) {
               console.error('[smoke] 卡片注入检查失败:', e);
               process.exitCode = 1;
+            }
+
+            // —— Office 预览链路（2026-10-04 修复）：硬判"物化产物 + 引擎执行位"，
+            //    软判"真实转换"（需要 python-docx，环境没有就跳过）。
+            //    背景：打包版一直报 "Installed LibreOfficeKit executable is not executable"
+            //    （asar 里的引擎没有执行位）→ 修法是把转换栈物化到真实目录，见 office-runtime.ts。
+            try {
+              const { spawnSync } = await import('child_process');
+              const home = path.join(app.getPath('userData'), 'dsh-home');
+              const nodeBin = path.join(home, 'office-runtime', 'bin', 'node');
+              const kitDir = path.join(home, 'office-runtime', 'kit', 'node_modules', '@deepseek-ai');
+              const cli = path.join(kitDir, 'libreoffice-kit', 'lib', 'cli.js');
+              let engines: string[] = [];
+              try {
+                engines = fs.readdirSync(kitDir).filter((n) => n.startsWith('libreoffice-kit-'));
+              } catch {
+                engines = [];
+              }
+              // 硬判 ①：cli 与引擎包都在
+              if (!fs.existsSync(nodeBin) || !fs.existsSync(cli) || engines.length === 0) {
+                console.error(
+                  '[smoke] Office 物化产物缺失（node=' + String(fs.existsSync(nodeBin)) +
+                    ' cli=' + String(fs.existsSync(cli)) + ' engines=' + String(engines.length) + '）',
+                );
+                process.exitCode = 1;
+              } else {
+                // 硬判 ②：引擎二进制必须有执行位（这正是打包版坏掉的那一点）
+                let execFound = false;
+                for (const e of engines) {
+                  const dir = path.join(kitDir, e);
+                  const walk = (d: string, depth: number): void => {
+                    if (execFound || depth > 4) return;
+                    let ents: fs.Dirent[] = [];
+                    try {
+                      ents = fs.readdirSync(d, { withFileTypes: true });
+                    } catch {
+                      return;
+                    }
+                    for (const it of ents) {
+                      const full = path.join(d, it.name);
+                      if (it.isSymbolicLink() || it.isDirectory()) walk(full, depth + 1);
+                      else if (it.name.indexOf('libreoffice-kit') >= 0) {
+                        try {
+                          fs.accessSync(full, fs.constants.X_OK);
+                          execFound = true;
+                        } catch {
+                          /* 没有执行位 */
+                        }
+                      }
+                    }
+                  };
+                  walk(dir, 0);
+                }
+                if (!execFound) {
+                  console.error('[smoke] Office 引擎没有可执行文件（打包版预览 docx 会失败）');
+                  process.exitCode = 1;
+                } else {
+                  console.log('[smoke] Office 链路：物化产物齐备，引擎带执行位 ✓');
+                }
+                // 软判：真实 docx→pdf（需要 python-docx）
+                try {
+                  const tmp = path.join(app.getPath('temp'), 'dsh-office-smoke');
+                  fs.mkdirSync(tmp, { recursive: true });
+                  const docx = path.join(tmp, 't.docx');
+                  const pdf = path.join(tmp, 't.pdf');
+                  try {
+                    fs.rmSync(pdf, { force: true });
+                  } catch {
+                    /* 忽略 */
+                  }
+                  const mk = spawnSync('python3', ['-c', `from docx import Document;d=Document();d.add_paragraph('深鲸桌面 Office 冒烟');d.save(r'${docx}')`], { encoding: 'utf-8', timeout: 30000 });
+                  if (mk.status !== 0) {
+                    console.log('[smoke] 跳过真实转换（本机没有 python-docx）');
+                  } else {
+                    const r = spawnSync(nodeBin, [cli, 'convert', '--input', docx, '--output', pdf], {
+                      encoding: 'utf-8',
+                      timeout: 90000,
+                    });
+                    const out = String(r.stdout || '').trim();
+                    if (out.indexOf('"backend"') >= 0 && fs.existsSync(pdf)) {
+                      console.log('[smoke] Office 真实转换通过：docx → pdf（' + String(fs.statSync(pdf).size) + 'B）');
+                    } else {
+                      console.error('[smoke] Office 真实转换失败：' + (out || String(r.stderr || '').slice(0, 200)));
+                      process.exitCode = 1;
+                    }
+                  }
+                } catch (e2) {
+                  console.warn('[smoke] Office 真实转换检查异常:', e2);
+                }
+              }
+            } catch (e) {
+              console.warn('[smoke] Office 链路检查异常（不影响其它断言）:', e);
             }
 
             // —— ⌘⇧O：任何会话都能开「本机内文件」（用户明确要求，不能只靠开始面板）——

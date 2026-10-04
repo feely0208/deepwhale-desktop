@@ -51,6 +51,12 @@ export interface UpdateManagerOptions {
   /** 状态变化回调（用于刷新托盘/菜单文案） */
   onStateChange?: (state: UpdateState) => void;
   /**
+   * 首次进入「下载中」时回调一次 —— 用户要求（2026-10-04）：
+   * 「弹出更新面板应该在更新同时弹出，而不是藏在那个后面」。
+   * 主进程用它把窗口前置 + 发系统通知，让下载一开始用户就知道。
+   */
+  onDownloadStart?: () => void;
+  /**
    * 是否启用自动检查。默认仅打包态启用。
    * 显式传 true 可在开发态测试（但 electron-updater 在未打包时不可用）。
    */
@@ -117,6 +123,9 @@ function macNeedsManualUpdate(): boolean {
 export class UpdateManager {
   private readonly getWindow: () => BrowserWindow | null;
   private readonly onStateChange: ((state: UpdateState) => void) | undefined;
+  private readonly onDownloadStart: (() => void) | undefined;
+  /** 本次下载是否已经通知过（避免每个百分比都弹一次） */
+  private downloadNotified = false;
 
   private readonly enabled: boolean;
   private state: UpdateState = { phase: 'idle' };
@@ -132,6 +141,7 @@ export class UpdateManager {
   constructor(options: UpdateManagerOptions) {
     this.getWindow = options.getWindow;
     this.onStateChange = options.onStateChange;
+    this.onDownloadStart = options.onDownloadStart;
     this.enabled = options.enabled ?? app.isPackaged;
   }
 
@@ -181,6 +191,19 @@ export class UpdateManager {
   }
 
   /** 当前状态（供托盘/菜单读取） */
+  /**
+   * 立即重启并安装（更新弹窗的「立即重启」按钮用）。
+   * 静默安装（isSilent=true）：不弹 NSIS 向导，复用已注册的安装目录 ——
+   * 这条是为了 Windows 快捷方式那个历史坑（见 windows-shortcut.ts）。
+   */
+  quitAndInstallNow(): void {
+    try {
+      autoUpdater.quitAndInstall(true, true);
+    } catch (e) {
+      console.error('[update] 立即重启失败:', e);
+    }
+  }
+
   getState(): UpdateState {
     return this.state;
   }
@@ -200,7 +223,20 @@ export class UpdateManager {
   // ── 内部实现 ────────────────────────────────────────────────────────
 
   private setState(next: UpdateState): void {
+    const prevPhase = this.state.phase;
     this.state = next;
+    // 下载一开始就通知（而不是等下载完）—— 见 onDownloadStart 的说明
+    if (next.phase === 'downloading' && prevPhase !== 'downloading' && !this.downloadNotified) {
+      this.downloadNotified = true;
+      try {
+        this.onDownloadStart?.();
+      } catch (e) {
+        console.warn('[update] 下载开始通知失败（已忽略）:', e);
+      }
+    }
+    if (next.phase === 'idle' || next.phase === 'up-to-date' || next.phase === 'error') {
+      this.downloadNotified = false;
+    }
     this.onStateChange?.(next);
     // 2026-10-03：把更新状态广播给渲染层 —— 设置页版本号那一行用它画下载进度条。
     // mac 上是「静默下载 285MB」，一路上不给任何反馈，用户会以为卡死。
@@ -511,10 +547,10 @@ export class UpdateManager {
       // 而不是装完一头雾水。取不到（离线/首次）就不显示，绝不影响更新本身。
       const highlights = summarize(await notesFor(info.version), 5);
       const choice = await this.confirm(
-        '更新已就绪',
-        `深鲸桌面 ${info.version} 已下载完成。\n\n` +
-          (highlights ? `本次更新：\n${highlights}\n\n` : '') +
-          '重启后即可使用新版本。',
+        `深鲸桌面 ${info.version} 更新已完成`,
+        `新版本已下载完成，重启应用后生效。\n\n` +
+          (highlights ? `本版更新内容：\n${highlights}\n\n` : '') +
+          '是否立即重启应用以完成更新？',
         ['立即重启', '退出时自动安装'],
       );
       if (choice === 0) {

@@ -16,6 +16,8 @@ export interface TrayMenuActions {
   onCheckUpdate?: () => void;
   /** 预览侧栏下载进度条（走与真实下载相同的状态通路，但纯假数据：不下载、不安装） */
   onPreviewUpdateProgress?: () => void;
+  /** 打开「本版更新内容」窗口（用户要求：放帮助菜单里，别塞设置页） */
+  onShowWhatsNew?: () => void;
   /** 手机连接：显示「用手机打开」的地址（地址里已带 token，用户不用手打） */
   onMobileConnect?: () => void;
   /** 皮肤子菜单（主题/背景图片，由调用方构建） */
@@ -138,6 +140,9 @@ export function buildAppMenuTemplate(a: TrayMenuActions): MenuItemConstructorOpt
     {
       label: '帮助',
       submenu: [
+        // 用户要求（2026-10-04）：「更新内容在设置页面就不要显示了，增加一个选项按钮在帮助里面」
+        { label: '本版更新内容…', click: () => a.onShowWhatsNew?.() },
+        { type: 'separator' as const },
         { label: '打开宠物目录…', click: () => a.onOpenPetsFolder?.() },
         { label: '打开自定义 CSS…', click: () => a.onOpenCustomCss() },
         { type: 'separator' as const },

@@ -530,12 +530,12 @@
     var st = document.createElement('style');
     st.id = 'dsh-ext-anim';
     st.textContent = [
-      '@keyframes dsh-dl-sweep{0%{transform:translateX(-120%)}100%{transform:translateX(520%)}}',
+      '@keyframes dsh-dl-sweep{0%{transform:translateX(-130%)}100%{transform:translateX(560%)}}',
       '@keyframes dsh-dl-run{0%{transform:translateX(-130%)}100%{transform:translateX(300%)}}',
       '@keyframes dsh-dl-flash{0%{opacity:.05}45%{opacity:.55}100%{opacity:0}}',
-      '#dsh-ext-dl-fill:after{content:"";position:absolute;top:0;bottom:0;width:45%;',
-      'background:linear-gradient(90deg,rgba(127,227,240,0),rgba(127,227,240,.55),rgba(127,227,240,0));',
-      'animation:dsh-dl-sweep 1.4s linear infinite}',
+      '#dsh-ext-dl-fill:after{content:"";position:absolute;top:0;bottom:0;width:60%;',
+      'background:linear-gradient(90deg,rgba(190,244,255,0),rgba(210,250,255,.85),rgba(190,244,255,0));',
+      'animation:dsh-dl-sweep 1.15s linear infinite}',
       '#dsh-ext-dl-runner{display:none}',
       '#dsh-ext-dl.indet #dsh-ext-dl-fill{display:none}',
       '#dsh-ext-dl.indet #dsh-ext-dl-runner{display:block;animation:dsh-dl-run 1.25s cubic-bezier(.45,.05,.55,.95) infinite}',
@@ -556,94 +556,7 @@
    * 数据来自壳主进程（shell:whatsnew → 先 CDN 后随包兜底，见 src/main/whatsnew.ts）。
    */
   /** 版本区域的锚点：优先设置页那条更新进度行，其次找含「当前版本」的那一行容器 */
-  function versionAnchor() {
-    var row = document.getElementById('dsh-ext-update-progress');
-    if (row) return row;
-    var all = document.querySelectorAll('div, section');
-    for (var i = 0; i < all.length; i++) {
-      var n = all[i];
-      var t = (n.textContent || '').trim();
-      if (t.indexOf('当前版本') === 0 && n.children.length > 0 && t.length < 120) return n;
-    }
-    return null;
-  }
-
-  function renderWhatsNewCard() {
-    if (document.getElementById('dsh-ext-whatsnew')) return;
-    var dsh = window.dsh || {};
-    if (typeof dsh.whatsNew !== 'function') return;
-    // 壳版本由主进程在注入时写在页面上（见 settings-inject.ts 的 window.__dshShellVersion）
-    var ver = String(window.__dshShellVersion || '').replace(/^v/, '');
-    if (!ver) return;
-    Promise.resolve(dsh.whatsNew(ver)).then(function (entry) {
-      if (!entry || !entry.items || !entry.items.length) return;
-      if (document.getElementById('dsh-ext-whatsnew')) return;
-      // 挂在版本行下面（找不到版本行就退回设置页顶部，宁可位置一般也要看得见）
-      var anchorRow = versionAnchor();
-      if (!anchorRow || !anchorRow.parentElement) return;
-
-      var box = document.createElement('div');
-      box.id = 'dsh-ext-whatsnew';
-      box.style.cssText =
-        'margin:10px 0 4px;padding:10px 12px;border-radius:8px;' +
-        'background:rgba(20,165,184,.10);border:1px solid rgba(20,165,184,.35);font-size:12px;line-height:1.7;';
-      var head = document.createElement('div');
-      head.style.cssText = 'font-weight:700;color:#14A5B8;margin-bottom:4px;';
-      head.textContent = '本版更新内容' + (entry.title ? '：' + entry.title : '') + '（v' + ver + '）';
-      box.appendChild(head);
-      entry.items.slice(0, 6).forEach(function (it) {
-        var line = document.createElement('div');
-        line.style.cssText = 'display:flex;gap:6px;align-items:flex-start;';
-        var dot = document.createElement('span');
-        dot.style.cssText = 'flex:none;opacity:.75;';
-        dot.textContent = it.kind === 'fix' ? '🛠' : '✨';
-        var txt = document.createElement('span');
-        txt.textContent = it.text;
-        line.appendChild(dot);
-        line.appendChild(txt);
-        box.appendChild(line);
-      });
-      anchorRow.parentElement.insertBefore(box, anchorRow.nextSibling);
-      console.log('[dsh-ext] 本版更新内容已显示（' + entry.items.length + ' 条）');
-    }).catch(function () { /* 取不到就不显示，别打扰用户 */ });
-  }
-
-  /**
-   * 设置页的「本机内文件」入口（2026-10-04）
-   * 「开始」面板里的第三张卡是主要入口，但那个面板只在空白会话时出现 ——
-   * 这里给一个**永远可达**的入口，功能不至于"找不到就等于没有"。
-   */
-  function renderLocalFilesEntry() {
-    if (document.getElementById('dsh-ext-localfiles')) return;
-    var anchorRow = versionAnchor();
-    if (!anchorRow || !anchorRow.parentElement) return;
-    var bar = document.createElement('div');
-    bar.id = 'dsh-ext-localfiles';
-    bar.style.cssText = 'margin:8px 0 4px;display:flex;gap:8px;flex-wrap:wrap;';
-    var btn = document.createElement('button');
-    btn.type = 'button';
-    btn.textContent = '📂 本机内文件…';
-    btn.style.cssText =
-      'padding:5px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;' +
-      'border:1px solid rgba(20,165,184,.5);background:rgba(20,165,184,.12);color:#14A5B8;';
-    btn.addEventListener('click', function () {
-      if (window.__dshLocalFiles && typeof window.__dshLocalFiles.open === 'function') {
-        window.__dshLocalFiles.open();
-      } else {
-        console.warn('[dsh-ext] 本机内文件模块未注入（localfiles.js 没加载？）');
-      }
-    });
-    var tip = document.createElement('span');
-    tip.style.cssText = 'align-self:center;font-size:11px;opacity:.6;';
-    tip.textContent = '浏览这台电脑上的文件，不用退出当前会话';
-    bar.appendChild(btn);
-    bar.appendChild(tip);
-    anchorRow.parentElement.insertBefore(bar, anchorRow.nextSibling);
-  }
-
   function maybeInjectSidebarProgress() {
-    renderWhatsNewCard();
-    renderLocalFilesEntry();
     if (document.getElementById('dsh-ext-dl')) return;
     var anchor = findSidebarSettingsAnchor();
     if (!anchor) {
@@ -686,16 +599,12 @@
       Math.round(SIDE_BAR_TRACK_H / 2) + 'px;background:#14A5B8;' +
       'transition:width .45s cubic-bezier(.22,.61,.36,1);';
     track.appendChild(fill);
+    // 用户 2026-10-04 实机反馈：「上面加的更新进度的白字也不好看，其实字可以不加的」
+    // → 侧栏条上不再放任何文字（需要文字时看设置页那一行）。id 保留但不渲染，
+    //   以免别处（如自检脚本）用 getElementById 拿不到而误判。
     var txt = document.createElement('span');
     txt.id = 'dsh-ext-dl-text';
-    // 叠在条右端：白字 + 细描边，青蓝填充与灰色轨道上都看得清
-    txt.style.cssText =
-      'position:absolute;right:6px;top:50%;transform:translateY(-50%);white-space:nowrap;' +
-      'font-size:10px;font-weight:700;letter-spacing:.2px;color:#fff;' +
-      // 灰轨道上也压得住：阴影加重一档（实测 0 0 2px/.5 在 8% 时偏淡）
-      'text-shadow:0 1px 2px rgba(0,0,0,.75),0 0 3px rgba(0,0,0,.55);pointer-events:none;';
-    txt.textContent = '下载中 0%';
-    track.appendChild(txt);
+    txt.style.display = 'none';
     var runner = document.createElement('span');
     runner.id = 'dsh-ext-dl-runner';
     runner.style.cssText =
@@ -715,12 +624,7 @@
       row.style.display = 'flex';
       row.style.alignItems = 'center';
     } catch (e) { /* 行样式动不了也不影响条本身 */ }
-    try {
-      // 侧栏折叠（行放不下文字）时只留条 —— 条会自己铺满剩余宽度，不挤坏布局
-      if (rectVisible(row) && row.getBoundingClientRect().width < SIDE_BAR_MIN_ROW) {
-        txt.style.display = 'none';
-      }
-    } catch (e) { /* 忽略 */ }
+    // 条上不再有文字，无需"折叠时藏文字"的分支（保留条本身铺满即可）
   }
 
   /* ---------- 更新状态订阅：同时驱动「设置页版本行」与「侧栏」两条进度条 ---------- */
@@ -740,10 +644,7 @@
       side.className = (indet ? 'indet ' : '') + (downloaded ? 'done' : '');
       var sf = document.getElementById('dsh-ext-dl-fill');
       if (sf) sf.style.width = pct + '%';
-      var stx = document.getElementById('dsh-ext-dl-text');
-      if (stx) {
-        stx.textContent = downloaded ? '已下好，重启生效' : (indet ? '正在下载…' : '下载中 ' + pct + '%');
-      }
+      // 条上不放文字（见上）；状态文字统一由设置页那一行承担
     }
     // 设置页版本行那条：带文字
     var box = document.getElementById('dsh-ext-update-progress');

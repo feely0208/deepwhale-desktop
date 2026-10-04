@@ -183,11 +183,12 @@ export class SkinManager {
              [class*="overlay"] { background: var(--dsw-alias-bg-base); position: fixed; inset: 0 }
          一改透明，整片浮层就变成透明纸片（用户截图里那个"怪白页"）。
          正确做法：**只把框架层（frame / centerCol）改透明**，token 保持 DSH 默认值。 */
-      body:not([data-ds-dark-theme]) [class*="frame"],
-      body:not([data-ds-dark-theme]) [class*="centerCol"] {
-        background: transparent !important;
-      }
+      /* ⚠️ 2026-10-04 修正（用户实机反馈"辉光给你搞没了"）：
+         辉光/壁纸本来就是靠基础底色透明才透出来的 —— 之前为了修"浮层被掏空"直接
+         不覆盖这个 token，结果连同辉光一起被 DSH 自己的实色盖住了。
+         正确做法：**基础底色照旧透明**（辉光透出来）+ **单独把浮层补成不透明**（不被掏空）。 */
       body:not([data-ds-dark-theme]) {
+        --dsw-alias-bg-base: transparent !important;
         --dsw-alias-bg-layer-1: rgba(255, 255, 255, var(--dsh-skin-alpha)) !important;
         --dsw-alias-bg-layer-2: rgba(244, 246, 248, var(--dsh-skin-alpha)) !important;
         --dsw-alias-bg-overlay: rgba(255, 255, 255, var(--dsh-skin-alpha)) !important;
@@ -207,18 +208,26 @@ export class SkinManager {
       /* 深色：面板/卡片改为不透明。原来是 rgba(...,alpha) 半透明，壁纸会透上来，
          于是面板发灰、和黑色模块割裂——这正是用户反馈的观感问题。
          基础底色保持 transparent，壁纸只在"没有面板覆盖"的地方透出。 */
-      /* 深色同理：不动 --dsw-alias-bg-base，只让框架层透明（浮层才不会被掏空） */
-      body[data-ds-dark-theme] [class*="frame"],
-      body[data-ds-dark-theme] [class*="centerCol"] {
-        background: transparent !important;
-      }
+      /* 深色同理：基础底色透明（辉光透出来） */
       body[data-ds-dark-theme] {
+        --dsw-alias-bg-base: transparent !important;
         --dsw-alias-bg-layer-1: #1c1f25 !important;
         --dsw-alias-bg-layer-2: #23272e !important;
         --dsw-alias-bg-overlay: #16191e !important;
         --dsw-specific-sidebar-fill: #16191e !important;
         --dsw-specific-sidebar-nav-item-active: rgba(255, 255, 255, 0.08) !important;
         --dsw-specific-sidebar-nav-item-hover: rgba(255, 255, 255, 0.05) !important;
+      }
+      /* ⚠️ 浮层必须单独补成不透明：DSH 的 [class*="overlay"] / onboarding 层
+         用基础底色当背景且 position:fixed;inset:0 —— 底色透明了它们就变透明纸片
+         （用户截图里那块"怪白页"）。两层主题各用各自的层色。 */
+      body[data-ds-dark-theme] [class*="overlay"],
+      body[data-ds-dark-theme] [class*="Overlay"] {
+        background: #16191e !important;
+      }
+      body:not([data-ds-dark-theme]) [class*="overlay"],
+      body:not([data-ds-dark-theme]) [class*="Overlay"] {
+        background: rgba(255, 255, 255, 0.98) !important;
       }
       /* 侧栏改成不透明实色：原来的渐变尾端有 0.25 透明度，壁纸直接透进导航区。 */
       body[data-ds-dark-theme] [class*="sidebarCol"] {

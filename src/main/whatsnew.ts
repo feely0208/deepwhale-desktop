@@ -86,7 +86,9 @@ export async function loadWhatsNew(force = false): Promise<WhatsNewFile> {
   try {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 5000);
-    const res = await fetch(CDN_URL, { signal: ctrl.signal });
+    // ⚠️ 必须带 cache-buster：CDN 对 .json 走的是"所有文件 30 天"规则，
+    //    直接拉会拿到上一版文案（2026-10-04 实测：不带参数是旧的、带参数才是新的）。
+    const res = await fetch(`${CDN_URL}?v=${Date.now()}`, { signal: ctrl.signal });
     clearTimeout(timer);
     if (res.ok) {
       const data = (await res.json()) as WhatsNewFile;

@@ -12,7 +12,7 @@ const path = require('path');
 const root = path.join(__dirname, '..');
 const dist = path.join(root, 'dist');
 
-const targets = ['src/pet', 'src/usage', 'src/apikey', 'src/settings', 'src/petstudio', 'src/welcome', 'src/localfiles', 'assets'];
+const targets = ['src/pet', 'src/usage', 'src/apikey', 'src/settings', 'src/petstudio', 'src/welcome', 'src/localfiles', 'src/update-popup', 'assets'];
 for (const t of targets) {
   const src = path.join(root, t);
   const dest = path.join(dist, t.replace(/^src\//, ''));

@@ -43,6 +43,12 @@ import { installCrashGuard, crashLogDir, appendCrashLog } from './crash-guard';
 import { repairWindowsShortcuts } from './windows-shortcut';
 import { registerLocalFilesIpc } from './localfiles';
 import { notesFor } from './whatsnew';
+import {
+  showUpdatePopup,
+  showWhatsNewWindow,
+  updatePopupState,
+  registerUpdatePopupIpc,
+} from './update-popup';
 
 /** 冒烟测试模式：自动启动、打印关键事件、8 秒后退出（供 CI/自动化验证） */
 const SMOKE = !!process.env.DSH_DESKTOP_SMOKE;
@@ -617,6 +623,10 @@ function buildMenuActions(): TrayMenuActions {
     onRefreshUsage: () => void usage.refresh(),
     onCheckUpdate: () => void updates?.checkNow(),
     onPreviewUpdateProgress: () => previewUpdateProgress(),
+    onShowWhatsNew: () => {
+      const ver = String(app.getVersion() || '').replace(/^v/, '');
+      void showWhatsNewWindow(ver);
+    },
     onMobileConnect: () => void showMobileConnect(),
     skinSubmenu,
     petSubmenu,
@@ -940,6 +950,19 @@ function registerIpc(): void {
 
   // ---- 宠物（设置页/菜单共用） ----
   registerLocalFilesIpc();
+  // 更新弹窗的按钮：立即重启 / 稍后（与更新管理器同源）
+  registerUpdatePopupIpc({
+    onRestart: () => {
+      try {
+        (updates as unknown as { quitAndInstallNow?: () => void })?.quitAndInstallNow?.();
+      } catch (e) {
+        console.warn('[update-popup] 立即重启失败:', e);
+      }
+    },
+    onLater: () => {
+      // 稍后：什么都不做（autoInstallOnAppQuit 已开启，退出时会装）
+    },
+  });
   // 「这版改了什么」：给渲染层（设置页卡片）用
   ipcMain.handle('shell:whatsnew', (_e, version: string) => notesFor(version));
 
@@ -1522,8 +1545,38 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
     //    更新检查与 DSH 是否就绪无关，必须无条件启动
     //    （UpdateManager 自己会处理"没有窗口"的情况，下面的回调也都有空值保护）。
     {
-      updates = new UpdateManager({
-        getWindow: () => (mainWin !== null && !mainWin.isDestroyed() ? mainWin : null),
+            updates = new UpdateManager({
+        // 用户要求（2026-10-04）：「弹出更新面板应该在更新同时弹出，而不是藏在那个后面」。
+        // 下载一开始：把主窗口前置 + 发系统通知（不阻塞），让用户立刻知道在更新。
+        onDownloadStart: () => {
+          try {
+            if (mainWin && !mainWin.isDestroyed()) {
+              if (!mainWin.isVisible()) mainWin.show();
+              mainWin.focus();
+            }
+            // 用户要求：「弹出更新面板应该在更新同时弹出」——用精心设计的弹窗，而不是系统对话框
+            const ver = (updates?.getState() as { version?: string } | undefined)?.version || '';
+            void showUpdatePopup(ver, {
+              phase: 'downloading',
+              percent: (updates?.getState() as { percent?: number } | undefined)?.percent ?? null,
+            });
+
+            try {
+              if (app.dock && typeof app.dock.bounce === 'function') app.dock.bounce('informational');
+            } catch {
+              /* 非 mac 没有 dock */
+            }
+            if (Notification.isSupported()) {
+              new Notification({
+                title: '正在下载深鲸桌面更新',
+                body: '下载完成后会提示重启应用，本版更新内容可在提示中查看。',
+              }).show();
+            }
+          } catch (e) {
+            console.warn('[update] 下载开始前置/通知失败（已忽略）:', e);
+          }
+        },
+       getWindow: () => (mainWin !== null && !mainWin.isDestroyed() ? mainWin : null),
         // ★ 进度**采了必须显示出来**。
         //   原来这里没有接 onStateChange —— 下载进度被采到了、然后直接扔掉，
         //   用户点了「立即下载」之后只看得到一个弹窗，之后什么都没有。
@@ -1532,6 +1585,11 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
         //     ① 托盘提示文字：悬停就能看到百分比
         //     ② Dock / 任务栏上的进度条：setProgressBar
         onStateChange: (state) => {
+          try {
+            updatePopupState({ phase: state.phase, percent: (state as { percent?: number }).percent ?? null, message: state.message });
+          } catch {
+            /* 弹窗不在就算了 */
+          }
           try {
             const pct = typeof state.percent === 'number' ? state.percent : null;
             const downloading = state.phase === 'downloading' && pct !== null;
@@ -1679,26 +1737,36 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
               const token = (cs.getPropertyValue('--dsw-alias-bg-base') || '').trim();
               const frame = document.querySelector('[class*="frame"]');
               const frameBg = frame ? getComputedStyle(frame).backgroundColor : 'no-frame';
-              return JSON.stringify({ token, frameBg });
+              // 借一个同 class 特征的临时元素，量"浮层"规则有没有生效
+              const probe = document.createElement('div');
+              probe.className = 'dsh-probe-overlay';
+              probe.style.cssText = 'position:fixed;left:-9999px;top:0;width:10px;height:10px;';
+              document.body.appendChild(probe);
+              const overlayBg = getComputedStyle(probe).backgroundColor;
+              probe.remove();
+              return JSON.stringify({ token, frameBg, overlayBg });
             })()`);
             console.log('[smoke] skin-token:', skinProbe);
             {
-              const sp = JSON.parse(skinProbe) as { token: string; frameBg: string };
-              const thinned = /transparent|rgba\([^)]*,\s*0?\.\d+\)/.test(sp.token);
-              if (!sp.token || thinned) {
+              const sp = JSON.parse(skinProbe) as { token: string; frameBg: string; overlayBg?: string };
+              // 2026-10-04 用户反馈"辉光给你搞没了"后的正确判据（两条都要满足）：
+              //   ① 基础底色必须**透明** —— 辉光/壁纸就是靠它透出来的；
+              //   ② 浮层必须**不透明** —— 否则浮层变透明纸片（"怪白页"）。
+              if (!/transparent|rgba\(0,\s*0,\s*0,\s*0\)/.test(sp.token)) {
                 console.error(
-                  '[smoke] 皮肤把 --dsw-alias-bg-base 打薄了（' + sp.token +
-                    '）→ 平台浮层会变成透明纸片，用户会看到"文字透上来"',
+                  '[smoke] --dsw-alias-bg-base 不是透明的（' + sp.token + '）→ 辉光/壁纸透不出来（用户实测过这一条）',
                 );
                 process.exitCode = 1;
               } else {
-                console.log('[smoke] --dsw-alias-bg-base 未被皮肤打薄：' + sp.token);
+                console.log('[smoke] 基础底色透明（辉光可见）：' + sp.token);
               }
-              if (sp.frameBg !== 'no-frame' && sp.frameBg !== 'rgba(0, 0, 0, 0)') {
-                console.error('[smoke] 框架层不是透明的（' + sp.frameBg + '）→ 壁纸/预设透不出来');
+              const ob = String(sp.overlayBg || '');
+              const overlayOpaque = ob && !/rgba\([^)]*,\s*0?\.\d+\)|transparent/.test(ob);
+              if (!overlayOpaque) {
+                console.error('[smoke] 浮层底色不是不透明的（' + ob + '）→ 全屏会出现"怪白页/文字透上来"');
                 process.exitCode = 1;
               } else {
-                console.log('[smoke] 框架层透明（壁纸可见）：' + sp.frameBg);
+                console.log('[smoke] 浮层不透明（不会被掏空）：' + ob);
               }
             }
 
@@ -1777,6 +1845,98 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
               process.exitCode = 1;
             }
 
+            // —— 更新弹窗（用户要求"精心设计一个"）——
+            //    冒烟里没有真实下载，所以直接调 showWhatsNewWindow 打开它，验内容 + 出一张图。
+            try {
+              const { showWhatsNewWindow } = await import('./update-popup');
+              void showWhatsNewWindow(String(app.getVersion() || '').replace(/^v/, ''));
+              await new Promise((r) => setTimeout(r, 2200));
+              const wins = BrowserWindow.getAllWindows().filter((w) => w.getTitle().indexOf('深鲸桌面') >= 0);
+              const pw = wins[0];
+              if (!pw) {
+                console.error('[smoke] 更新弹窗没能创建');
+                process.exitCode = 1;
+              } else {
+                const probe = await pw.webContents.executeJavaScript(`(() => {
+                  const items = document.querySelectorAll('#items li').length;
+                  const tag = document.getElementById('notes-tag');
+                  const title = document.getElementById('title');
+                  const glow = getComputedStyle(document.querySelector('.glow-a')).backgroundImage;
+                  return JSON.stringify({
+                    items,
+                    tag: tag ? tag.textContent : '',
+                    title: title ? title.textContent : '',
+                    hasGlow: /radial-gradient/.test(glow),
+                  });
+                })()`);
+                const pp = JSON.parse(probe) as { items: number; tag: string; title: string; hasGlow: boolean };
+                if (pp.items < 1 || !pp.hasGlow) {
+                  console.error('[smoke] 更新弹窗内容不完整：' + probe);
+                  process.exitCode = 1;
+                } else {
+                  console.log('[smoke] 更新弹窗：' + pp.title + ' ' + pp.tag + '，更新条目 ' + String(pp.items) + ' 条，辉光已生效');
+                }
+                try {
+                  const img = await pw.webContents.capturePage();
+                  fs.mkdirSync('/tmp/dsh-update-popup', { recursive: true });
+                  fs.writeFileSync('/tmp/dsh-update-popup/popup.png', img.toPNG());
+                  console.log('[smoke] 更新弹窗截图：/tmp/dsh-update-popup/popup.png');
+                } catch (e2) {
+                  console.warn('[smoke] 弹窗截图失败:', e2);
+                }
+                pw.hide();
+              }
+            } catch (e) {
+              console.error('[smoke] 更新弹窗检查失败:', e);
+              process.exitCode = 1;
+            }
+
+            // —— 「开始」面板第三张卡片：造同结构假面板，验证注入逻辑 ——
+            //    真面板只在空白会话时出现，冒烟里出不来；这里验证"定位 + 并列插在第二张卡之后
+            //    + 常驻补插（面板晚出现也能补上）"这三件事。
+            try {
+              await mainWin!.webContents.executeJavaScript(`(() => {
+                if (document.getElementById('smoke-fake-hero')) return true;
+                const box = document.createElement('div');
+                box.id = 'smoke-fake-hero';
+                box.style.cssText = 'position:fixed;left:-9999px;top:0;width:620px;';
+                box.innerHTML =
+                  '<div style="width:560px">' +
+                  '<div role="button" style="width:560px;height:96px"><span>工作区文件</span><span>浏览会话工作区的文件</span></div>' +
+                  '<div role="button" style="width:560px;height:96px"><span>新建终端</span><span>在会话工作区运行命令</span></div>' +
+                  '</div>';
+                document.body.appendChild(box);
+                return true;
+              })()`);
+              await new Promise((r) => setTimeout(r, 2800));
+              const hero = await mainWin!.webContents.executeJavaScript(`(() => {
+                const box = document.getElementById('smoke-fake-hero');
+                const card = document.getElementById('dsh-local-files-card');
+                if (!box) return JSON.stringify({ card: !!card, insideFake: false, order: -1, total: 0 });
+                const kids = Array.from(box.querySelectorAll('[role="button"], #dsh-local-files-card'));
+                return JSON.stringify({
+                  card: !!card,
+                  insideFake: !!card && box.contains(card),
+                  order: card ? kids.indexOf(card) : -1,
+                  total: kids.length,
+                  text: card ? (card.textContent || '').slice(0, 12) : '',
+                });
+              })()`);
+              const h = JSON.parse(hero) as { card: boolean; insideFake: boolean; order: number; total: number; text?: string };
+              if (!h.card) {
+                console.error('[smoke] 「开始」面板的第三张卡片没能注入（面板晚出现也没补上）');
+                process.exitCode = 1;
+              } else if (!h.insideFake || h.order !== 2) {
+                console.error('[smoke] 卡片没并列在第二张卡之后（order=' + String(h.order) + '/' + String(h.total) + '）');
+                process.exitCode = 1;
+              } else {
+                console.log('[smoke] 本机内文件卡片：与两张自带卡并列，插在第三位 ✓（' + String(h.text) + '…）');
+              }
+            } catch (e) {
+              console.error('[smoke] 卡片注入检查失败:', e);
+              process.exitCode = 1;
+            }
+
             // —— 托盘/应用菜单里的「预览更新进度条」（用户要"随时能看到进度条长什么样"）——
             try {
               const appMenu = Menu.getApplicationMenu();
@@ -1823,22 +1983,48 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
               const l2 = JSON.parse(lf2) as {
                 entry: boolean; panelOpen?: boolean; rows?: number; dir?: string; wnew?: boolean; wnItems?: number;
               };
-              if (!l2.entry) {
-                console.error('[smoke] 设置页没有「本机内文件」入口');
+              if (l2.entry) {
+                console.error('[smoke] 设置页又出现了「本机内文件」入口（用户要求撤销）');
                 process.exitCode = 1;
-              } else if (!l2.panelOpen || (l2.rows ?? 0) < 1) {
-                console.error('[smoke] 点设置页入口没打开「本机内文件」面板或没列出内容：' + lf2);
+              } else {
+                console.log('[smoke] 设置页已无「本机内文件」入口（按用户要求撤销）✓');
+              }
+              // 面板功能改由「开始」面板那张卡片点开验证（见上面的假面板用例）
+              // 面板形态按用户要求改成了"只给路径"（官方选目录那种），断言随之调整
+              const openFromCard = await mainWin!.webContents.executeJavaScript(`(async () => {
+                const card = document.getElementById('dsh-local-files-card');
+                if (!card) return JSON.stringify({ ok: false, why: 'no-card' });
+                card.click();
+                await new Promise((r) => setTimeout(r, 500));
+                const panel = document.getElementById('dsh-local-files-panel');
+                const input = document.getElementById('dsh-local-files-panel-path');
+                const rows = document.querySelectorAll('#dsh-local-files-panel-list > div').length;
+                return JSON.stringify({
+                  ok: !!panel && panel.style.display !== 'none',
+                  hasInput: !!input,
+                  path: input ? input.value : '',
+                  rows: rows,
+                });
+              })()`);
+              const oc = JSON.parse(openFromCard) as {
+                ok: boolean; hasInput?: boolean; path?: string; rows?: number; why?: string;
+              };
+              // 面板形状对齐官方「工作区文件」：页签 + 路径条 + 条目列表
+              if (!oc.ok || !oc.hasInput || (oc.rows ?? 0) < 1) {
+                console.error('[smoke] 本机内文件面板不完整（要路径条 + 文件列表）：' + openFromCard);
                 process.exitCode = 1;
               } else {
                 console.log(
-                  '[smoke] 本机内文件：面板列出 ' + String(l2.rows) + ' 项，起始目录=' + String(l2.dir),
+                  '[smoke] 本机内文件面板：路径=' + String(oc.path) + '，列出 ' + String(oc.rows) + ' 项（对齐官方文件面板形状）',
                 );
-              }
-              if (!l2.wnew) {
-                console.error('[smoke] 设置页没有「本版更新内容」卡片（用户要"知道这版改了什么"）');
-                process.exitCode = 1;
-              } else {
-                console.log('[smoke] 本版更新内容卡片已显示');
+                try {
+                  const shot = await mainWin!.webContents.capturePage();
+                  fs.mkdirSync('/tmp/dsh-localfiles', { recursive: true });
+                  fs.writeFileSync('/tmp/dsh-localfiles/panel.png', shot.toPNG());
+                  console.log('[smoke] 本机内文件面板截图：/tmp/dsh-localfiles/panel.png');
+                } catch (e3) {
+                  console.warn('[smoke] 面板截图失败:', e3);
+                }
               }
             } catch (e) {
               console.error('[smoke] 本机内文件/更新内容检查失败:', e);
@@ -1917,7 +2103,7 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
                 sibs: sibs,
                 display: s ? s.style.display : 'missing',
                 fillWidth: f ? f.style.width : 'missing',
-                text: t ? t.textContent : 'missing',
+                text: t ? t.textContent : 'missing',   // 条上已不放文字（用户 2026-10-04 要求）
                 rect: r ? { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) } : null,
                 vw: innerWidth,
                 vh: innerHeight,
@@ -1967,12 +2153,12 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
                   text: txt ? txt.textContent : '',
                 });
               })()`);
-              const ip = JSON.parse(indetProbe) as { cls: string; runnerDisplay: string; runnerAnim: string; text: string };
+              const ip = JSON.parse(indetProbe) as { cls: string; runnerDisplay: string; runnerAnim: string; text?: string };
               if (ip.cls.indexOf('indet') < 0 || ip.runnerDisplay === 'none' || ip.runnerAnim === 'none') {
                 console.error('[smoke] 百分比未知时没走"不定态"游走：' + indetProbe);
                 process.exitCode = 1;
               } else {
-                console.log('[smoke] 不定态游走生效：' + ip.runnerDisplay + ' / ' + ip.runnerAnim + ' 文字=' + ip.text);
+                console.log('[smoke] 不定态游走生效：' + ip.runnerDisplay + ' / ' + ip.runnerAnim);
               }
 
               // 已知百分比：宽度必须是缓动推进（transition 不是 .2s linear 那种硬走）
@@ -1993,15 +2179,14 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
               await new Promise((r) => setTimeout(r, 300));
               const doneProbe = await mainWin!.webContents.executeJavaScript(`(() => {
                 const wrap = document.getElementById('dsh-ext-dl');
-                const txt = document.getElementById('dsh-ext-dl-text');
-                return JSON.stringify({ cls: wrap ? wrap.className : '', text: txt ? txt.textContent : '' });
+                return JSON.stringify({ cls: wrap ? wrap.className : '' });
               })()`);
-              const dp2 = JSON.parse(doneProbe) as { cls: string; text: string };
+              const dp2 = JSON.parse(doneProbe) as { cls: string; text?: string };
               if (dp2.cls.indexOf('done') < 0) {
                 console.error('[smoke] 下载完成后没有进入 done（闪光）态：' + doneProbe);
                 process.exitCode = 1;
               } else {
-                console.log('[smoke] 完成态（满条 + 闪光）生效：' + dp2.text);
+                console.log('[smoke] 完成态（满条 + 闪光）生效');
               }
 
               // —— 抓帧，供生成"动效 GIF"（用户要肉眼验收）——
@@ -2065,9 +2250,6 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
                 '[smoke] 侧栏进度条没有铺满（宽 ' + String(p2.trackW) + 'px，应 >=120px；右侧间隙 ' + String(p2.gapRight) + 'px）',
               );
               process.exitCode = 1;
-            } else if (!p2.text.includes('42%')) {
-              console.error('[smoke] 侧栏进度条没显示百分比文字：' + p2.text);
-              process.exitCode = 1;
             } else if (
               p2.rect.x < 0 || p2.rect.y < 0 ||
               p2.rect.x + p2.rect.w > p2.vw || p2.rect.y + p2.rect.h > p2.vh
@@ -2101,7 +2283,7 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
               console.log(
                 '[smoke] 侧栏下载进度条可见：' + JSON.stringify(p2.rect) +
                   ' 条=' + String(p2.trackW) + '×' + String(p2.trackH) +
-                  ' 距行右缘=' + String(p2.gapRight) + 'px 文字=' + p2.text,
+                  ' 距行右缘=' + String(p2.gapRight) + 'px（条上不放文字）',
               );
             }
 

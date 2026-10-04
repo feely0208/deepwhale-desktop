@@ -43,13 +43,17 @@
 
   /* ---------------- 定位「开始」面板里那两张卡 ---------------- */
 
-  function leafByText(text) {
+  function leafByText(text, allowContains) {
     var all = document.querySelectorAll('button, [role="button"], a, div, span, p');
+    var loose = null;
     for (var i = 0; i < all.length; i++) {
       var n = all[i];
-      if (n.children.length === 0 && (n.textContent || '').trim() === text) return n;
+      if (n.children.length !== 0) continue;
+      var t = (n.textContent || '').trim();
+      if (t === text) return n;
+      if (!loose && allowContains && t.indexOf(text) >= 0) loose = n;
     }
-    return null;
+    return loose;
   }
 
   /** 从文字叶子往上找到"卡片"那一层：够宽、够高、且是可点的 */
@@ -64,52 +68,53 @@
   }
 
   function buildCard() {
-    var anchor = leafByText('工作区文件') || leafByText('浏览会话工作区的文件');
-    if (!anchor) {
-      warnOnce('没找到「开始」面板的工作区卡片，本机内文件入口未注入（不影响其它功能）');
-      return;
-    }
-    var refCard = cardOf(anchor);
-    if (!refCard || !refCard.parentElement) {
-      warnOnce('找到了文字但没定位到卡片容器，未注入');
-      return;
-    }
     if (document.getElementById(CARD_ID)) return;
+    // 期望：与「工作区文件」「新建终端」**并列**，排在它们后面（用户明确要求"占第三个位置"）
+    var termLeaf = leafByText('新建终端', true) || leafByText('在会话工作区运行命令', true);
+    var wsLeaf = leafByText('工作区文件') || leafByText('浏览会话工作区的文件', true);
+    var refCard = (termLeaf && cardOf(termLeaf)) || (wsLeaf && cardOf(wsLeaf));
+    if (!refCard) {
+      warnOnce('「开始」面板还没出现（它只在空白会话时渲染）——本机内文件卡片等它出现再插');
+      return;
+    }
+    if (!refCard.parentElement) return;
 
-    // 用与官方卡片同款的浅色圆角卡（内联样式，避免依赖 DSH 的 class）
+    // 样式对齐官方那两张卡（图2）：浅色圆角卡 + 左侧图标 + 标题/副标题 + 右侧提示
     var card = el(
       'div',
       'display:flex;align-items:center;gap:12px;width:100%;box-sizing:border-box;' +
         'padding:14px 16px;margin-top:10px;border-radius:12px;cursor:pointer;' +
         'background:var(--dsw-alias-bg-layer-1,rgba(255,255,255,.96));' +
         'border:1px solid var(--dsw-alias-border-l2,rgba(0,0,0,.08));' +
-        'box-shadow:0 1px 2px rgba(0,0,0,.06);transition:background .15s,transform .15s;',
+        'transition:background .15s ease,border-color .15s ease;',
     );
     card.id = CARD_ID;
     card.setAttribute('role', 'button');
     card.tabIndex = 0;
 
-    var icon = el(
-      'span',
-      'flex:none;width:28px;height:28px;display:flex;align-items:center;justify-content:center;' +
-        'font-size:17px;line-height:1;',
-      '🗂️',
-    );
-    var textBox = el('span', 'flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:2px;');
-    textBox.appendChild(el('span', 'font-size:14px;font-weight:600;', '本机内文件'));
-    textBox.appendChild(
-      el('span', 'font-size:12px;opacity:.65;', '浏览这台电脑上的文件（不用再开别的软件）'),
-    );
-    var hint = el('span', 'flex:none;font-size:12px;opacity:.5;', '点击打开');
+    var icon = el('span', 'flex:none;width:28px;height:28px;display:flex;align-items:center;justify-content:center;');
+    icon.innerHTML =
+      '<svg viewBox="0 0 24 24" width="22" height="22" fill="none">' +
+      '<path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h3.2c.7 0 1.3.3 1.8.8l1 1.2h7A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5v-9z" ' +
+      'fill="#F2B21B" opacity=".95"/><path d="M3 10h18v6.5A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5V10z" fill="#FFC94A"/></svg>';
+
+    var textBox = el('span', 'flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:3px;');
+    textBox.appendChild(el('span', 'font-size:15px;font-weight:500;line-height:1.35;', '本机内文件'));
+    textBox.appendChild(el('span', 'font-size:13px;opacity:.6;line-height:1.35;', '浏览这台电脑上的其他文件'));
+
+    var hint = el('span', 'flex:none;font-size:12px;opacity:.45;letter-spacing:.5px;', '⌘⇧O');
+
     card.appendChild(icon);
     card.appendChild(textBox);
     card.appendChild(hint);
 
     card.addEventListener('mouseenter', function () {
-      card.style.transform = 'translateY(-1px)';
+      card.style.background = 'var(--dsw-alias-bg-layer-2,rgba(255,255,255,.99))';
+      card.style.borderColor = 'rgba(20,165,184,.45)';
     });
     card.addEventListener('mouseleave', function () {
-      card.style.transform = 'none';
+      card.style.background = 'var(--dsw-alias-bg-layer-1,rgba(255,255,255,.96))';
+      card.style.borderColor = 'var(--dsw-alias-border-l2,rgba(0,0,0,.08))';
     });
     var open = function () {
       togglePanel(true);
@@ -120,9 +125,17 @@
     });
 
     refCard.parentElement.insertBefore(card, refCard.nextSibling);
+    console.log('[localfiles] 本机内文件卡片已插入「开始」面板（第三项）');
   }
 
-  /* ---------------- 面板 ---------------- */
+  /* ---------------- 面板：照官方「工作区文件」的形状（图1） ----------------
+     用户 2026-10-04 给了官方那张截图并说「照这个样子来部署」：
+       · 顶部一个页签「文件夹图标 + 名称 + ✕」
+       · 下面是**路径条**（可直接编辑/粘贴，回车跳转）+ 刷新按钮
+       · 再下面是**条目列表**（目录在前、文件显示大小），点目录进入、点文件用系统程序打开
+     数据来自主进程 localfiles:list（只读列目录，不递归）。 */
+
+  var state = { home: '', shortcuts: [], dir: '', parent: '', entries: [] };
 
   function togglePanel(show) {
     var panel = document.getElementById(PANEL_ID);
@@ -131,7 +144,28 @@
       document.body.appendChild(panel);
     }
     panel.style.display = show ? 'flex' : 'none';
-    if (show) void navigate(state.rootsHome || '');
+    if (show) {
+      // 打开时确保先拿到"起始目录"（roots 是异步拉的，可能还没回来 ——
+      // 第一版就因此把空路径丢给主进程，面板显示"需要绝对路径"，实机一看就是坏的）
+      void ensureRoots().then(function () {
+        var input = document.getElementById(PANEL_ID + '-path');
+        if (input && !input.value) input.value = state.home || '';
+        if (!state.dir) void navigate((input && input.value) || state.home || '');
+      });
+    }
+  }
+
+  async function ensureRoots() {
+    if (state.home || typeof dsh.localFilesRoots !== 'function') return;
+    try {
+      var roots = await dsh.localFilesRoots();
+      if (roots) {
+        state.home = roots.home || '';
+        state.shortcuts = roots.shortcuts || [];
+      }
+    } catch (e) {
+      /* 忽略：下面 navigate 会给出友好错误 */
+    }
   }
 
   function closePanel() {
@@ -139,96 +173,103 @@
     if (panel) panel.style.display = 'none';
   }
 
-  var state = {
-    rootsHome: '',
-    shortcuts: [],
-    dir: '',
-    parent: '',
-    entries: [],
-  };
+  function fmtSize(n) {
+    if (!n) return '';
+    if (n < 1024) return n + ' B';
+    if (n < 1048576) return (n / 1024).toFixed(0) + ' KB';
+    if (n < 1073741824) return (n / 1048576).toFixed(1) + ' MB';
+    return (n / 1073741824).toFixed(2) + ' GB';
+  }
 
   function buildPanel() {
     var panel = el('div', '');
     panel.id = PANEL_ID;
     panel.style.cssText =
-      'position:fixed;top:0;right:0;bottom:0;width:min(560px,92vw);z-index:2147483000;' +
-      'display:none;flex-direction:column;background:var(--dsw-alias-bg-overlay,rgba(20,23,28,.98));' +
-      'color:var(--dsw-alias-text-1,#e8eaed);box-shadow:-12px 0 32px rgba(0,0,0,.35);' +
-      'backdrop-filter:blur(2px);font-size:13px;';
+      'position:fixed;top:0;right:0;bottom:0;width:min(460px,94vw);z-index:2147483000;' +
+      'display:none;flex-direction:column;' +
+      'background:var(--dsw-specific-sidebar-fill,var(--dsw-alias-bg-overlay,rgba(20,23,28,.98)));' +
+      'color:var(--dsw-alias-text-1,#e8eaed);border-left:1px solid rgba(128,128,128,.25);' +
+      'box-shadow:-10px 0 28px rgba(0,0,0,.28);font-size:13px;';
 
-    // 头部
-    var head = el('div', 'flex:none;padding:14px 16px 10px;border-bottom:1px solid rgba(128,128,128,.25);');
-    var titleRow = el('div', 'display:flex;align-items:center;gap:10px;');
-    titleRow.appendChild(el('span', 'font-size:15px;font-weight:700;flex:1 1 auto;', '本机内文件'));
-    var upBtn = el('button', 'padding:4px 10px;border-radius:7px;cursor:pointer;font-size:12px;', '上一级');
+    // 顶部：页签（图标 + 名称 + ✕）—— 对齐图1
+    var tabRow = el('div', 'flex:none;display:flex;align-items:center;gap:8px;padding:10px 12px 8px;');
+    var tab = el('div', 'display:flex;align-items:center;gap:7px;padding:5px 10px;border-radius:9px;' +
+      'background:var(--dsw-alias-bg-layer-1,rgba(128,128,128,.16));font-size:13px;font-weight:500;');
+    var tabIcon = el('span', 'width:16px;height:16px;display:flex;align-items:center;justify-content:center;');
+    tabIcon.innerHTML =
+      '<svg viewBox="0 0 24 24" width="15" height="15" fill="none">' +
+      '<path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h3.2c.7 0 1.3.3 1.8.8l1 1.2h7A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5v-9z" ' +
+      'fill="#F2B21B" opacity=".95"/><path d="M3 10h18v6.5A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5V10z" fill="#FFC94A"/></svg>';
+    tab.appendChild(tabIcon);
+    tab.appendChild(el('span', '', '本机内文件'));
+    var tabClose = el('button', 'border:0;background:transparent;color:inherit;opacity:.55;cursor:pointer;' +
+      'font-size:13px;line-height:1;padding:0 2px;', '✕');
+    tabClose.addEventListener('click', closePanel);
+    tab.appendChild(tabClose);
+    tabRow.appendChild(tab);
+    panel.appendChild(tabRow);
+
+    // 路径条 + 刷新/上级（对齐图1的那一行）
+    var pathRow = el('div', 'flex:none;display:flex;align-items:center;gap:6px;padding:0 12px 8px;');
+    var input = document.createElement('input');
+    input.id = PANEL_ID + '-path';
+    input.type = 'text';
+    input.spellcheck = false;
+    input.placeholder = '/Users/…（可直接编辑或粘贴）';
+    input.style.cssText =
+      'flex:1 1 auto;min-width:0;padding:6px 9px;border-radius:8px;font-size:12.5px;' +
+      'border:1px solid rgba(128,128,128,.28);background:transparent;color:inherit;outline:none;';
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') void navigate(input.value);
+      if (e.key === 'Escape') closePanel();
+    });
+    var upBtn = el('button', 'flex:none;width:28px;height:28px;border-radius:8px;cursor:pointer;' +
+      'border:1px solid rgba(128,128,128,.28);background:transparent;color:inherit;', '↑');
+    upBtn.title = '上一级';
     upBtn.addEventListener('click', function () {
       if (state.parent) void navigate(state.parent);
     });
-    var closeBtn = el('button', 'padding:4px 10px;border-radius:7px;cursor:pointer;font-size:12px;', '关闭');
-    closeBtn.addEventListener('click', closePanel);
-    titleRow.appendChild(upBtn);
-    titleRow.appendChild(closeBtn);
-    head.appendChild(titleRow);
-
-    var crumbs = el('div', 'margin-top:8px;font-size:12px;opacity:.75;word-break:break-all;');
-    crumbs.id = PANEL_ID + '-crumbs';
-    head.appendChild(crumbs);
-
-    var quick = el('div', 'display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;');
-    quick.id = PANEL_ID + '-quick';
-    head.appendChild(quick);
-    panel.appendChild(head);
+    var refreshBtn = el('button', 'flex:none;width:28px;height:28px;border-radius:8px;cursor:pointer;' +
+      'border:1px solid rgba(128,128,128,.28);background:transparent;color:inherit;', '⟳');
+    refreshBtn.title = '刷新';
+    refreshBtn.addEventListener('click', function () {
+      void navigate(state.dir || input.value);
+    });
+    pathRow.appendChild(input);
+    pathRow.appendChild(upBtn);
+    pathRow.appendChild(refreshBtn);
+    panel.appendChild(pathRow);
 
     // 列表
-    var list = el('div', 'flex:1 1 auto;overflow:auto;padding:8px 8px 16px;');
+    var list = el('div', 'flex:1 1 auto;overflow:auto;padding:2px 6px 14px;');
     list.id = PANEL_ID + '-list';
     panel.appendChild(list);
 
-    // Esc 关闭
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') closePanel();
     });
     return panel;
   }
 
-  function fmtSize(n) {
-    if (!n) return '';
-    if (n < 1024) return n + ' B';
-    if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
-    if (n < 1073741824) return (n / 1048576).toFixed(1) + ' MB';
-    return (n / 1073741824).toFixed(2) + ' GB';
-  }
-
   function rowFor(entry) {
-    var row = el(
-      'div',
-      'display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:8px;cursor:pointer;',
-    );
-    row.addEventListener('mouseenter', function () {
-      row.style.background = 'rgba(128,128,128,.18)';
-    });
-    row.addEventListener('mouseleave', function () {
-      row.style.background = 'transparent';
-    });
-    row.appendChild(el('span', 'flex:none;width:20px;text-align:center;', entry.dir ? '📁' : '📄'));
+    var row = el('div', 'display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:8px;cursor:pointer;');
+    row.addEventListener('mouseenter', function () { row.style.background = 'rgba(128,128,128,.16)'; });
+    row.addEventListener('mouseleave', function () { row.style.background = 'transparent'; });
+    var ic = el('span', 'flex:none;width:18px;text-align:center;' + (entry.dir ? '' : 'opacity:.75;'));
+    ic.textContent = entry.dir ? '📁' : '📄';
+    row.appendChild(ic);
     var name = el('span', 'flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;', entry.name);
     name.title = entry.path;
     row.appendChild(name);
-    row.appendChild(el('span', 'flex:none;opacity:.55;font-size:11px;', entry.dir ? '' : fmtSize(entry.size)));
-
-    var revealBtn = el('button', 'flex:none;padding:2px 7px;border-radius:6px;font-size:11px;cursor:pointer;', '显示');
-    revealBtn.addEventListener('click', function (e) {
+    row.appendChild(el('span', 'flex:none;opacity:.5;font-size:11px;', entry.dir ? '' : fmtSize(entry.size)));
+    var reveal = el('button', 'flex:none;padding:2px 7px;border-radius:6px;font-size:11px;cursor:pointer;' +
+      'border:1px solid rgba(128,128,128,.28);background:transparent;color:inherit;', '显示');
+    reveal.title = '在访达中显示';
+    reveal.addEventListener('click', function (e) {
       e.stopPropagation();
       if (typeof dsh.localFilesReveal === 'function') dsh.localFilesReveal(entry.path);
     });
-    var openBtn = el('button', 'flex:none;padding:2px 7px;border-radius:6px;font-size:11px;cursor:pointer;', '打开');
-    openBtn.addEventListener('click', function (e) {
-      e.stopPropagation();
-      if (typeof dsh.localFilesOpen === 'function') dsh.localFilesOpen(entry.path);
-    });
-    row.appendChild(revealBtn);
-    row.appendChild(openBtn);
-
+    row.appendChild(reveal);
     row.addEventListener('click', function () {
       if (entry.dir) void navigate(entry.path);
       else if (typeof dsh.localFilesOpen === 'function') dsh.localFilesOpen(entry.path);
@@ -237,8 +278,12 @@
   }
 
   async function navigate(dir) {
-    if (!hasBridge) {
-      warnOnce('没有 window.dsh.localFilesList 桥（浏览器里直接打开 DSH 时正常），面板显示空');
+    var input = document.getElementById(PANEL_ID + '-path');
+    var list = document.getElementById(PANEL_ID + '-list');
+    if (!list) return;
+    if (typeof dsh.localFilesList !== 'function') {
+      warnOnce('没有 window.dsh.localFilesList 桥（浏览器里直接打开 DSH 时正常）');
+      list.textContent = '当前环境不支持浏览本机文件。';
       return;
     }
     var res;
@@ -247,39 +292,22 @@
     } catch (e) {
       res = { ok: false, error: String(e) };
     }
-    var listEl = document.getElementById(PANEL_ID + '-list');
-    var crumbs = document.getElementById(PANEL_ID + '-crumbs');
-    var quick = document.getElementById(PANEL_ID + '-quick');
-    if (!listEl || !crumbs) return;
-
     if (!res || !res.ok) {
-      listEl.textContent = '';
-      listEl.appendChild(el('div', 'padding:14px;opacity:.8;', '打不开这个目录：' + ((res && res.error) || '未知错误')));
+      list.textContent = '';
+      list.appendChild(el('div', 'padding:12px;opacity:.8;', '打不开这个目录：' + ((res && res.error) || '未知错误')));
       return;
     }
     state.dir = res.dir;
     state.parent = res.parent;
     state.entries = res.entries || [];
-    crumbs.textContent = res.dir;
+    if (input) input.value = res.dir;
 
-    if (quick && !quick.childNodes.length) {
-      (state.shortcuts || []).forEach(function (s) {
-        var b = el('button', 'padding:3px 9px;border-radius:7px;font-size:12px;cursor:pointer;', s.label);
-        b.addEventListener('click', function () {
-          void navigate(s.path);
-        });
-        quick.appendChild(b);
-      });
-    }
-
-    listEl.textContent = '';
+    list.textContent = '';
     if (!state.entries.length) {
-      listEl.appendChild(el('div', 'padding:14px;opacity:.7;', '这个目录里没有可直接显示的内容'));
+      list.appendChild(el('div', 'padding:12px;opacity:.6;', '这个目录里没有可直接显示的内容'));
       return;
     }
-    state.entries.forEach(function (entry) {
-      listEl.appendChild(rowFor(entry));
-    });
+    state.entries.forEach(function (entry) { list.appendChild(rowFor(entry)); });
   }
 
   /* ---------------- 启动：拉 roots，然后注入卡片 ---------------- */
@@ -303,12 +331,25 @@
   //（「开始」面板只在空白会话时出现，所以必须给一个**永远可达**的入口）
   window.__dshLocalFiles = { open: function () { togglePanel(true); }, close: closePanel };
 
-  // 「开始」面板是异步渲染的，且切会话/新建会话时会重绘 —— 用轻量定时器兜底补插
+  // 「开始」面板是异步渲染的（新建会话时才出现），切会话也会重绘 ——
+  // ⚠️ 第一版只轮询 30 秒，用户几分钟后才新建会话 → 卡片永远不出现（2026-10-04 实机反馈）。
+  //    现在改成**常驻**：MutationObserver 去抖 + 便宜的定时器双保险，只要面板出现就补上。
   void init();
-  var tries = 0;
-  var timer = setInterval(function () {
-    tries += 1;
-    if (!document.getElementById(CARD_ID)) buildCard();
-    if (tries > 40 || document.getElementById(CARD_ID)) clearInterval(timer);
-  }, 750);
+  var lastCheck = 0;
+  function ensureCard() {
+    var now = Date.now();
+    if (now - lastCheck < 400) return;   // 去抖：DSH 界面很热闹，别每次都查
+    lastCheck = now;
+    if (document.getElementById(CARD_ID)) return;
+    buildCard();
+  }
+  try {
+    new MutationObserver(ensureCard).observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+    });
+  } catch (e) {
+    /* 观察不了就只靠下面的定时器 */
+  }
+  setInterval(ensureCard, 2000);
 })();

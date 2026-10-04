@@ -272,7 +272,9 @@ export function presetBackgroundCss(preset: string): string | null {
 
       /* ── 浅色（body 上没有那个属性时走这里）── */
       body {${glowBackgroundCss('light')}
-        /* 不覆盖 --dsw-alias-bg-base（浮层底色，见 skin-manager.ts 的注释）；框架层单独透明 */
+        /* 基础底色透明：辉光就是靠它透出来的（2026-10-04 用户反馈"辉光没了"后恢复）；
+           浮层的不透明由下面的 [class*="overlay"] 规则单独兜住 */
+        --dsw-alias-bg-base: transparent !important;
         /* 面板偏实：设置页/浮层底下压着会话正文，太透就会两种字叠在一起
            （用户 2026-10-01「设置里面看有点透底」）。
            注意：**不要用 backdrop-filter 治透底** —— 选择器一旦匹配到根容器
@@ -289,13 +291,18 @@ export function presetBackgroundCss(preset: string): string | null {
       /* 壁纸/辉光要透出来 = 只让**框架层**透明（不是改 token，见 skin-manager.ts 的注释）。
          frame = 根网格，centerCol = 正文列；面板/卡片仍走各自的 layer 色，保持可读。 */
       [class*="frame"], [class*="centerCol"] { background: transparent !important; }
+      /* 浮层补不透明（基础底色透明后，它们会变透明纸片 —— 用户截图里的"怪白页"） */
+      body[data-ds-dark-theme] [class*="overlay"], body[data-ds-dark-theme] [class*="Overlay"] { background: #16191e !important; }
+      body:not([data-ds-dark-theme]) [class*="overlay"], body:not([data-ds-dark-theme]) [class*="Overlay"] { background: rgba(255,255,255,.98) !important; }
 
       /* ── 深色 ── */
       body[data-ds-dark-theme] {${glowBackgroundCss('dark')}
         /* 正文底半实：辉光透一点、文字压得住（全透会让辉光糊到文字上） */
         /* 正文底：原来 0.62 把辉光压掉六成 → 深色看着就是一片黑。
            降到 0.42：辉光透得上来，而正文是近白字，在深蓝上对比仍然充足。 */
-        /* 同上：深色原来给的是 0.42 半透明，浮层会变成半透明白片 */
+        /* 深色基础底色同样透明（辉光透出来）；
+           原来这里是 0.42 半透明 → 浮层会变成半透明白片，现由下面的 overlay 规则兜住 */
+        --dsw-alias-bg-base: transparent !important;
         /* 面板/浮层比正文实：设置页盖在会话上，透底就是从这里来的 */
         --dsw-alias-bg-layer-1: rgba(23, 26, 32, 0.96) !important;
         --dsw-alias-bg-layer-2: rgba(32, 36, 43, 0.97) !important;

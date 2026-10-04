@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <!-- ⚠️ 必须允许 'self'：弹窗的 css/js 就是同目录文件。
+         第一版写成 default-src 'none' + 只放行 inline → 自己的样式与脚本被拦，
+         弹窗渲染成"裸 HTML"（2026-10-04 实测，截图一眼就看出来）。 -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:;" />
+    <title>深鲸桌面更新</title>
+    <link rel="stylesheet" href="./update-popup.css" />
+  </head>
+  <body>
+    <div class="stage">
+      <div class="glow glow-a"></div>
+      <div class="glow glow-b"></div>
+      <div class="card">
+        <header class="head">
+          <!-- 标记用我们的「青色大肥鱼」（取自宠物精灵图 idle 首帧，见 assets/brand/whale-pet.png） -->
+          <div class="mark" aria-hidden="true">
+            <img src="../assets/brand/whale-pet.png" alt="" width="46" height="40" />
+          </div>
+          <div class="titles">
+            <div class="eyebrow" id="eyebrow">正在下载更新</div>
+            <h1 id="title">深鲸桌面</h1>
+            <div class="sub" id="subtitle"></div>
+          </div>
+          <button class="x" id="btn-close" title="关闭">✕</button>
+        </header>
+
+        <section class="progress" id="progress-wrap">
+          <div class="bar"><span class="fill" id="fill"></span><span class="sweep"></span></div>
+          <div class="pct"><span id="pct">0%</span><span class="hint" id="speed"></span></div>
+          <div class="status" id="status">正在下载安装包…</div>
+        </section>
+
+        <section class="notes">
+          <div class="notes-head">
+            <span id="notes-title">本版更新内容</span>
+            <span class="tag" id="notes-tag"></span>
+          </div>
+          <ul id="items"></ul>
+          <div class="empty" id="notes-empty" hidden>本版暂无更新说明。</div>
+        </section>
+
+        <footer class="foot">
+          <button class="ghost" id="btn-later">稍后</button>
+          <button class="primary" id="btn-restart" disabled>下载中…</button>
+        </footer>
+        <div class="fineprint" id="fineprint">深鲸桌面 · 本地运行 · 不上传你的文件</div>
+      </div>
+    </div>
+    <script src="./update-popup.js"></script>
+  </body>
+</html>

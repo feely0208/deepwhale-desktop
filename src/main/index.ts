@@ -1937,6 +1937,39 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
               process.exitCode = 1;
             }
 
+            // —— 品牌标记：空白会话顶部应是「青色大肥鱼」（用户要求与弹窗/宠物统一）——
+            try {
+              const mark = await mainWin!.webContents.executeJavaScript(`(async () => {
+                const el = document.querySelector('[data-dsh-brand-mark]');
+                const img = el ? el.querySelector('img') : null;
+                let loaded = false;
+                try {
+                  const r = await fetch('/', { credentials: 'same-origin' });
+                  const html = await r.text();
+                  loaded = html.indexOf('dsh-shell-brand-mark') >= 0;
+                } catch (e) { loaded = false; }
+                return JSON.stringify({
+                  present: !!el,
+                  isDataUri: !!img && String(img.src || '').indexOf('data:image/png') === 0,
+                  w: img ? img.width : 0,
+                  loaded: loaded,
+                });
+              })()`);
+              const mk = JSON.parse(mark) as { present: boolean; isDataUri: boolean; w: number; loaded: boolean };
+              if (!mk.loaded) {
+                console.error('[smoke] 品牌标记插件没被加载（boot 列表里没有 dsh-shell-brand-mark）');
+                process.exitCode = 1;
+              } else if (mk.present) {
+                console.log(
+                  '[smoke] 品牌标记已替换为青色大肥鱼（' + String(mk.w) + 'px，data URI=' + String(mk.isDataUri) + '）',
+                );
+              } else {
+                console.log('[smoke] 品牌标记插件已加载（插槽本轮未渲染：它只在空白会话出现）');
+              }
+            } catch (e) {
+              console.warn('[smoke] 品牌标记检查异常:', e);
+            }
+
             // —— 托盘/应用菜单里的「预览更新进度条」（用户要"随时能看到进度条长什么样"）——
             try {
               const appMenu = Menu.getApplicationMenu();

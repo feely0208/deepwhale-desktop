@@ -47,6 +47,8 @@ const BUNDLED_PLUGINS: BundledPlugin[] = [
   // 官方把它挂在 `profileContext.name === 'desktop'` 条件下，而同一个条件还开着
   // 官方遥测与产品埋点 —— 所以我们不改 profile 名，只单独覆盖这一条 disabled。
   { name: '@deepwhale-cn/dsh-shell-web-preview', dir: 'dsh-shell-web-preview' },
+  // 空白会话顶部的品牌标记 → 青色大肥鱼（与更新弹窗、宠物统一视觉）
+  { name: '@deepwhale-cn/dsh-shell-brand-mark', dir: 'dsh-shell-brand-mark' },
 ];
 
 /** 注入结果。 */

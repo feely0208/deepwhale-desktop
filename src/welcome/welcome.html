@@ -17,6 +17,8 @@
       -webkit-user-select: none;
       user-select: none;
     }
+    .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .brand img { display: block; filter: drop-shadow(0 4px 10px rgba(20,165,184,.35)); }
     h1 { font-size: 18px; margin: 0 0 8px; }
     p.desc { font-size: 12.5px; color: #57606a; margin: 0 0 16px; line-height: 1.7; }
     ul.ready { list-style: none; padding: 0; margin: 0 0 18px; }
@@ -59,6 +61,10 @@
   </style>
 </head>
 <body>
+  <!-- 品牌标记：与更新弹窗、桌面宠物统一用「青色大肥鱼」 -->
+  <div class="brand">
+    <img src="../assets/brand/whale-pet.png" alt="" width="56" height="48" />
+  </div>
   <h1>欢迎使用深鲸桌面</h1>
   <p class="desc">
     深鲸桌面是 DeepSeek Harness 的桌面客户端，安装包已内置完整运行时——<br />

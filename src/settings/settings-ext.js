@@ -516,7 +516,134 @@
     return null;
   }
 
+  /**
+   * 进度条动画（2026-10-04 用户：「给进度条做个动效，别那么傻傻的跑」）。
+   *
+   * 纯 CSS，不引 rAF、不在侧栏跑常驻 JS 动画（侧栏是常驻 DOM，动效必须便宜）：
+   *   · 填充：宽度缓动推进（.45s 缓出）+ 一条青色流光从左往右扫过（1.4s 一轮）
+   *   · 百分比未知：切成"不定态"——一段 36% 宽的填充在轨道里来回游走
+   *   · 已下载好：满条 + 一次闪光，然后静止
+   *   · 尊重 prefers-reduced-motion：只留宽度过渡，关掉流光与游走
+   */
+  function ensureProgressAnimCss() {
+    if (document.getElementById('dsh-ext-anim')) return;
+    var st = document.createElement('style');
+    st.id = 'dsh-ext-anim';
+    st.textContent = [
+      '@keyframes dsh-dl-sweep{0%{transform:translateX(-120%)}100%{transform:translateX(520%)}}',
+      '@keyframes dsh-dl-run{0%{transform:translateX(-130%)}100%{transform:translateX(300%)}}',
+      '@keyframes dsh-dl-flash{0%{opacity:.05}45%{opacity:.55}100%{opacity:0}}',
+      '#dsh-ext-dl-fill:after{content:"";position:absolute;top:0;bottom:0;width:45%;',
+      'background:linear-gradient(90deg,rgba(127,227,240,0),rgba(127,227,240,.55),rgba(127,227,240,0));',
+      'animation:dsh-dl-sweep 1.4s linear infinite}',
+      '#dsh-ext-dl-runner{display:none}',
+      '#dsh-ext-dl.indet #dsh-ext-dl-fill{display:none}',
+      '#dsh-ext-dl.indet #dsh-ext-dl-runner{display:block;animation:dsh-dl-run 1.25s cubic-bezier(.45,.05,.55,.95) infinite}',
+      '#dsh-ext-dl-flash{opacity:0}',
+      '#dsh-ext-dl.done #dsh-ext-dl-flash{animation:dsh-dl-flash .7s ease-out 1}',
+      '#dsh-ext-update-progress-fill{transition:width .45s cubic-bezier(.22,.61,.36,1) !important}',
+      '@media (prefers-reduced-motion: reduce){',
+      '#dsh-ext-dl-fill:after{animation:none;opacity:0}',
+      '#dsh-ext-dl.indet #dsh-ext-dl-runner{animation:none;transform:none;opacity:.55}',
+      '#dsh-ext-dl.done #dsh-ext-dl-flash{animation:none}}',
+    ].join('');
+    (document.head || document.documentElement).appendChild(st);
+  }
+
+  /**
+   * 设置页「本版更新内容」卡片（2026-10-04 用户提议）：
+   *   「升级了什么用户根本不知道，体验感不好」→ 版本行下面直接列出这一版改了什么。
+   * 数据来自壳主进程（shell:whatsnew → 先 CDN 后随包兜底，见 src/main/whatsnew.ts）。
+   */
+  /** 版本区域的锚点：优先设置页那条更新进度行，其次找含「当前版本」的那一行容器 */
+  function versionAnchor() {
+    var row = document.getElementById('dsh-ext-update-progress');
+    if (row) return row;
+    var all = document.querySelectorAll('div, section');
+    for (var i = 0; i < all.length; i++) {
+      var n = all[i];
+      var t = (n.textContent || '').trim();
+      if (t.indexOf('当前版本') === 0 && n.children.length > 0 && t.length < 120) return n;
+    }
+    return null;
+  }
+
+  function renderWhatsNewCard() {
+    if (document.getElementById('dsh-ext-whatsnew')) return;
+    var dsh = window.dsh || {};
+    if (typeof dsh.whatsNew !== 'function') return;
+    // 壳版本由主进程在注入时写在页面上（见 settings-inject.ts 的 window.__dshShellVersion）
+    var ver = String(window.__dshShellVersion || '').replace(/^v/, '');
+    if (!ver) return;
+    Promise.resolve(dsh.whatsNew(ver)).then(function (entry) {
+      if (!entry || !entry.items || !entry.items.length) return;
+      if (document.getElementById('dsh-ext-whatsnew')) return;
+      // 挂在版本行下面（找不到版本行就退回设置页顶部，宁可位置一般也要看得见）
+      var anchorRow = versionAnchor();
+      if (!anchorRow || !anchorRow.parentElement) return;
+
+      var box = document.createElement('div');
+      box.id = 'dsh-ext-whatsnew';
+      box.style.cssText =
+        'margin:10px 0 4px;padding:10px 12px;border-radius:8px;' +
+        'background:rgba(20,165,184,.10);border:1px solid rgba(20,165,184,.35);font-size:12px;line-height:1.7;';
+      var head = document.createElement('div');
+      head.style.cssText = 'font-weight:700;color:#14A5B8;margin-bottom:4px;';
+      head.textContent = '本版更新内容' + (entry.title ? '：' + entry.title : '') + '（v' + ver + '）';
+      box.appendChild(head);
+      entry.items.slice(0, 6).forEach(function (it) {
+        var line = document.createElement('div');
+        line.style.cssText = 'display:flex;gap:6px;align-items:flex-start;';
+        var dot = document.createElement('span');
+        dot.style.cssText = 'flex:none;opacity:.75;';
+        dot.textContent = it.kind === 'fix' ? '🛠' : '✨';
+        var txt = document.createElement('span');
+        txt.textContent = it.text;
+        line.appendChild(dot);
+        line.appendChild(txt);
+        box.appendChild(line);
+      });
+      anchorRow.parentElement.insertBefore(box, anchorRow.nextSibling);
+      console.log('[dsh-ext] 本版更新内容已显示（' + entry.items.length + ' 条）');
+    }).catch(function () { /* 取不到就不显示，别打扰用户 */ });
+  }
+
+  /**
+   * 设置页的「本机内文件」入口（2026-10-04）
+   * 「开始」面板里的第三张卡是主要入口，但那个面板只在空白会话时出现 ——
+   * 这里给一个**永远可达**的入口，功能不至于"找不到就等于没有"。
+   */
+  function renderLocalFilesEntry() {
+    if (document.getElementById('dsh-ext-localfiles')) return;
+    var anchorRow = versionAnchor();
+    if (!anchorRow || !anchorRow.parentElement) return;
+    var bar = document.createElement('div');
+    bar.id = 'dsh-ext-localfiles';
+    bar.style.cssText = 'margin:8px 0 4px;display:flex;gap:8px;flex-wrap:wrap;';
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = '📂 本机内文件…';
+    btn.style.cssText =
+      'padding:5px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;' +
+      'border:1px solid rgba(20,165,184,.5);background:rgba(20,165,184,.12);color:#14A5B8;';
+    btn.addEventListener('click', function () {
+      if (window.__dshLocalFiles && typeof window.__dshLocalFiles.open === 'function') {
+        window.__dshLocalFiles.open();
+      } else {
+        console.warn('[dsh-ext] 本机内文件模块未注入（localfiles.js 没加载？）');
+      }
+    });
+    var tip = document.createElement('span');
+    tip.style.cssText = 'align-self:center;font-size:11px;opacity:.6;';
+    tip.textContent = '浏览这台电脑上的文件，不用退出当前会话';
+    bar.appendChild(btn);
+    bar.appendChild(tip);
+    anchorRow.parentElement.insertBefore(bar, anchorRow.nextSibling);
+  }
+
   function maybeInjectSidebarProgress() {
+    renderWhatsNewCard();
+    renderLocalFilesEntry();
     if (document.getElementById('dsh-ext-dl')) return;
     var anchor = findSidebarSettingsAnchor();
     if (!anchor) {
@@ -553,9 +680,11 @@
       'border-radius:' + Math.round(SIDE_BAR_TRACK_H / 2) + 'px;background:rgba(128,128,128,.28);overflow:hidden;';
     var fill = document.createElement('span');
     fill.id = 'dsh-ext-dl-fill';
+    // position:relative + overflow:hidden → 让 ::after 的流光被裁在填充范围内
     fill.style.cssText =
-      'display:block;width:0%;height:100%;border-radius:' + Math.round(SIDE_BAR_TRACK_H / 2) +
-      'px;background:#14A5B8;transition:width .2s;';
+      'position:relative;display:block;width:0%;height:100%;overflow:hidden;border-radius:' +
+      Math.round(SIDE_BAR_TRACK_H / 2) + 'px;background:#14A5B8;' +
+      'transition:width .45s cubic-bezier(.22,.61,.36,1);';
     track.appendChild(fill);
     var txt = document.createElement('span');
     txt.id = 'dsh-ext-dl-text';
@@ -563,9 +692,22 @@
     txt.style.cssText =
       'position:absolute;right:6px;top:50%;transform:translateY(-50%);white-space:nowrap;' +
       'font-size:10px;font-weight:700;letter-spacing:.2px;color:#fff;' +
-      'text-shadow:0 0 2px rgba(0,0,0,.5);pointer-events:none;';
+      // 灰轨道上也压得住：阴影加重一档（实测 0 0 2px/.5 在 8% 时偏淡）
+      'text-shadow:0 1px 2px rgba(0,0,0,.75),0 0 3px rgba(0,0,0,.55);pointer-events:none;';
     txt.textContent = '下载中 0%';
     track.appendChild(txt);
+    var runner = document.createElement('span');
+    runner.id = 'dsh-ext-dl-runner';
+    runner.style.cssText =
+      'position:absolute;top:0;bottom:0;left:0;width:36%;border-radius:' +
+      Math.round(SIDE_BAR_TRACK_H / 2) + 'px;background:#14A5B8;';
+    track.appendChild(runner);
+    var flash = document.createElement('span');
+    flash.id = 'dsh-ext-dl-flash';
+    flash.style.cssText =
+      'position:absolute;inset:0;border-radius:' + Math.round(SIDE_BAR_TRACK_H / 2) +
+      'px;background:#7FE3F0;pointer-events:none;';
+    track.appendChild(flash);
     wrap.appendChild(track);
     row.appendChild(wrap);
 
@@ -585,16 +727,23 @@
   function renderUpdateProgress(st) {
     var downloading = !!(st && (st.phase === 'downloading' || st.phase === 'downloaded'));
     var downloaded = !!(st && st.phase === 'downloaded');
+    // 百分比未知（真实下载刚起步 / 预览的不定态阶段）→ 走"游走"，别钉在 0% 干等
+    var indet = downloading && !downloaded && !(st && typeof st.percent === 'number');
     var pct = st && typeof st.percent === 'number' ? st.percent : (downloaded ? 100 : 0);
+
+    ensureProgressAnimCss();
 
     // 侧栏条：条 + 百分比文字
     var side = document.getElementById('dsh-ext-dl');
     if (side) {
       side.style.display = downloading ? 'inline-flex' : 'none';
+      side.className = (indet ? 'indet ' : '') + (downloaded ? 'done' : '');
       var sf = document.getElementById('dsh-ext-dl-fill');
       if (sf) sf.style.width = pct + '%';
       var stx = document.getElementById('dsh-ext-dl-text');
-      if (stx) stx.textContent = downloaded ? '已下好，重启生效' : '下载中 ' + pct + '%';
+      if (stx) {
+        stx.textContent = downloaded ? '已下好，重启生效' : (indet ? '正在下载…' : '下载中 ' + pct + '%');
+      }
     }
     // 设置页版本行那条：带文字
     var box = document.getElementById('dsh-ext-update-progress');

@@ -14,6 +14,8 @@ export interface TrayMenuActions {
   onOpenPetsFolder?: () => void;
   /** 手动检查更新（有结果会如实告知，含"已是最新"与失败原因） */
   onCheckUpdate?: () => void;
+  /** 预览侧栏下载进度条（走与真实下载相同的状态通路，但纯假数据：不下载、不安装） */
+  onPreviewUpdateProgress?: () => void;
   /** 手机连接：显示「用手机打开」的地址（地址里已带 token，用户不用手打） */
   onMobileConnect?: () => void;
   /** 皮肤子菜单（主题/背景图片，由调用方构建） */
@@ -46,6 +48,9 @@ export function buildMenuTemplate(a: TrayMenuActions): MenuItemConstructorOption
     { label: '手机连接…', click: () => a.onMobileConnect?.() },
     { type: 'separator' },
     { label: '检查更新…', click: () => a.onCheckUpdate?.() },
+    // 进度条只在"正在下载更新"时出现 —— 升到最新版后用户根本没机会看它长什么样。
+    // 这一项让用户随时能预览（走同一条 shell:update-state 通路，纯假数据）。
+    { label: '预览更新进度条', click: () => a.onPreviewUpdateProgress?.() },
     { type: 'separator' },
     { label: '退出', click: () => a.onQuit() },
   ];
@@ -138,6 +143,7 @@ export function buildAppMenuTemplate(a: TrayMenuActions): MenuItemConstructorOpt
         { type: 'separator' as const },
         { label: '手机连接…', click: () => a.onMobileConnect?.() },
         { label: '检查更新…', click: () => a.onCheckUpdate?.() },
+        { label: '预览更新进度条', click: () => a.onPreviewUpdateProgress?.() },
       ],
     },
   ];

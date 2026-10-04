@@ -36,6 +36,16 @@ for f in *; do
 done
 ls -la "$STAGE" | tail -n +2 | awk '{printf "   %s\n", $NF}'
 
+echo "②a 放入「本版更新内容」（whatsnew.json）…"
+# 用户要"升级前就知道改了什么"：这个文件由旧版本的壳在检查更新时拉取，
+# 所以必须随每次发布同步到 CDN（内容来自仓库 assets/whatsnew.json）。
+if [ -f "$ROOT/assets/whatsnew.json" ]; then
+  cp "$ROOT/assets/whatsnew.json" "$STAGE/whatsnew.json"
+  echo "   已放入 whatsnew.json"
+else
+  echo "   ⚠️ 没找到 assets/whatsnew.json（跳过）"
+fi
+
 echo "②b 校正 mac 更新清单（补双臂 + 按实际产物重算 sha512/size）…"
 # CI 的 arm64 / x64 是两个 job，各生成一份 latest-mac.yml，后传的会覆盖先传的（只剩一个架构）；
 # 这里用目录里真实存在的两个 zip 把缺失架构补回来，并保证哈希与上传的文件一致。

@@ -41,6 +41,8 @@ import { UpdateManager } from './update-manager';
 import type { UpdateState } from './update-manager';
 import { installCrashGuard, crashLogDir, appendCrashLog } from './crash-guard';
 import { repairWindowsShortcuts } from './windows-shortcut';
+import { registerLocalFilesIpc } from './localfiles';
+import { notesFor } from './whatsnew';
 
 /** 冒烟测试模式：自动启动、打印关键事件、8 秒后退出（供 CI/自动化验证） */
 const SMOKE = !!process.env.DSH_DESKTOP_SMOKE;
@@ -168,6 +170,14 @@ async function onPageReady(win: BrowserWindow): Promise<void> {
     await usage.applyPanel(win);
   }
   await injectSettingsExtension(win);
+  // 「本机内文件」：往「开始」面板补第三张卡片 + 面板 UI（见 src/localfiles/localfiles.js 的注释，
+  // 为什么不是插件插槽：hero 的插槽是单占用，没有 list 槽可追加）
+  try {
+    const lfJs = fs.readFileSync(path.join(__dirname, '../localfiles/localfiles.js'), 'utf-8');
+    await win.webContents.executeJavaScript(lfJs);
+  } catch (e) {
+    console.error('[localfiles] 注入失败:', e);
+  }
   if (SMOKE) console.log('[smoke] page ready (skin + usage panel + settings ext injected)');
 }
 
@@ -496,6 +506,48 @@ function refreshMobileAddressFile(): void {
   }
 }
 
+/**
+ * 预览侧栏下载进度条（托盘菜单「预览更新进度条」）。
+ *
+ * 为什么需要：进度条**只在真实下载更新时出现**，而用户升到最新版后就再没机会看到它
+ * ——2026-10-03 就吃过这个亏（用户装完 1.0.47 问"新的粗条在哪"，可当时没有更新可下）。
+ *
+ * 做法：走与真实下载**完全相同的状态通路**（`shell:update-state` → 渲染层那套
+ * renderUpdateProgress），但**是纯假数据**：不下载、不安装、不写任何持久化状态。
+ * 真实的下载正在进行时直接不动它（别把真实进度顶掉）。
+ */
+function previewUpdateProgress(): void {
+  const win = mainWin;
+  if (!win || win.isDestroyed()) return;
+  const phase = updates?.getState().phase;
+  if (phase === 'downloading' || phase === 'downloaded') {
+    console.log('[preview] 真实更新正在进行，跳过预览');
+    return;
+  }
+  const send = (st: Record<string, unknown>): void => {
+    try {
+      win.webContents.send('shell:update-state', st);
+    } catch (e) {
+      console.warn('[preview] 发送状态失败:', e);
+    }
+  };
+  // 1) 百分比未知（不定态）→ 2) 缓动推进到 100% → 3) 已下载好（满条+闪光）→ 4) 收起
+  send({ phase: 'downloading', percent: null, message: '正在下载…' });
+  const steps: Array<[number, number]> = [
+    [700, 6],
+    [1400, 19],
+    [2100, 38],
+    [2800, 56],
+    [3500, 79],
+    [4200, 100],
+  ];
+  for (const [delay, percent] of steps) {
+    setTimeout(() => send({ phase: 'downloading', percent, message: `正在下载 ${percent}%` }), delay);
+  }
+  setTimeout(() => send({ phase: 'downloaded', percent: 100, message: '已下载好，重启生效' }), 5200);
+  setTimeout(() => send({ phase: 'idle', percent: null, message: '' }), 7600);
+}
+
 function buildMenuActions(): TrayMenuActions {
   const skinSubmenu: MenuItemConstructorOptions[] = [
     { label: '背景图片…', click: () => void pickBackgroundImage() },
@@ -564,6 +616,7 @@ function buildMenuActions(): TrayMenuActions {
     },
     onRefreshUsage: () => void usage.refresh(),
     onCheckUpdate: () => void updates?.checkNow(),
+    onPreviewUpdateProgress: () => previewUpdateProgress(),
     onMobileConnect: () => void showMobileConnect(),
     skinSubmenu,
     petSubmenu,
@@ -886,6 +939,10 @@ function registerIpc(): void {
   });
 
   // ---- 宠物（设置页/菜单共用） ----
+  registerLocalFilesIpc();
+  // 「这版改了什么」：给渲染层（设置页卡片）用
+  ipcMain.handle('shell:whatsnew', (_e, version: string) => notesFor(version));
+
   ipcMain.handle('pet:list', () => pet?.listPets() ?? []);
   ipcMain.handle('pet:state', () => ({
     current: store.get('petGif'),
@@ -1645,6 +1702,190 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
               }
             }
 
+            // —— 「本机内文件」第三张卡片 + 面板（2026-10-04，用户要求并列第三位）——
+            //    ⚠️「开始」面板只在**空白会话**时渲染 → 这里先点一次「新会话」把它带出来，
+            //       否则断言会假失败（第一版就栽在这）。
+            try {
+              await mainWin!.webContents.executeJavaScript(`(async () => {
+                const clickByText = (text) => {
+                  const all = document.querySelectorAll('button, [role="button"], a, div, span');
+                  for (const n of all) {
+                    if (n.children.length === 0 && (n.textContent || '').trim() === text) {
+                      const target = n.closest('button,[role="button"],a') || n;
+                      target.click();
+                      return true;
+                    }
+                  }
+                  return false;
+                };
+                clickByText('新会话');
+                await new Promise((r) => setTimeout(r, 1200));
+                return true;
+              })()`);
+            } catch (e) {
+              console.warn('[smoke] 点新会话失败（不影响后续断言）:', e);
+            }
+            try {
+              const lf = await mainWin!.webContents.executeJavaScript(`(async () => {
+                const card = document.getElementById('dsh-local-files-card');
+                if (!card) {
+                  // 诊断：首屏到底有没有「开始」面板的那两张卡
+                  const hasWsCard = Array.from(document.querySelectorAll('*')).some(
+                    (n) => n.children.length === 0 && (n.textContent || '').trim() === '工作区文件',
+                  );
+                  return JSON.stringify({ card: false, hasWsCard, hash: location.hash });
+                }
+                if (!card) return JSON.stringify({ card: false });
+                const r = card.getBoundingClientRect();
+                const txt = card.textContent || '';
+                card.click();
+                await new Promise((res) => setTimeout(res, 700));
+                const panel = document.getElementById('dsh-local-files-panel');
+                const rows = document.querySelectorAll('#dsh-local-files-panel-list > div').length;
+                const crumbs = document.getElementById('dsh-local-files-panel-crumbs');
+                return JSON.stringify({
+                  card: true,
+                  w: Math.round(r.width), h: Math.round(r.height),
+                  hasText: txt.indexOf('本机内文件') >= 0,
+                  panelOpen: !!panel && panel.style.display !== 'none',
+                  rows: rows,
+                  dir: crumbs ? crumbs.textContent : '',
+                });
+              })()`);
+              const l = JSON.parse(lf) as {
+                card: boolean; w?: number; h?: number; hasText?: boolean; panelOpen?: boolean;
+                rows?: number; dir?: string; hasWsCard?: boolean; hash?: string;
+              };
+              if (!l.card) {
+                // 「开始」面板只在空白会话时渲染 → 冒烟环境里没有它是正常的。
+                // 真正的硬断言放在下面（设置页那条**永远可达**的入口 + 面板能否列出内容）。
+                console.log(
+                  '[smoke] 「开始」面板本次未渲染（hasWsCard=' + String(l.hasWsCard) +
+                    '，hash=' + String(l.hash) + '）→ 第三张卡片跳过校验，改验设置页入口',
+                );
+              } else if (!l.hasText || (l.w ?? 0) < 200 || (l.h ?? 0) < 44) {
+                console.error('[smoke] 卡片尺寸/文案不对：' + lf);
+                process.exitCode = 1;
+              } else if (!l.panelOpen || (l.rows ?? 0) < 1) {
+                console.error('[smoke] 点卡片没打开面板或没列出内容：' + lf);
+                process.exitCode = 1;
+              } else {
+                console.log('[smoke] 本机内文件：卡片 ' + String(l.w) + '×' + String(l.h) + '，面板列出 ' + String(l.rows) + ' 项，目录=' + String(l.dir));
+              }
+            } catch (e) {
+              console.error('[smoke] 本机内文件检查失败:', e);
+              process.exitCode = 1;
+            }
+
+            // —— 托盘/应用菜单里的「预览更新进度条」（用户要"随时能看到进度条长什么样"）——
+            try {
+              const appMenu = Menu.getApplicationMenu();
+              const labels: string[] = [];
+              const walk = (items: Electron.MenuItem[]): void => {
+                for (const it of items) {
+                  labels.push(it.label || '');
+                  if (it.submenu) walk(it.submenu.items);
+                }
+              };
+              if (appMenu) walk(appMenu.items);
+              if (!labels.some((l) => l.indexOf('预览更新进度条') >= 0)) {
+                console.error('[smoke] 菜单里没有「预览更新进度条」入口');
+                process.exitCode = 1;
+              } else {
+                console.log('[smoke] 菜单里有「预览更新进度条」入口');
+              }
+            } catch (e) {
+              console.warn('[smoke] 菜单检查异常（不影响其它断言）:', e);
+            }
+
+            // —— 本机内文件（设置页入口，永远可达）+ 设置页「本版更新内容」卡片 ——
+            try {
+              const lf2 = await mainWin!.webContents.executeJavaScript(`(async () => {
+                const entry = document.getElementById('dsh-ext-localfiles');
+                const wnew = document.getElementById('dsh-ext-whatsnew');
+                const wnItems = wnew ? wnew.querySelectorAll('div > span:last-child').length : 0;
+                if (!entry) return JSON.stringify({ entry: false, wnew: !!wnew });
+                const btn = entry.querySelector('button');
+                if (btn) btn.click();
+                await new Promise((r) => setTimeout(r, 800));
+                const panel = document.getElementById('dsh-local-files-panel');
+                const rows = document.querySelectorAll('#dsh-local-files-panel-list > div').length;
+                const crumbs = document.getElementById('dsh-local-files-panel-crumbs');
+                return JSON.stringify({
+                  entry: true,
+                  panelOpen: !!panel && panel.style.display !== 'none',
+                  rows: rows,
+                  dir: crumbs ? crumbs.textContent : '',
+                  wnew: !!wnew,
+                  wnItems: Date.now() ? wnItems : 0,
+                });
+              })()`);
+              const l2 = JSON.parse(lf2) as {
+                entry: boolean; panelOpen?: boolean; rows?: number; dir?: string; wnew?: boolean; wnItems?: number;
+              };
+              if (!l2.entry) {
+                console.error('[smoke] 设置页没有「本机内文件」入口');
+                process.exitCode = 1;
+              } else if (!l2.panelOpen || (l2.rows ?? 0) < 1) {
+                console.error('[smoke] 点设置页入口没打开「本机内文件」面板或没列出内容：' + lf2);
+                process.exitCode = 1;
+              } else {
+                console.log(
+                  '[smoke] 本机内文件：面板列出 ' + String(l2.rows) + ' 项，起始目录=' + String(l2.dir),
+                );
+              }
+              if (!l2.wnew) {
+                console.error('[smoke] 设置页没有「本版更新内容」卡片（用户要"知道这版改了什么"）');
+                process.exitCode = 1;
+              } else {
+                console.log('[smoke] 本版更新内容卡片已显示');
+              }
+            } catch (e) {
+              console.error('[smoke] 本机内文件/更新内容检查失败:', e);
+              process.exitCode = 1;
+            }
+
+            // —— 网页预览开关的红线断言（2026-10-04）——
+            //    我们要的是官方右栏浏览器（sidebar-browser）启用；但**绝不能**连带打开
+            //    官方遥测（product-telemetry）与产品埋点（product-analytics）——
+            //    三者在同一条 `profileContext.name === 'desktop'` 条件下，所以只能用
+            //    自有 patch 单独覆盖 browser 那一条（见 bundled-plugins/dsh-shell-web-preview）。
+            try {
+              const plug = await mainWin!.webContents.executeJavaScript(`(async () => {
+                try {
+                  const r = await fetch('/', { credentials: 'same-origin' });
+                  const html = await r.text();
+                  return JSON.stringify({
+                    hasBrowser: html.indexOf('dsh-client-ui-sidebar-browser') >= 0,
+                    hasTelemetry: html.indexOf('product-telemetry') >= 0,
+                    hasAnalytics: html.indexOf('product-analytics') >= 0,
+                  });
+                } catch (e) { return JSON.stringify({ err: String(e) }); }
+              })()`);
+              const pj = JSON.parse(plug) as { hasBrowser?: boolean; hasTelemetry?: boolean; hasAnalytics?: boolean; err?: string };
+              if (pj.err) {
+                console.warn('[smoke] 插件清单探测失败（不影响其它断言）:', pj.err);
+              } else {
+                if (!pj.hasBrowser) {
+                  console.error('[smoke] 官方网页预览（sidebar-browser）没被启用 —— 右栏开不了网页');
+                  process.exitCode = 1;
+                } else {
+                  console.log('[smoke] 官方网页预览已启用（sidebar-browser 在 boot 列表里）');
+                }
+                if (pj.hasTelemetry || pj.hasAnalytics) {
+                  console.error(
+                    '[smoke] 危险：官方遥测/埋点被连带打开了（telemetry=' + String(pj.hasTelemetry) +
+                      ' analytics=' + String(pj.hasAnalytics) + '）—— 法律行业产品不允许',
+                  );
+                  process.exitCode = 1;
+                } else {
+                  console.log('[smoke] 遥测/埋点仍关闭（红线守住了）');
+                }
+              }
+            } catch (e) {
+              console.warn('[smoke] 插件清单检查异常（不影响其它断言）:', e);
+            }
+
             mainWin!.webContents.send('shell:update-state', { phase: 'downloading', percent: 42, message: '正在下载 42%' });
             await new Promise((r) => setTimeout(r, 500));
             const probe2 = await mainWin!.webContents.executeJavaScript(`(() => {
@@ -1691,6 +1932,117 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
               trackW: number; trackH: number; gapRight: number; hostW: number; sibs: string[];
               vw: number; vh: number; settingsRowVisible: boolean; settingsRowText: string;
             };
+            // —— 动效 / 不定态 / 完成态回归（2026-10-04，用户要求"别傻傻的跑"）——
+            try {
+              const animProbe = await mainWin!.webContents.executeJavaScript(`(() => {
+                const st = document.getElementById('dsh-ext-anim');
+                const wrap = document.getElementById('dsh-ext-dl');
+                const runner = document.getElementById('dsh-ext-dl-runner');
+                return JSON.stringify({
+                  hasAnim: !!st,
+                  hasRunner: !!runner,
+                  cls: wrap ? wrap.className : 'no-wrap',
+                });
+              })()`);
+              const ap = JSON.parse(animProbe) as { hasAnim: boolean; hasRunner: boolean; cls: string };
+              if (!ap.hasAnim || !ap.hasRunner) {
+                console.error('[smoke] 进度条动效没注入（anim=' + String(ap.hasAnim) + ' runner=' + String(ap.hasRunner) + '）');
+                process.exitCode = 1;
+              } else {
+                console.log('[smoke] 进度条动效已注入（流光 + 不定态游走层都在）');
+              }
+
+              // 不定态：percent=null → 应有 indet 类、游走段可见、文字是"正在下载…"
+              mainWin!.webContents.send('shell:update-state', { phase: 'downloading', percent: null, message: '正在下载…' });
+              await new Promise((r) => setTimeout(r, 400));
+              const indetProbe = await mainWin!.webContents.executeJavaScript(`(() => {
+                const wrap = document.getElementById('dsh-ext-dl');
+                const runner = document.getElementById('dsh-ext-dl-runner');
+                const txt = document.getElementById('dsh-ext-dl-text');
+                const rs = runner ? getComputedStyle(runner) : null;
+                return JSON.stringify({
+                  cls: wrap ? wrap.className : 'no-wrap',
+                  runnerDisplay: rs ? rs.display : 'no-runner',
+                  runnerAnim: rs ? rs.animationName : '',
+                  text: txt ? txt.textContent : '',
+                });
+              })()`);
+              const ip = JSON.parse(indetProbe) as { cls: string; runnerDisplay: string; runnerAnim: string; text: string };
+              if (ip.cls.indexOf('indet') < 0 || ip.runnerDisplay === 'none' || ip.runnerAnim === 'none') {
+                console.error('[smoke] 百分比未知时没走"不定态"游走：' + indetProbe);
+                process.exitCode = 1;
+              } else {
+                console.log('[smoke] 不定态游走生效：' + ip.runnerDisplay + ' / ' + ip.runnerAnim + ' 文字=' + ip.text);
+              }
+
+              // 已知百分比：宽度必须是缓动推进（transition 不是 .2s linear 那种硬走）
+              mainWin!.webContents.send('shell:update-state', { phase: 'downloading', percent: 62, message: '' });
+              await new Promise((r) => setTimeout(r, 300));
+              const fillT = await mainWin!.webContents.executeJavaScript(
+                "getComputedStyle(document.getElementById('dsh-ext-dl-fill')).transition",
+              );
+              if (!/cubic-bezier/.test(String(fillT))) {
+                console.error('[smoke] 进度条宽度推进没有缓动（transition=' + String(fillT) + '）');
+                process.exitCode = 1;
+              } else {
+                console.log('[smoke] 宽度推进有缓动：' + String(fillT));
+              }
+
+              // 完成态：downloaded → done 类 + 文案
+              mainWin!.webContents.send('shell:update-state', { phase: 'downloaded', percent: 100, message: '' });
+              await new Promise((r) => setTimeout(r, 300));
+              const doneProbe = await mainWin!.webContents.executeJavaScript(`(() => {
+                const wrap = document.getElementById('dsh-ext-dl');
+                const txt = document.getElementById('dsh-ext-dl-text');
+                return JSON.stringify({ cls: wrap ? wrap.className : '', text: txt ? txt.textContent : '' });
+              })()`);
+              const dp2 = JSON.parse(doneProbe) as { cls: string; text: string };
+              if (dp2.cls.indexOf('done') < 0) {
+                console.error('[smoke] 下载完成后没有进入 done（闪光）态：' + doneProbe);
+                process.exitCode = 1;
+              } else {
+                console.log('[smoke] 完成态（满条 + 闪光）生效：' + dp2.text);
+              }
+
+              // —— 抓帧，供生成"动效 GIF"（用户要肉眼验收）——
+              try {
+                const frameDir = '/tmp/dsh-bar-frames';
+                fs.mkdirSync(frameDir, { recursive: true });
+                const rect = p2.rect!;
+                const clip = {
+                  x: 0,
+                  y: Math.max(0, rect.y - 34),
+                  width: Math.min(420, p2.vw),
+                  height: Math.min(96, p2.vh - Math.max(0, rect.y - 34)),
+                };
+                const frames: Array<[number | null, number]> = [[8, 220], [30, 220], [58, 220], [86, 220]];
+                let idx = 0;
+                for (const [pctv] of frames) {
+                  mainWin!.webContents.send('shell:update-state', { phase: 'downloading', percent: pctv, message: '' });
+                  await new Promise((r) => setTimeout(r, 260));
+                  const img = await mainWin!.webContents.capturePage(clip);
+                  fs.writeFileSync(`${frameDir}/frame-${idx++}.png`, img.toPNG());
+                }
+                // 不定态连抓 3 帧 —— GIF 里能看出"游走"
+                mainWin!.webContents.send('shell:update-state', { phase: 'downloading', percent: null, message: '' });
+                for (let i = 0; i < 3; i++) {
+                  await new Promise((r) => setTimeout(r, 200));
+                  const img = await mainWin!.webContents.capturePage(clip);
+                  fs.writeFileSync(`${frameDir}/frame-${idx++}.png`, img.toPNG());
+                }
+                mainWin!.webContents.send('shell:update-state', { phase: 'downloaded', percent: 100, message: '' });
+                await new Promise((r) => setTimeout(r, 200));
+                const doneImg = await mainWin!.webContents.capturePage(clip);
+                fs.writeFileSync(`${frameDir}/frame-${idx++}.png`, doneImg.toPNG());
+                console.log('[smoke] 动效帧已保存：' + frameDir + '（' + String(idx) + ' 帧）');
+              } catch (frameErr) {
+                console.warn('[smoke] 抓帧失败（不影响断言）:', frameErr);
+              }
+            } catch (e) {
+              console.error('[smoke] 动效检查失败:', e);
+              process.exitCode = 1;
+            }
+
             if (p2.display === 'missing') {
               console.error('[smoke] 侧栏「设置」旁的下载进度条没被注入（用户会"看不到下载中"）');
               process.exitCode = 1;

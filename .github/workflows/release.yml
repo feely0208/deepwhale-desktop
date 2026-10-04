@@ -396,6 +396,10 @@ jobs:
             esac
             cp "$f" obs-desktop/
           done
+          # 「本版更新内容」：旧版本的壳会来 CDN 拉它，好让用户升级前就知道改了什么
+          if [ -f assets/whatsnew.json ]; then
+            cp assets/whatsnew.json obs-desktop/whatsnew.json
+          fi
           # 更新清单（体积只有几百字节，但决定"用户能不能收到更新"）
           for y in dist-assets/latest*.yml; do
             [ -f "$y" ] || continue

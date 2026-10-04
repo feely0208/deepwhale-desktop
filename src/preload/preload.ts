@@ -14,6 +14,13 @@ contextBridge.exposeInMainWorld('dsh', {
   /** 冲刺划水：让宠物窗口按方向滑出去半个屏幕（主进程做缓动 + 边界限制） */
   petDash: (direction: number) => ipcRenderer.send('pet:dash', direction),
   petHover: (hovering: boolean) => ipcRenderer.send('pet:hover', hovering),
+  // 「本机内文件」：列目录 / 用系统默认程序打开 / 在访达中显示（宿主半边见 src/main/localfiles.ts）
+  /** 某版本的更新说明（设置页「本版更新」卡片用） */
+  whatsNew: (version: string) => ipcRenderer.invoke('shell:whatsnew', version),
+  localFilesRoots: () => ipcRenderer.invoke('localfiles:roots'),
+  localFilesList: (dir: string) => ipcRenderer.invoke('localfiles:list', dir),
+  localFilesOpen: (target: string) => ipcRenderer.invoke('localfiles:open', target),
+  localFilesReveal: (target: string) => ipcRenderer.invoke('localfiles:reveal', target),
 
   // ---- 用量面板 ----
   usageRefresh: () => ipcRenderer.send('usage:refresh'),

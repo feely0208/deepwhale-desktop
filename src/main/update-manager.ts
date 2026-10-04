@@ -5,6 +5,7 @@ import { spawnSync } from 'child_process';
 import * as path from 'path';
 import { needsManualUpdate } from './mac-signature';
 import { CDN_FEED_URL, cdnFeedConfig, readPackagedUpdateConfig } from './update-feed';
+import { notesFor, summarize } from './whatsnew';
 
 /**
  * update-manager.ts — 应用自动更新（electron-updater + GitHub Releases）
@@ -506,9 +507,14 @@ export class UpdateManager {
     }
     this.prompting = true;
     try {
+      // 「这版改了什么」：用户提议（2026-10-04）——升级前就让他看到具体内容，
+      // 而不是装完一头雾水。取不到（离线/首次）就不显示，绝不影响更新本身。
+      const highlights = summarize(await notesFor(info.version), 5);
       const choice = await this.confirm(
         '更新已就绪',
-        `深鲸桌面 ${info.version} 已下载完成。\n\n重启后即可使用新版本。`,
+        `深鲸桌面 ${info.version} 已下载完成。\n\n` +
+          (highlights ? `本次更新：\n${highlights}\n\n` : '') +
+          '重启后即可使用新版本。',
         ['立即重启', '退出时自动安装'],
       );
       if (choice === 0) {

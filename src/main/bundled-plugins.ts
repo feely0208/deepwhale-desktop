@@ -43,6 +43,10 @@ const BUNDLED_PLUGINS: BundledPlugin[] = [
   // PDF / Word / PPT / Markdown / 文本 / 图片都没有 —— 本插件往
   // `sidebar.right.tab.document.actions` 插槽加一项，补上这块（2026-10-02）。
   { name: '@deepwhale-cn/dsh-shell-document-print', dir: 'dsh-shell-document-print' },
+  // 只做"打开官方右栏网页浏览器"这一件事的补丁包（见该包 cordis.patch.yml 的说明）：
+  // 官方把它挂在 `profileContext.name === 'desktop'` 条件下，而同一个条件还开着
+  // 官方遥测与产品埋点 —— 所以我们不改 profile 名，只单独覆盖这一条 disabled。
+  { name: '@deepwhale-cn/dsh-shell-web-preview', dir: 'dsh-shell-web-preview' },
 ];
 
 /** 注入结果。 */

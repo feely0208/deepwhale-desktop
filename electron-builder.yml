@@ -113,8 +113,21 @@ win:
   artifactName: DeepWhale-Desktop-${version}-${arch}-Setup.${ext}
 
 nsis:
-  oneClick: false
-  allowToChangeInstallationDirectory: true
+  # ⚠️ 2026-10-04 事故修复（Windows 用户自动更新后"整个应用消失"）：
+  #   原 oneClick:false + allowToChangeInstallationDirectory:true 是"带向导的安装器"，
+  #   与 electron-updater 的**静默自动更新**不兼容：更新会把旧安装挪到 %TEMP%\...\old-install，
+  #   新版本却装到另一个目录；一旦 %TEMP% 被系统/杀软清理，旧版本也没了 →
+  #   用户看到"连之前装好的版本都不见了"（数据在 %APPDATA%，不受影响）。
+  #   放大器：appId 曾改名（com.dsh.desktop → com.deepwhale.desktop）——NSIS 用 appId 拼
+  #   注册表键记安装目录，键一变就丢失"安装目录记忆"，永远回不到原目录。
+  #   → 改为 electron-builder 官方支持静默自动更新的形态：oneClick + 固定默认目录。
+  oneClick: true
+  perMachine: false
+  allowElevation: false
+  allowToChangeInstallationDirectory: false
+  deleteAppDataOnUninstall: false
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
   shortcutName: DeepWhale Desktop
 
 linux:

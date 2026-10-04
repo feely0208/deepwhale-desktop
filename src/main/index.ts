@@ -1888,6 +1888,28 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
               process.exitCode = 1;
             }
 
+            // —— 回归：旧缓存里没有当前版本时，必须强制回源（用户 1.0.49 实测踩到）——
+            try {
+              const stalePath = path.join(app.getPath('userData'), 'whatsnew-cache.json');
+              // 先写一份"只有 1.0.0"的假缓存，模拟升级前抓到的旧快照
+              fs.writeFileSync(
+                stalePath,
+                JSON.stringify({ versions: { '1.0.0': { title: '旧快照', items: [{ kind: 'fix', text: 'x' }] } } }),
+                'utf-8',
+              );
+              const { notesFor } = await import('./whatsnew');
+              const got = await notesFor(String(app.getVersion()).replace(/^v/, ''));
+              if (!got || !got.items || got.items.length === 0) {
+                console.error('[smoke] 旧缓存里没有当前版本时没能回源（用户会看到"本版暂无更新说明"）');
+                process.exitCode = 1;
+              } else {
+                console.log('[smoke] 旧缓存缺当前版本 → 已强制回源，拿到 ' + String(got.items.length) + ' 条说明 ✓');
+              }
+            } catch (e) {
+              console.error('[smoke] 回源回归检查失败:', e);
+              process.exitCode = 1;
+            }
+
             // —— 更新弹窗（用户要求"精心设计一个"）——
             //    冒烟里没有真实下载，所以直接调 showWhatsNewWindow 打开它，验内容 + 出一张图。
             try {

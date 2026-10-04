@@ -29,7 +29,8 @@ interface WhatsNewFile {
 }
 
 const CDN_URL = 'https://dl.deepwhale.org.cn/whatsnew.json';
-const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+// 从 6 小时缩到 1 小时：更新说明每版都会变，缓存太久会看到旧快照
+const CACHE_TTL_MS = 60 * 60 * 1000;
 
 let memory: WhatsNewFile | null = null;
 
@@ -114,10 +115,20 @@ export async function loadWhatsNew(force = false): Promise<WhatsNewFile> {
 
 /** 取某一版的说明；取不到返回空 */
 export async function notesFor(version: string): Promise<WhatsNewEntry | null> {
-  const data = await loadWhatsNew();
   const v = String(version || '').replace(/^v/, '');
-  const entry = data.versions?.[v];
-  if (!entry || !Array.isArray(entry.items)) return null;
+  const pick = (data: WhatsNewFile): WhatsNewEntry | null => {
+    const e = data.versions?.[v];
+    return e && Array.isArray(e.items) ? e : null;
+  };
+
+  let entry = pick(await loadWhatsNew());
+  if (!entry) {
+    // 2026-10-04 用户实测踩到：刚升级到 1.0.49，弹窗显示「本版暂无更新说明」。
+    // 原因：升级前那次检查更新抓的 whatsnew 里还没有 1.0.49 条目，被 TTL 缓存住，
+    // 升级完成后读到的仍是旧快照。修法：**本地数据里没有这一版就强制回源**
+    //（force=true 跳过内存与文件缓存）。
+    entry = pick(await loadWhatsNew(true));
+  }
   return entry;
 }
 

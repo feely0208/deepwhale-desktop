@@ -207,6 +207,8 @@ jobs:
           # 曾经客户端插件好好的，而预设写进了运行时已不读的目录，
           # 三平台的选择器里都没有「法律模式」，所有检查却都是绿的。
           node scripts/check-legal-preset-roster.js
+          # patch 文件损坏自愈（Windows 更新中途杀进程 → 空字节 → DSH 起不来）
+          node scripts/test-patch-heal.js
 
       - name: Package (构建安装包，不发布)
         run: npm run dist -- --publish never ${{ matrix.args }}

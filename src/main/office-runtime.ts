@@ -1,4 +1,5 @@
 import { app } from 'electron';
+import { writeFileAtomic } from './patch-heal';
 import * as fs from 'fs';
 import { profileDirOf } from './profile';
 import { removeOurInsertBlocks } from './legal-mode';
@@ -42,8 +43,9 @@ function readText(file: string): string | null {
 /** 写文件（内容一致则跳过，返回是否真的写了）。 */
 function writeIfChanged(file: string, next: string): boolean {
   if (readText(file) === next) return false;
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, next);
+  // 原子写：Windows 自动更新会中途杀进程，直接 writeFileSync 可能留下半截文件（空字节），
+  // 之后 DSH 解析 patch 会直接失败（2026-10-04 用户事故）。见 patch-heal.ts。
+  writeFileAtomic(file, next);
   return true;
 }
 

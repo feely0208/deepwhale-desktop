@@ -41,6 +41,7 @@ import { UpdateManager } from './update-manager';
 import type { UpdateState } from './update-manager';
 import { installCrashGuard, crashLogDir, appendCrashLog } from './crash-guard';
 import { repairWindowsShortcuts } from './windows-shortcut';
+import { healPatchFiles } from './patch-heal';
 import { registerLocalFilesIpc } from './localfiles';
 import { notesFor } from './whatsnew';
 import {
@@ -1085,6 +1086,15 @@ function registerIpc(): void {
   });
 
   // ---- 宠物（设置页/菜单共用） ----
+  // 2026-10-04 事故修复：Windows 自动更新中途杀进程 → patch 文件留下空字节 →
+  // DSH 解析失败 → 用户看到「无法连接到 DSH 服务」。启动时先自愈（必须在拉起 DSH 之前）。
+  try {
+    const healed = healPatchFiles(legalModeHome(app.getPath('userData')));
+    if (healed.healed.length) console.log('[patch-heal] 启动自愈完成：', healed.healed.length, '个文件');
+  } catch (e) {
+    console.warn('[patch-heal] 自愈检查失败（不影响启动）:', e);
+  }
+
   registerLocalFilesIpc();
   // 更新弹窗的按钮：立即重启 / 稍后（与更新管理器同源）
   registerUpdatePopupIpc({

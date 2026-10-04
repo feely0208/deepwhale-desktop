@@ -158,8 +158,8 @@ export function buildAppMenuTemplate(a: TrayMenuActions): MenuItemConstructorOpt
           label: '本机内文件快捷键',
           submenu: [
             { label: '⌥⌘O（默认，推荐）', type: 'radio' as const, checked: (a.localFilesShortcut || 'Alt+Cmd+O') === 'Alt+Cmd+O', click: () => a.onPickLocalFilesShortcut?.('Alt+Cmd+O') },
-            { label: '⌥F', type: 'radio' as const, checked: a.localFilesShortcut === 'Alt+F', click: () => a.onPickLocalFilesShortcut?.('Alt+F') },
-            { label: '⌃⌥O', type: 'radio' as const, checked: a.localFilesShortcut === 'Ctrl+Alt+O', click: () => a.onPickLocalFilesShortcut?.('Ctrl+Alt+O') },
+            { label: '⌥F（备选）', type: 'radio' as const, checked: a.localFilesShortcut === 'Alt+F', click: () => a.onPickLocalFilesShortcut?.('Alt+F') },
+            { label: '⌃⌥O（备选）', type: 'radio' as const, checked: a.localFilesShortcut === 'Ctrl+Alt+O', click: () => a.onPickLocalFilesShortcut?.('Ctrl+Alt+O') },
             { type: 'separator' as const },
             { label: '关闭快捷键', type: 'radio' as const, checked: a.localFilesShortcut === 'off', click: () => a.onPickLocalFilesShortcut?.('off') },
           ],

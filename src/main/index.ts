@@ -1613,6 +1613,38 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
             })()`);
             console.log('[smoke] sidebar-probe:', probe);
 
+            // ⚠️ 2026-10-04 回归断言（用户实机："全屏时一整片怪白页、会话文字透上来"）：
+            //    皮肤不能把 `--dsw-alias-bg-base` 打薄 —— DSH 的平台浮层/onboarding 层
+            //    （`.[hash]_overlay{background:var(--dsw-alias-bg-base);position:fixed;inset:0}`）
+            //    就是用它当底色的；同时框架层必须仍透明，否则壁纸/预设就白做了。
+            const skinProbe = await mainWin!.webContents.executeJavaScript(`(() => {
+              const cs = getComputedStyle(document.body);
+              const token = (cs.getPropertyValue('--dsw-alias-bg-base') || '').trim();
+              const frame = document.querySelector('[class*="frame"]');
+              const frameBg = frame ? getComputedStyle(frame).backgroundColor : 'no-frame';
+              return JSON.stringify({ token, frameBg });
+            })()`);
+            console.log('[smoke] skin-token:', skinProbe);
+            {
+              const sp = JSON.parse(skinProbe) as { token: string; frameBg: string };
+              const thinned = /transparent|rgba\([^)]*,\s*0?\.\d+\)/.test(sp.token);
+              if (!sp.token || thinned) {
+                console.error(
+                  '[smoke] 皮肤把 --dsw-alias-bg-base 打薄了（' + sp.token +
+                    '）→ 平台浮层会变成透明纸片，用户会看到"文字透上来"',
+                );
+                process.exitCode = 1;
+              } else {
+                console.log('[smoke] --dsw-alias-bg-base 未被皮肤打薄：' + sp.token);
+              }
+              if (sp.frameBg !== 'no-frame' && sp.frameBg !== 'rgba(0, 0, 0, 0)') {
+                console.error('[smoke] 框架层不是透明的（' + sp.frameBg + '）→ 壁纸/预设透不出来');
+                process.exitCode = 1;
+              } else {
+                console.log('[smoke] 框架层透明（壁纸可见）：' + sp.frameBg);
+              }
+            }
+
             mainWin!.webContents.send('shell:update-state', { phase: 'downloading', percent: 42, message: '正在下载 42%' });
             await new Promise((r) => setTimeout(r, 500));
             const probe2 = await mainWin!.webContents.executeJavaScript(`(() => {
@@ -1625,6 +1657,13 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
               const rowR = row ? row.getBoundingClientRect() : null;
               // 2026-10-03（1.0.47）：用户要求进度条"铺满到便捷框"且"加粗"，
               // 这里把条与所在行的几何一起带出来，便于断言"真的铺满了"。
+              const host = s ? s.parentElement : null;
+              const sibs = host
+                ? Array.from(host.children).map((c) => {
+                    const rr = c.getBoundingClientRect();
+                    return (c.id || c.className || c.tagName) + '@' + Math.round(rr.x) + ',' + Math.round(rr.width);
+                  })
+                : [];
               const trackEl = s ? s.querySelector('span') : null;
               const trackR = trackEl ? trackEl.getBoundingClientRect() : null;
               const hostRow = s && s.parentElement ? s.parentElement.getBoundingClientRect() : null;
@@ -1633,6 +1672,8 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
                 trackW: trackR ? Math.round(trackR.width) : -1,
                 trackH: trackR ? Math.round(trackR.height) : -1,
                 gapRight: hostRow && trackR ? Math.round(hostRow.right - trackR.right) : -1,
+                hostW: hostRow ? Math.round(hostRow.width) : -1,
+                sibs: sibs,
                 display: s ? s.style.display : 'missing',
                 fillWidth: f ? f.style.width : 'missing',
                 text: t ? t.textContent : 'missing',
@@ -1647,7 +1688,7 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
             const p2 = JSON.parse(probe2) as {
               count: number; display: string; fillWidth: string; text: string;
               rect: { x: number; y: number; w: number; h: number } | null;
-              trackW: number; trackH: number; gapRight: number;
+              trackW: number; trackH: number; gapRight: number; hostW: number; sibs: string[];
               vw: number; vh: number; settingsRowVisible: boolean; settingsRowText: string;
             };
             if (p2.display === 'missing') {
@@ -1687,6 +1728,24 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
               console.error('[smoke] 设置页版本行的进度没跟上：label=' + p2.settingsRowText);
               process.exitCode = 1;
             } else {
+              // 顺手截一张侧栏区域的真图（冒烟专用）：给"新进度条长什么样"留存证据，
+              // 不用等下一个版本发布才能看到。
+              try {
+                const pad = 40;
+                const top = Math.max(0, p2.rect!.y - pad);
+                // 取景涵盖整个侧栏宽度（而不是只围住条），这样能看出"到便捷框还差多少"
+                const shot = await mainWin!.webContents.capturePage({
+                  x: 0,
+                  y: top,
+                  width: Math.min(420, p2.vw),
+                  height: Math.min(120, p2.vh - top),
+                });
+                fs.writeFileSync('/tmp/dsh-sidebar-bar.png', shot.toPNG());
+                console.log('[smoke] 侧栏进度条截图已保存：/tmp/dsh-sidebar-bar.png');
+              } catch (shotErr) {
+                console.warn('[smoke] 截图失败（不影响断言）:', shotErr);
+              }
+
               console.log(
                 '[smoke] 侧栏下载进度条可见：' + JSON.stringify(p2.rect) +
                   ' 条=' + String(p2.trackW) + '×' + String(p2.trackH) +

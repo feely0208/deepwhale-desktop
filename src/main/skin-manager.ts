@@ -177,8 +177,17 @@ export class SkinManager {
       body:not([data-ds-dark-theme])::before {
         filter: brightness(1.38) saturate(0.95) !important;
       }
+      /* ⚠️ 2026-10-04 修（用户截图：全屏时"怪异的大白页"、会话文字透上来）：
+         这里原来写的是 CSS 变量 --dsw-alias-bg-base: transparent !important，但那个 token
+         同时是**平台浮层 / onboarding 层的底色** —— DSH 自己的 CSS 形如
+             [class*="overlay"] { background: var(--dsw-alias-bg-base); position: fixed; inset: 0 }
+         一改透明，整片浮层就变成透明纸片（用户截图里那个"怪白页"）。
+         正确做法：**只把框架层（frame / centerCol）改透明**，token 保持 DSH 默认值。 */
+      body:not([data-ds-dark-theme]) [class*="frame"],
+      body:not([data-ds-dark-theme]) [class*="centerCol"] {
+        background: transparent !important;
+      }
       body:not([data-ds-dark-theme]) {
-        --dsw-alias-bg-base: transparent !important;
         --dsw-alias-bg-layer-1: rgba(255, 255, 255, var(--dsh-skin-alpha)) !important;
         --dsw-alias-bg-layer-2: rgba(244, 246, 248, var(--dsh-skin-alpha)) !important;
         --dsw-alias-bg-overlay: rgba(255, 255, 255, var(--dsh-skin-alpha)) !important;
@@ -198,8 +207,12 @@ export class SkinManager {
       /* 深色：面板/卡片改为不透明。原来是 rgba(...,alpha) 半透明，壁纸会透上来，
          于是面板发灰、和黑色模块割裂——这正是用户反馈的观感问题。
          基础底色保持 transparent，壁纸只在"没有面板覆盖"的地方透出。 */
+      /* 深色同理：不动 --dsw-alias-bg-base，只让框架层透明（浮层才不会被掏空） */
+      body[data-ds-dark-theme] [class*="frame"],
+      body[data-ds-dark-theme] [class*="centerCol"] {
+        background: transparent !important;
+      }
       body[data-ds-dark-theme] {
-        --dsw-alias-bg-base: transparent !important;
         --dsw-alias-bg-layer-1: #1c1f25 !important;
         --dsw-alias-bg-layer-2: #23272e !important;
         --dsw-alias-bg-overlay: #16191e !important;

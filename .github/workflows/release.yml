@@ -407,7 +407,11 @@ jobs:
           done
           echo "待同步 $(find obs-desktop -type f | wc -l) 个文件"
           START=$(date +%s)
-          node scripts/sync-to-obs.js --dir obs-desktop
+          # ⚠️ --no-exclude 必须带：我们已经在上面显式挑好了要传的文件，
+          #    而 sync-to-obs.js 的默认规则里还有一条「排除桌面 .zip」——
+          #    不加这个参数，刚挑出来的 mac zip 会在脚本内部被二次过滤掉
+          #    （1.0.47 / 1.0.48 两次发版都栽在这一条上）。
+          node scripts/sync-to-obs.js --dir obs-desktop --no-exclude
           END=$(date +%s)
           D=$((END-START)); [ "$D" -eq 0 ] && D=1
           SZ=$(du -sm obs-desktop | cut -f1)

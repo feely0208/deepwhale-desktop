@@ -56,10 +56,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build (tsc + assets)
-        - name: 安装器配置守卫（appId 冻结 / oneClick / 固定目录）
-          run: npm run check:installer
+      - name: 安装器配置守卫（appId 冻结 / oneClick / 固定目录）
+        run: npm run check:installer
 
+      - name: Build (tsc + assets)
         run: npm run build
 
       # 随包 DSH 运行时：把整套 harness 打进安装包，用户机器无需 Node.js / npx / 联网。

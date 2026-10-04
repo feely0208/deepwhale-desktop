@@ -80,12 +80,13 @@
     if (!refCard.parentElement) return;
 
     // 样式对齐官方那两张卡（图2）：浅色圆角卡 + 左侧图标 + 标题/副标题 + 右侧提示
+    var CP = palette();
     var card = el(
       'div',
       'display:flex;align-items:center;gap:12px;width:100%;box-sizing:border-box;' +
         'padding:14px 16px;margin-top:10px;border-radius:12px;cursor:pointer;' +
-        'background:var(--dsw-alias-bg-layer-1,rgba(255,255,255,.96));' +
-        'border:1px solid var(--dsw-alias-border-l2,rgba(0,0,0,.08));' +
+        'background:' + CP.bg + ';color:' + CP.text + ';' +
+        'border:1px solid ' + CP.border + ';' +
         'transition:background .15s ease,border-color .15s ease;',
     );
     card.id = CARD_ID;
@@ -108,14 +109,8 @@
     card.appendChild(textBox);
     card.appendChild(hint);
 
-    card.addEventListener('mouseenter', function () {
-      card.style.background = 'var(--dsw-alias-bg-layer-2,rgba(255,255,255,.99))';
-      card.style.borderColor = 'rgba(20,165,184,.45)';
-    });
-    card.addEventListener('mouseleave', function () {
-      card.style.background = 'var(--dsw-alias-bg-layer-1,rgba(255,255,255,.96))';
-      card.style.borderColor = 'var(--dsw-alias-border-l2,rgba(0,0,0,.08))';
-    });
+    card.addEventListener('mouseenter', function () { card.style.borderColor = 'rgba(20,165,184,.55)'; });
+    card.addEventListener('mouseleave', function () { card.style.borderColor = CP.border; });
     var open = function () {
       togglePanel(true);
     };
@@ -137,6 +132,36 @@
 
   var state = { home: '', shortcuts: [], dir: '', parent: '', entries: [] };
 
+  /**
+   * 主题色板（2026-10-04 用户实测：浅色主题下这个面板白底 + 浅灰字 = 看不见）。
+   * 原因：样式依赖 DSH 的 CSS 变量（--dsw-alias-text-1 等），而浅色主题下变量名/取值不同，
+   * 我的兜底色又是深色主题的浅灰字 → 白底浅灰字。现在**自己带一套**，两种主题都清楚。
+   */
+  function isDarkTheme() {
+    try {
+      if (document.body && document.body.hasAttribute('data-ds-dark-theme')) return true;
+      if (document.documentElement.hasAttribute('data-ds-dark-theme')) return true;
+      return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    } catch (e) {
+      return true;
+    }
+  }
+
+  function palette() {
+    return isDarkTheme()
+      ? {
+          bg: '#16191e', text: '#e8eaed', dim: 'rgba(232,234,237,.62)', faint: 'rgba(232,234,237,.45)',
+          border: 'rgba(255,255,255,.16)', hover: 'rgba(255,255,255,.08)', chip: 'rgba(255,255,255,.12)',
+          inputBg: 'rgba(0,0,0,.22)', accent: '#14A5B8', accentText: '#04131a',
+        }
+      : {
+          bg: '#ffffff', text: '#24292f', dim: 'rgba(36,41,47,.62)', faint: 'rgba(36,41,47,.45)',
+          border: 'rgba(0,0,0,.14)', hover: 'rgba(0,0,0,.05)', chip: 'rgba(0,0,0,.06)',
+          inputBg: '#ffffff', accent: '#0E7C8C', accentText: '#ffffff',
+        };
+  }
+
+
   function togglePanel(show) {
     var panel = document.getElementById(PANEL_ID);
     if (!panel) {
@@ -149,8 +174,15 @@
       // 第一版就因此把空路径丢给主进程，面板显示"需要绝对路径"，实机一看就是坏的）
       void ensureRoots().then(function () {
         var input = document.getElementById(PANEL_ID + '-path');
+        var last = '';
+        try {
+          last = localStorage.getItem('dsh-local-files-last') || '';
+        } catch (e) {
+          last = '';
+        }
         if (input && !input.value) input.value = state.home || '';
-        if (!state.dir) void navigate((input && input.value) || state.home || '');
+        // 记住上次目录（B2）：打开面板直接回到你上次在看的地方
+        if (!state.dir) void navigate(last || (input && input.value) || state.home || '');
       });
     }
   }
@@ -182,19 +214,19 @@
   }
 
   function buildPanel() {
+    var P = palette();
     var panel = el('div', '');
     panel.id = PANEL_ID;
     panel.style.cssText =
       'position:fixed;top:0;right:0;bottom:0;width:min(460px,94vw);z-index:2147483000;' +
       'display:none;flex-direction:column;' +
-      'background:var(--dsw-specific-sidebar-fill,var(--dsw-alias-bg-overlay,rgba(20,23,28,.98)));' +
-      'color:var(--dsw-alias-text-1,#e8eaed);border-left:1px solid rgba(128,128,128,.25);' +
+      'background:' + P.bg + ';color:' + P.text + ';border-left:1px solid ' + P.border + ';' +
       'box-shadow:-10px 0 28px rgba(0,0,0,.28);font-size:13px;';
 
     // 顶部：页签（图标 + 名称 + ✕）—— 对齐图1
     var tabRow = el('div', 'flex:none;display:flex;align-items:center;gap:8px;padding:10px 12px 8px;');
     var tab = el('div', 'display:flex;align-items:center;gap:7px;padding:5px 10px;border-radius:9px;' +
-      'background:var(--dsw-alias-bg-layer-1,rgba(128,128,128,.16));font-size:13px;font-weight:500;');
+      'background:' + P.chip + ';font-size:13px;font-weight:500;');
     var tabIcon = el('span', 'width:16px;height:16px;display:flex;align-items:center;justify-content:center;');
     tabIcon.innerHTML =
       '<svg viewBox="0 0 24 24" width="15" height="15" fill="none">' +
@@ -217,27 +249,54 @@
     input.spellcheck = false;
     input.placeholder = '/Users/…（可直接编辑或粘贴）';
     input.style.cssText =
-      'flex:1 1 auto;min-width:0;padding:6px 9px;border-radius:8px;font-size:12.5px;' +
-      'border:1px solid rgba(128,128,128,.28);background:transparent;color:inherit;outline:none;';
+      // 官方那行是"纯文本 + 刷新"，这里保持可编辑但去掉边框，观感一致
+      'flex:1 1 auto;min-width:0;padding:6px 2px;border-radius:8px;font-size:12.5px;' +
+      'border:1px solid transparent;background:transparent;color:' + P.dim + ';outline:none;';
+    input.addEventListener('focus', function () {
+      input.style.borderColor = P.border;
+      input.style.background = P.inputBg;
+      input.style.color = P.text;
+    });
+    input.addEventListener('blur', function () {
+      input.style.borderColor = 'transparent';
+      input.style.background = 'transparent';
+      input.style.color = P.dim;
+    });
     input.addEventListener('keydown', function (e) {
       if (e.key === 'Enter') void navigate(input.value);
       if (e.key === 'Escape') closePanel();
     });
     var upBtn = el('button', 'flex:none;width:28px;height:28px;border-radius:8px;cursor:pointer;' +
-      'border:1px solid rgba(128,128,128,.28);background:transparent;color:inherit;', '↑');
+      'border:1px solid ' + P.border + ';background:transparent;color:' + P.text + ';', '↑');
     upBtn.title = '上一级';
     upBtn.addEventListener('click', function () {
       if (state.parent) void navigate(state.parent);
     });
     var refreshBtn = el('button', 'flex:none;width:28px;height:28px;border-radius:8px;cursor:pointer;' +
-      'border:1px solid rgba(128,128,128,.28);background:transparent;color:inherit;', '⟳');
+      'border:1px solid ' + P.border + ';background:transparent;color:' + P.text + ';', '⟳');
     refreshBtn.title = '刷新';
     refreshBtn.addEventListener('click', function () {
       void navigate(state.dir || input.value);
     });
+    // B2：复制当前路径（用户在会话里要粘贴路径时最常用）
+    var copyBtn = el('button', 'flex:none;width:28px;height:28px;border-radius:8px;cursor:pointer;' +
+      'border:1px solid ' + P.border + ';background:transparent;color:' + P.text + ';font-size:11px;', '⧉');
+    copyBtn.title = '复制当前路径';
+    copyBtn.addEventListener('click', function () {
+      var v = (input.value || state.dir || '').trim();
+      if (!v) return;
+      try {
+        void navigator.clipboard.writeText(v);
+        copyBtn.textContent = '✓';
+        setTimeout(function () { copyBtn.textContent = '⧉'; }, 1200);
+      } catch (e) {
+        /* 剪贴板不可用就算了 */
+      }
+    });
     pathRow.appendChild(input);
     pathRow.appendChild(upBtn);
     pathRow.appendChild(refreshBtn);
+    pathRow.appendChild(copyBtn);
     panel.appendChild(pathRow);
 
     // 列表
@@ -251,26 +310,35 @@
     return panel;
   }
 
+  // 官方「工作区文件」同款的行：SVG 图标 + 名称，无多余按钮，**双击打开**
+  function iconFor(dir) {
+    var wrap = el('span', 'flex:none;width:18px;height:18px;display:flex;align-items:center;justify-content:center;');
+    wrap.innerHTML = dir
+      ? '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" ' +
+        'stroke-linecap="round" stroke-linejoin="round" style="opacity:.62">' +
+        '<path d="M3 7.5A2 2 0 0 1 5 5.5h3.6c.5 0 1 .2 1.4.6l1.2 1.2H19a2 2 0 0 1 2 2v7.2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7.5z"/></svg>'
+      : '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" ' +
+        'stroke-linecap="round" stroke-linejoin="round" style="opacity:.5">' +
+        '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5z"/><path d="M14 3v5h5"/></svg>';
+    return wrap;
+  }
+
   function rowFor(entry) {
-    var row = el('div', 'display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:8px;cursor:pointer;');
-    row.addEventListener('mouseenter', function () { row.style.background = 'rgba(128,128,128,.16)'; });
-    row.addEventListener('mouseleave', function () { row.style.background = 'transparent'; });
-    var ic = el('span', 'flex:none;width:18px;text-align:center;' + (entry.dir ? '' : 'opacity:.75;'));
-    ic.textContent = entry.dir ? '📁' : '📄';
-    row.appendChild(ic);
-    var name = el('span', 'flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;', entry.name);
-    name.title = entry.path;
+    var P = palette();
+    // 行高与留白对齐官方：约 44px、左右 14px，无分隔线，仅 hover 高亮
+    var row = el('div', 'display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:8px;cursor:default;');
+    row.title = entry.path;
+    row.appendChild(iconFor(entry.dir));
+    var name = el('span', 'flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' +
+      'font-size:13.5px;line-height:1.35;', entry.name);
     row.appendChild(name);
-    row.appendChild(el('span', 'flex:none;opacity:.5;font-size:11px;', entry.dir ? '' : fmtSize(entry.size)));
-    var reveal = el('button', 'flex:none;padding:2px 7px;border-radius:6px;font-size:11px;cursor:pointer;' +
-      'border:1px solid rgba(128,128,128,.28);background:transparent;color:inherit;', '显示');
-    reveal.title = '在访达中显示';
-    reveal.addEventListener('click', function (e) {
-      e.stopPropagation();
-      if (typeof dsh.localFilesReveal === 'function') dsh.localFilesReveal(entry.path);
-    });
-    row.appendChild(reveal);
-    row.addEventListener('click', function () {
+    if (!entry.dir) {
+      row.appendChild(el('span', 'flex:none;font-size:11.5px;color:' + P.faint + ';', fmtSize(entry.size)));
+    }
+    row.addEventListener('mouseenter', function () { row.style.background = P.hover; });
+    row.addEventListener('mouseleave', function () { row.style.background = 'transparent'; });
+    // 用户要求："双击文件夹就直接打开" —— 单击不动作，双击进入/打开
+    row.addEventListener('dblclick', function () {
       if (entry.dir) void navigate(entry.path);
       else if (typeof dsh.localFilesOpen === 'function') dsh.localFilesOpen(entry.path);
     });
@@ -299,6 +367,11 @@
     }
     state.dir = res.dir;
     state.parent = res.parent;
+    try {
+      localStorage.setItem('dsh-local-files-last', res.dir);
+    } catch (e) {
+      /* 隐私模式下写不了，忽略 */
+    }
     state.entries = res.entries || [];
     if (input) input.value = res.dir;
 

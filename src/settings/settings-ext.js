@@ -556,7 +556,25 @@
    * 数据来自壳主进程（shell:whatsnew → 先 CDN 后随包兜底，见 src/main/whatsnew.ts）。
    */
   /** 版本区域的锚点：优先设置页那条更新进度行，其次找含「当前版本」的那一行容器 */
+  /**
+   * B3（2026-10-04 用户要的）：设置页一句隐私说明。
+   * 我们确实把官方遥测/埋点关掉了（见 bundled-plugins/dsh-shell-web-preview 的 profile 红线），
+   * 但用户不知道 —— 说出来才是差异化。
+   */
+  function renderPrivacyNote() {
+    if (document.getElementById('dsh-ext-privacy')) return;
+    var row = document.getElementById('dsh-ext-version');
+    if (!row || !row.parentElement) return;
+    var note = document.createElement('div');
+    note.id = 'dsh-ext-privacy';
+    note.style.cssText =
+      'margin-top:6px;font-size:11.5px;line-height:1.6;opacity:.62;';
+    note.textContent = '本机运行 · 不上传你的文件 · 遥测与埋点默认关闭';
+    row.parentElement.insertBefore(note, row.nextSibling);
+  }
+
   function maybeInjectSidebarProgress() {
+    renderPrivacyNote();
     if (document.getElementById('dsh-ext-dl')) return;
     var anchor = findSidebarSettingsAnchor();
     if (!anchor) {

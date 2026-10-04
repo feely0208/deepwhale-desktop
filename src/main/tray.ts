@@ -20,6 +20,8 @@ export interface TrayMenuActions {
   onShowWhatsNew?: () => void;
   /** 打开「本机内文件」（任何会话都能用；与 ⌘⇧O 同一动作） */
   onOpenLocalFiles?: () => void;
+  /** 诊断与关于：版本/更新状态/日志路径，一键复制或打开日志（用户反馈问题时能直接给全信息） */
+  onShowDiagnostics?: () => void;
   /** 手机连接：显示「用手机打开」的地址（地址里已带 token，用户不用手打） */
   onMobileConnect?: () => void;
   /** 皮肤子菜单（主题/背景图片，由调用方构建） */
@@ -50,6 +52,7 @@ export function buildMenuTemplate(a: TrayMenuActions): MenuItemConstructorOption
     { label: '设置 API Key…', click: () => a.onSetApiKey() },
     { label: '自定义 CSS…', click: () => a.onOpenCustomCss() },
     { label: '本机内文件…', click: () => a.onOpenLocalFiles?.() },
+    { label: '诊断与关于…', click: () => a.onShowDiagnostics?.() },
     { label: '手机连接…', click: () => a.onMobileConnect?.() },
     { type: 'separator' },
     { label: '检查更新…', click: () => a.onCheckUpdate?.() },
@@ -146,6 +149,7 @@ export function buildAppMenuTemplate(a: TrayMenuActions): MenuItemConstructorOpt
         // 用户要求（2026-10-04）：「更新内容在设置页面就不要显示了，增加一个选项按钮在帮助里面」
         { label: '本版更新内容…', click: () => a.onShowWhatsNew?.() },
         { label: '本机内文件…', click: () => a.onOpenLocalFiles?.() },
+        { label: '诊断与关于…', click: () => a.onShowDiagnostics?.() },
         { type: 'separator' as const },
         { label: '打开宠物目录…', click: () => a.onOpenPetsFolder?.() },
         { label: '打开自定义 CSS…', click: () => a.onOpenCustomCss() },

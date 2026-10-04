@@ -566,6 +566,56 @@ function previewUpdateProgress(): void {
   setTimeout(() => send({ phase: 'idle', percent: null, message: '' }), 7600);
 }
 
+/**
+ * 「诊断与关于」（2026-10-04 用户要的 B1/B5）
+ *
+ * 为什么值得做：用户反馈问题时，我们每次都要问「哪个版本 / DSH 是哪个版本 / 更新什么状态 /
+ * 日志在哪」——有它就能一键给全，支撑成本直接降一个量级。
+ * 做成原生对话框（不新开窗口、不占内存），按钮点完立即有反馈。
+ */
+function showDiagnostics(): void {
+  const shellVer = resolveShellVersion();
+  const runtimeVer = (() => {
+    try {
+      // 随包运行时版本由构建期生成（见 scripts/dsh-runtime-version.js）
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      return String(require('./dsh-version.generated').DSH_RUNTIME_VERSION || '未知');
+    } catch {
+      return '未知';
+    }
+  })();
+  const st = updates?.getState();
+  const updateLine = st
+    ? `${st.phase}${typeof (st as { percent?: number }).percent === 'number' ? ' ' + String((st as { percent?: number }).percent) + '%' : ''}${st.message ? '（' + st.message + '）' : ''}`
+    : '未知';
+  const lines = [
+    `深鲸桌面：${shellVer}`,
+    `随包 DSH 运行时：${runtimeVer}`,
+    `更新状态：${updateLine}`,
+    `DSH 端口：${store.get('port')}`,
+    `系统：${process.platform} ${process.arch} · Electron ${process.versions.electron}`,
+    `用户数据：${app.getPath('userData')}`,
+    `日志目录：${crashLogDir()}`,
+  ];
+  const detail = lines.join('\n');
+  const choice = dialog.showMessageBoxSync({
+    type: 'info',
+    title: '诊断与关于',
+    message: `深鲸桌面 ${shellVer}`,
+    detail,
+    buttons: ['复制诊断信息', '打开日志文件夹', '关闭'],
+    defaultId: 0,
+    cancelId: 2,
+  });
+  if (choice === 0) {
+    clipboard.writeText(`深鲸桌面诊断信息\n${detail}\n`);
+    // 给一个明确反馈：菜单栏下没有提示的话用户不知道复制成功没有
+    void dialog.showMessageBox({ type: 'info', message: '已复制', detail: '诊断信息已复制到剪贴板，可直接粘贴给我们。', buttons: ['好'] });
+  } else if (choice === 1) {
+    void shell.openPath(crashLogDir());
+  }
+}
+
 function buildMenuActions(): TrayMenuActions {
   const skinSubmenu: MenuItemConstructorOptions[] = [
     { label: '背景图片…', click: () => void pickBackgroundImage() },
@@ -648,6 +698,7 @@ function buildMenuActions(): TrayMenuActions {
         console.warn('[localfiles] 菜单打开失败:', e);
       }
     },
+    onShowDiagnostics: () => showDiagnostics(),
     onShowWhatsNew: () => {
       const ver = String(app.getVersion() || '').replace(/^v/, '');
       void showWhatsNewWindow(ver);
@@ -1792,16 +1843,18 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
             console.log('[smoke] skin-token:', skinProbe);
             {
               const sp = JSON.parse(skinProbe) as { token: string; frameBg: string; overlayBg?: string };
-              // 2026-10-04 用户反馈"辉光给你搞没了"后的正确判据（两条都要满足）：
-              //   ① 基础底色必须**透明** —— 辉光/壁纸就是靠它透出来的；
-              //   ② 浮层必须**不透明** —— 否则浮层变透明纸片（"怪白页"）。
-              if (!/transparent|rgba\(0,\s*0,\s*0,\s*0\)/.test(sp.token)) {
+              // 2026-10-04 定稿判据（前两次都栽在"极端化"）：
+              //   ① 基础底色必须**不透明** → 面板可读（透明会让浅色主题整片洗白，用户实测）
+              //   ② 浮层必须**不透明** → 不会变透明纸片（"怪白页"）
+              //   ③ 辉光不靠改底色，而靠"body 上的渐变 + 框架层透明"（见下面皮肤的硬断言）
+              const baseOpaque = sp.token && !/transparent|rgba\(0,\s*0,\s*0,\s*0\)/.test(sp.token);
+              if (!baseOpaque) {
                 console.error(
-                  '[smoke] --dsw-alias-bg-base 不是透明的（' + sp.token + '）→ 辉光/壁纸透不出来（用户实测过这一条）',
+                  '[smoke] 基础底色透明（' + sp.token + '）→ 面板会半透明/洗白，用户无法阅读',
                 );
                 process.exitCode = 1;
               } else {
-                console.log('[smoke] 基础底色透明（辉光可见）：' + sp.token);
+                console.log('[smoke] 基础底色不透明（面板可读）：' + sp.token);
               }
               const ob = String(sp.overlayBg || '');
               const overlayOpaque = ob && !/rgba\([^)]*,\s*0?\.\d+\)|transparent/.test(ob);
@@ -1888,27 +1941,163 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
               process.exitCode = 1;
             }
 
-            // —— 皮肤双主题截图（2026-10-04：浅色主题"整片发白"的教训 —— 必须肉眼看图）——
+            // —— 本机内文件面板：形态校验 + 出图（放这里是因为这段每次都会执行）——
+            try {
+              const pc = JSON.parse(
+                await mainWin!.webContents.executeJavaScript(`(async () => {
+                  // 先造"开始"面板的同结构假壳（真面板只在空白会话出现，冒烟里没有），
+                  // 本机内文件卡片是常驻 MutationObserver 补插的，造好等它插进来即可
+                  if (!document.getElementById('smoke-fake-hero')) {
+                    const box = document.createElement('div');
+                    box.id = 'smoke-fake-hero';
+                    box.style.cssText = 'position:fixed;left:-9999px;top:0;width:620px;';
+                    box.innerHTML =
+                      '<div style="width:560px">' +
+                      '<div role="button" style="width:560px;height:96px"><span>工作区文件</span><span>浏览会话工作区的文件</span></div>' +
+                      '<div role="button" style="width:560px;height:96px"><span>新建终端</span><span>在会话工作区运行命令</span></div>' +
+                      '</div>';
+                    document.body.appendChild(box);
+                    await new Promise((r) => setTimeout(r, 2600));
+                  }
+                  const card = document.getElementById('dsh-local-files-card');
+                  if (!card) return JSON.stringify({ ok: false, why: 'no-card' });
+                  card.click();
+                  await new Promise((r) => setTimeout(r, 1000));
+                  const panel = document.getElementById('dsh-local-files-panel');
+                  const input = document.getElementById('dsh-local-files-panel-path');
+                  return JSON.stringify({
+                    ok: !!panel && panel.style.display !== 'none',
+                    hasInput: !!input,
+                    path: input ? input.value : '',
+                    rows: document.querySelectorAll('#dsh-local-files-panel-list > div').length,
+                    svgs: document.querySelectorAll('#dsh-local-files-panel-list svg').length,
+                    buttons: document.querySelectorAll('#dsh-local-files-panel-list button').length,
+                  });
+                })()`),
+              ) as { ok: boolean; hasInput?: boolean; path?: string; rows?: number; svgs?: number; buttons?: number; why?: string };
+              if (!pc.ok || !pc.hasInput || (pc.rows ?? 0) < 1) {
+                console.error('[smoke] 本机内文件面板异常：' + JSON.stringify(pc));
+                process.exitCode = 1;
+              } else if ((pc.buttons ?? 0) !== 0) {
+                console.error('[smoke] 面板行里还有按钮（应已去掉「显示」）：' + String(pc.buttons));
+                process.exitCode = 1;
+              } else {
+                console.log(
+                  '[smoke] 本机内文件面板 ✓ 行 ' + String(pc.rows) + ' · SVG 图标 ' + String(pc.svgs) +
+                    ' · 行内按钮 ' + String(pc.buttons) + ' · 路径=' + String(pc.path),
+                );
+                try {
+                  const shot = await mainWin!.webContents.capturePage();
+                  fs.mkdirSync('/tmp/dsh-localfiles', { recursive: true });
+                  fs.writeFileSync('/tmp/dsh-localfiles/panel.png', shot.toPNG());
+                  console.log('[smoke] 面板截图：/tmp/dsh-localfiles/panel.png');
+                } catch (e6) {
+                  console.warn('[smoke] 面板截图失败:', e6);
+                }
+                // 关掉面板，免得影响后面的截图
+                await mainWin!.webContents.executeJavaScript(
+                  "const p=document.getElementById('dsh-local-files-panel'); if(p) p.style.display='none'; true",
+                );
+              }
+            } catch (e) {
+              console.warn('[smoke] 面板检查异常:', e);
+            }
+
+            // —— 皮肤：双主题截图 + 像素验证（用户要求"确切验证辉光和洗白"）——
+            // 教训：第一版这里①截图太早（抓到白页）②主题标签靠猜（写反了）。
+            // 现在：等页面稳定 → 从 DOM 读实际主题 → 截图 → 再切主题截第二张 → 逐像素验证。
             try {
               const shotDir = '/tmp/dsh-skin-themes';
               fs.mkdirSync(shotDir, { recursive: true });
-              await new Promise((r) => setTimeout(r, 600));
-              const darkImg = await mainWin!.webContents.capturePage();
-              fs.writeFileSync(path.join(shotDir, 'dark.png'), darkImg.toPNG());
-              // 切到浅色（DSH 用 data-ds-dark-theme 标记深色）
-              await mainWin!.webContents.executeJavaScript(
-                "document.body.removeAttribute('data-ds-dark-theme'); true",
+              // 等界面真的就绪（frame 出现 + 稳定 800ms），否则截到的是"正在启动"白页
+              for (let i = 0; i < 20; i++) {
+                const ready = await mainWin!.webContents.executeJavaScript(
+                  '!!document.querySelector("[class*=frame]")',
+                );
+                if (ready) break;
+                await new Promise((r) => setTimeout(r, 400));
+              }
+              await new Promise((r) => setTimeout(r, 800));
+
+              // 辉光的 CSS 硬断言：body 上必须有 radial-gradient（预设把辉光画在 body 上）
+              const glowCss = await mainWin!.webContents.executeJavaScript(
+                "getComputedStyle(document.body).backgroundImage",
               );
-              await new Promise((r) => setTimeout(r, 700));
-              const lightImg = await mainWin!.webContents.capturePage();
-              fs.writeFileSync(path.join(shotDir, 'light.png'), lightImg.toPNG());
+              if (String(glowCss).indexOf('radial-gradient') < 0) {
+                console.error('[smoke] body 上没有辉光渐变（皮肤预设没生效）：' + String(glowCss).slice(0, 60));
+                process.exitCode = 1;
+              } else {
+                console.log('[smoke] 辉光渐变在 body 上 ✓');
+              }
+
+              const capture = async (name: string) => {
+                const img = await mainWin!.webContents.capturePage();
+                fs.writeFileSync(path.join(shotDir, name + '.png'), img.toPNG());
+                return img;
+              };
+              const themeNow = async (): Promise<boolean> =>
+                Boolean(
+                  await mainWin!.webContents.executeJavaScript(
+                    "!!(document.body.hasAttribute('data-ds-dark-theme') || document.documentElement.hasAttribute('data-ds-dark-theme'))",
+                  ),
+                );
+
+              const isDarkNow = await themeNow();
+              const firstImg = await capture(isDarkNow ? 'dark' : 'light');
+              // 切到另一主题
+              await mainWin!.webContents.executeJavaScript(
+                isDarkNow
+                  ? "document.body.removeAttribute('data-ds-dark-theme');document.documentElement.removeAttribute('data-ds-dark-theme');true"
+                  : "document.body.setAttribute('data-ds-dark-theme','');document.documentElement.setAttribute('data-ds-dark-theme','');true",
+              );
+              await new Promise((r) => setTimeout(r, 900));
+              const isDarkNow2 = await themeNow();
+              const secondImg = await capture(isDarkNow2 ? 'dark' : 'light');
               // 还原
               await mainWin!.webContents.executeJavaScript(
-                "document.body.setAttribute('data-ds-dark-theme',''); true",
+                isDarkNow
+                  ? "document.body.setAttribute('data-ds-dark-theme','');document.documentElement.setAttribute('data-ds-dark-theme','');true"
+                  : "document.body.removeAttribute('data-ds-dark-theme');document.documentElement.removeAttribute('data-ds-dark-theme');true",
               );
-              console.log('[smoke] 皮肤双主题截图：' + shotDir + '（dark.png / light.png）');
+
+              const probe = (img: Electron.NativeImage, label: string, wantDark: boolean) => {
+                const bmp = img.getBitmap() as unknown as Buffer;
+                const { width, height } = img.getSize();
+                const at = (x: number, y: number) => {
+                  const i = (y * width + x) * 4;
+                  return { b: bmp[i], g: bmp[i + 1], r: bmp[i + 2] };
+                };
+                const corner = at(3, 3);                 // 最外圈：背景/辉光
+                const center = at(Math.round(width / 2), Math.round(height / 2));
+                const sum = (c: { r: number; g: number; b: number }) => c.r + c.g + c.b;
+                // ① 背景（外圈）必须和画面中心**不一样** —— 说明面板没有盖满、辉光/背景透出来了
+                const differs = Math.abs(sum(corner) - sum(center)) >= 12;
+                // ② 主题方向：深色主题整体偏暗、浅色偏亮
+                const avg = Math.round((sum(corner) + sum(center)) / 2 / 3);
+                const themeOk = wantDark ? avg <= 140 : avg >= 150;
+                if (!differs) {
+                  console.error(
+                    '[smoke] ' + label + '主题：外圈与中心几乎同色（辉光/背景没透出来）corner=' +
+                      JSON.stringify(corner) + ' center=' + JSON.stringify(center),
+                  );
+                  process.exitCode = 1;
+                } else if (!themeOk) {
+                  console.error(
+                    '[smoke] ' + label + '主题：整体亮度异常（均值 ' + String(avg) + '）→ 可能洗白/发黑',
+                  );
+                  process.exitCode = 1;
+                } else {
+                  console.log(
+                    '[smoke] ' + label + '主题像素验证 ✓（外圈 ' + JSON.stringify(corner) +
+                      ' vs 中心 ' + JSON.stringify(center) + '，均值 ' + String(avg) + '）',
+                  );
+                }
+              };
+              probe(firstImg, isDarkNow ? '深色' : '浅色', isDarkNow);
+              probe(secondImg, isDarkNow2 ? '深色' : '浅色', isDarkNow2);
+              console.log('[smoke] 皮肤双主题截图：' + shotDir + '/dark.png + light.png');
             } catch (e) {
-              console.warn('[smoke] 皮肤截图失败:', e);
+              console.warn('[smoke] 皮肤截图/验证失败:', e);
             }
 
             // —— 皮肤/背景层栈诊断（临时）：查清"整片发白"是哪一层造成的 ——
@@ -2052,10 +2241,101 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
                 process.exitCode = 1;
               } else {
                 console.log('[smoke] 本机内文件卡片：与两张自带卡并列，插在第三位 ✓（' + String(h.text) + '…）');
+                // 顺着这张卡点开面板：验形态（SVG 图标、无「显示」按钮、行数）+ 出一张图给用户看
+                const pc = JSON.parse(
+                  await mainWin!.webContents.executeJavaScript(`(async () => {
+                    const card = document.getElementById('dsh-local-files-card');
+                    if (!card) return JSON.stringify({ ok: false });
+                    card.click();
+                    await new Promise((r) => setTimeout(r, 1000));
+                    const panel = document.getElementById('dsh-local-files-panel');
+                    const input = document.getElementById('dsh-local-files-panel-path');
+                    return JSON.stringify({
+                      ok: !!panel && panel.style.display !== 'none',
+                      hasInput: !!input,
+                      path: input ? input.value : '',
+                      rows: document.querySelectorAll('#dsh-local-files-panel-list > div').length,
+                      svgs: document.querySelectorAll('#dsh-local-files-panel-list svg').length,
+                      buttons: document.querySelectorAll('#dsh-local-files-panel-list button').length,
+                    });
+                  })()`),
+                ) as { ok: boolean; hasInput?: boolean; path?: string; rows?: number; svgs?: number; buttons?: number };
+                if (!pc.ok || !pc.hasInput || (pc.rows ?? 0) < 1) {
+                  console.error('[smoke] 点卡片没打开本机内文件面板：' + JSON.stringify(pc));
+                  process.exitCode = 1;
+                } else if ((pc.buttons ?? 0) !== 0) {
+                  console.error('[smoke] 面板行里还有按钮（应已去掉「显示」）：' + String(pc.buttons));
+                  process.exitCode = 1;
+                } else {
+                  console.log(
+                    '[smoke] 本机内文件面板 ✓ 行 ' + String(pc.rows) + ' · SVG 图标 ' + String(pc.svgs) +
+                      ' · 行内按钮 ' + String(pc.buttons) + '（已按官方去掉「显示」）· 路径=' + String(pc.path),
+                  );
+                  try {
+                    const shot = await mainWin!.webContents.capturePage();
+                    fs.mkdirSync('/tmp/dsh-localfiles', { recursive: true });
+                    fs.writeFileSync('/tmp/dsh-localfiles/panel.png', shot.toPNG());
+                    console.log('[smoke] 面板截图：/tmp/dsh-localfiles/panel.png');
+                  } catch (e4) {
+                    console.warn('[smoke] 面板截图失败:', e4);
+                  }
+                }
               }
             } catch (e) {
               console.error('[smoke] 卡片注入检查失败:', e);
               process.exitCode = 1;
+            }
+
+            // —— 本机内文件面板：独立校验（不依赖"开始"面板是否渲染）+ 出图 ——
+            //    用户 2026-10-04 反馈过这个面板"白底浅灰字看不见"，所以要留图 + 断言行数与图标
+            try {
+              const panelChk = await mainWin!.webContents.executeJavaScript(`(async () => {
+                let card = document.getElementById('dsh-local-files-card');
+                if (!card) return JSON.stringify({ ok: false, why: 'no-card' });
+                card.click();
+                await new Promise((r) => setTimeout(r, 900));
+                const panel = document.getElementById('dsh-local-files-panel');
+                const input = document.getElementById('dsh-local-files-panel-path');
+                const rows = document.querySelectorAll('#dsh-local-files-panel-list > div').length;
+                const firstRowText = (document.querySelector('#dsh-local-files-panel-list > div') || {}).textContent || '';
+                const revealBtns = Array.from(document.querySelectorAll('#dsh-local-files-panel-list button')).length;
+                const svgs = document.querySelectorAll('#dsh-local-files-panel-list svg').length;
+                return JSON.stringify({
+                  ok: !!panel && panel.style.display !== 'none',
+                  hasInput: !!input,
+                  path: input ? input.value : '',
+                  rows, firstRowText: firstRowText.slice(0, 20), svgs, revealBtns,
+                });
+              })()`);
+              const pc = JSON.parse(panelChk) as {
+                ok: boolean; hasInput?: boolean; path?: string; rows?: number;
+                firstRowText?: string; svgs?: number; revealBtns?: number; why?: string;
+              };
+              if (!pc.ok || !pc.hasInput || (pc.rows ?? 0) < 1) {
+                console.error('[smoke] 本机内文件面板不可用：' + panelChk);
+                process.exitCode = 1;
+              } else if ((pc.svgs ?? 0) < 1 || (pc.revealBtns ?? 0) !== 0) {
+                console.error(
+                  '[smoke] 面板行样式不符（应 SVG 图标、无「显示」按钮）：svg=' + String(pc.svgs) +
+                    ' 按钮=' + String(pc.revealBtns),
+                );
+                process.exitCode = 1;
+              } else {
+                console.log(
+                  '[smoke] 本机内文件面板 ✓ ' + String(pc.rows) + ' 项 · SVG 图标 ' + String(pc.svgs) +
+                    ' 个 · 无「显示」按钮 · 路径=' + String(pc.path),
+                );
+                try {
+                  const shot = await mainWin!.webContents.capturePage();
+                  fs.mkdirSync('/tmp/dsh-localfiles', { recursive: true });
+                  fs.writeFileSync('/tmp/dsh-localfiles/panel.png', shot.toPNG());
+                  console.log('[smoke] 本机内文件面板截图：/tmp/dsh-localfiles/panel.png');
+                } catch (e3) {
+                  console.warn('[smoke] 面板截图失败:', e3);
+                }
+              }
+            } catch (e) {
+              console.warn('[smoke] 本机内文件面板检查异常:', e);
             }
 
             // —— Office 预览链路（2026-10-04 修复）：硬判"物化产物 + 引擎执行位"，

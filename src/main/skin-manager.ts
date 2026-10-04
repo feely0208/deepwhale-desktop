@@ -187,11 +187,14 @@ export class SkinManager {
          辉光/壁纸本来就是靠基础底色透明才透出来的 —— 之前为了修"浮层被掏空"直接
          不覆盖这个 token，结果连同辉光一起被 DSH 自己的实色盖住了。
          正确做法：**基础底色照旧透明**（辉光透出来）+ **单独把浮层补成不透明**（不被掏空）。 */
+      /* ⚠️ 2026-10-04 二次修正（用户截图：浅色主题下整个界面"洗白"）：
+         之前浅色分支把面板色写成 rgba(255,255,255, var(--dsh-skin-alpha))，而那个 alpha 是给
+         **背景图**调透明的（默认很低）→ 面板只剩两三成不透明，文字浮在亮底上，整片发白。
+         正解：底色与面板一律实色（可读优先），辉光只从"框架层透明"透出来。 */
       body:not([data-ds-dark-theme]) {
-        --dsw-alias-bg-base: transparent !important;
-        --dsw-alias-bg-layer-1: rgba(255, 255, 255, var(--dsh-skin-alpha)) !important;
-        --dsw-alias-bg-layer-2: rgba(244, 246, 248, var(--dsh-skin-alpha)) !important;
-        --dsw-alias-bg-overlay: rgba(255, 255, 255, var(--dsh-skin-alpha)) !important;
+        --dsw-alias-bg-layer-1: rgba(255, 255, 255, 0.96) !important;
+        --dsw-alias-bg-layer-2: rgba(246, 248, 250, 0.97) !important;
+        --dsw-alias-bg-overlay: rgba(255, 255, 255, 0.985) !important;
         --dsw-specific-sidebar-fill: rgba(244, 246, 248, var(--dsh-skin-alpha)) !important;
         --dsw-specific-sidebar-nav-item-active: rgba(0, 0, 0, 0.06) !important;
         --dsw-specific-sidebar-nav-item-hover: rgba(0, 0, 0, 0.04) !important;
@@ -208,9 +211,8 @@ export class SkinManager {
       /* 深色：面板/卡片改为不透明。原来是 rgba(...,alpha) 半透明，壁纸会透上来，
          于是面板发灰、和黑色模块割裂——这正是用户反馈的观感问题。
          基础底色保持 transparent，壁纸只在"没有面板覆盖"的地方透出。 */
-      /* 深色同理：基础底色透明（辉光透出来） */
+      /* 深色同理：面板实色（可读优先），辉光从框架层透明处透出 */
       body[data-ds-dark-theme] {
-        --dsw-alias-bg-base: transparent !important;
         --dsw-alias-bg-layer-1: #1c1f25 !important;
         --dsw-alias-bg-layer-2: #23272e !important;
         --dsw-alias-bg-overlay: #16191e !important;

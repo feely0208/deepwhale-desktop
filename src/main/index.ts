@@ -1888,6 +1888,62 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
               process.exitCode = 1;
             }
 
+            // —— 皮肤双主题截图（2026-10-04：浅色主题"整片发白"的教训 —— 必须肉眼看图）——
+            try {
+              const shotDir = '/tmp/dsh-skin-themes';
+              fs.mkdirSync(shotDir, { recursive: true });
+              await new Promise((r) => setTimeout(r, 600));
+              const darkImg = await mainWin!.webContents.capturePage();
+              fs.writeFileSync(path.join(shotDir, 'dark.png'), darkImg.toPNG());
+              // 切到浅色（DSH 用 data-ds-dark-theme 标记深色）
+              await mainWin!.webContents.executeJavaScript(
+                "document.body.removeAttribute('data-ds-dark-theme'); true",
+              );
+              await new Promise((r) => setTimeout(r, 700));
+              const lightImg = await mainWin!.webContents.capturePage();
+              fs.writeFileSync(path.join(shotDir, 'light.png'), lightImg.toPNG());
+              // 还原
+              await mainWin!.webContents.executeJavaScript(
+                "document.body.setAttribute('data-ds-dark-theme',''); true",
+              );
+              console.log('[smoke] 皮肤双主题截图：' + shotDir + '（dark.png / light.png）');
+            } catch (e) {
+              console.warn('[smoke] 皮肤截图失败:', e);
+            }
+
+            // —— 皮肤/背景层栈诊断（临时）：查清"整片发白"是哪一层造成的 ——
+            try {
+              const stack = await mainWin!.webContents.executeJavaScript(`(() => {
+                const out = [];
+                const pick = (el) => {
+                  if (!el) return null;
+                  const cs = getComputedStyle(el);
+                  return {
+                    cls: String(el.className || el.tagName).slice(0, 60),
+                    bg: cs.backgroundColor,
+                    bgi: (cs.backgroundImage || '').slice(0, 40),
+                  };
+                };
+                out.push({ what: 'html', ...pick(document.documentElement) });
+                out.push({ what: 'body', ...pick(document.body) });
+                const frame = document.querySelector('[class*="frame"]');
+                out.push({ what: 'frame', ...pick(frame) });
+                const center = document.querySelector('[class*="centerCol"]');
+                out.push({ what: 'centerCol', ...pick(center) });
+                const sidebar = document.querySelector('[class*="sidebarCol"]');
+                out.push({ what: 'sidebarCol', ...pick(sidebar) });
+                const token = getComputedStyle(document.body).getPropertyValue('--dsw-alias-bg-base').trim();
+                const tokens = {
+                  base: token,
+                  l1: getComputedStyle(document.body).getPropertyValue('--dsw-alias-bg-layer-1').trim(),
+                };
+                return JSON.stringify({ tokens, out });
+              })()`);
+              console.log('[smoke] skin-stack: ' + stack);
+            } catch (e) {
+              console.warn('[smoke] 皮肤层栈诊断失败:', e);
+            }
+
             // —— 回归：旧缓存里没有当前版本时，必须强制回源（用户 1.0.49 实测踩到）——
             try {
               const stalePath = path.join(app.getPath('userData'), 'whatsnew-cache.json');

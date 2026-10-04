@@ -1265,7 +1265,7 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
     const officePayload = officePayloadDir(app.isPackaged, app.getAppPath(), process.resourcesPath);
     let officeSetup: { changed: boolean; profilePending: boolean } = { changed: false, profilePending: false };
     try {
-      officeSetup = ensureOfficeSetup(legalHome, officePayload, legalRuntimeDir, process.execPath);
+      officeSetup = ensureOfficeSetup(legalHome, officePayload, legalRuntimeDir, process.execPath, app.getVersion());
     } catch (error) {
       logInjectionFailure('office', '载荷注入', error);
     }

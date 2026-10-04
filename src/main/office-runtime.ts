@@ -290,6 +290,7 @@ export function ensureOfficeSetup(
   payloadDir: string,
   runtimeNodeModulesDir: string | undefined,
   electronPath: string,
+  appVersion?: string,
 ): OfficeSetupResult {
   // 载荷不完整就整体跳过：宁可没有 office，也不要注入一个指向空目录的行。
   if (!fs.existsSync(path.join(payloadDir, 'runtime.json'))) {
@@ -310,8 +311,12 @@ export function ensureOfficeSetup(
   }
   // ⚠️ 必须用"物化到真实目录"的那份 cli（asar 里的引擎没有执行位 → 打包版必挂）。
   //    物化失败才退回 asar 路径（开发态/异常情况下至少还有一次机会）。
-  const cliPath =
-    materializeOfficeKit(home, runtimeNodeModulesDir, app.getVersion()) ?? asarCliPath;
+  // ⚠️ 别在这里直接用 `app`：CI 的离线守卫脚本用**纯 node** 跑这个模块，
+  //    那里 `import { app } from 'electron'` 拿到的是字符串、没有 getVersion
+  //    → 2026-10-04 就是把 1.0.49 的 CI 打挂在这个 TypeError 上。
+  const version =
+    appVersion ?? (typeof app?.getVersion === 'function' ? app.getVersion() : 'dev');
+  const cliPath = materializeOfficeKit(home, runtimeNodeModulesDir, version) ?? asarCliPath;
 
   let changed = false;
   // 包装脚本写到【用户数据目录】，不写 App 包内（理由见 ensureWrapperNode 注释）

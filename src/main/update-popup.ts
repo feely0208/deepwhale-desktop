@@ -13,6 +13,7 @@
  * 关掉只是隐藏，不销毁，避免下次弹出闪烁；应用退出时随之销毁。
  */
 import { BrowserWindow, ipcMain, screen, app } from 'electron';
+import type { Store } from './store';
 import * as path from 'path';
 import { notesFor, WhatsNewEntry } from './whatsnew';
 
@@ -30,6 +31,38 @@ let currentVersion = '';
 
 function popupFile(): string {
   return path.join(__dirname, '../update-popup/update-popup.html');
+}
+
+/**
+ * 记住用户拖动后的位置（2026-10-04）
+ *
+ * 用户实测：弹窗无边框、抓哪儿都拖不动 → 加了拖拽区之后，必须把位置存下来，
+ * 否则每次打开又回到居中，等于白拖。位置越界（换显示器/改分辨率）时自动回退。
+ */
+const POS_KEY = 'updatePopupPos';
+
+/** 由 index.ts 注入的 store（与其它模块共用同一个实例，避免各自 new 出多份状态） */
+let storeRef: Store | null = null;
+
+export function bindUpdatePopupStore(s: Store): void {
+  storeRef = s;
+}
+
+function savedPosition(): { x: number; y: number } | null {
+  try {
+    const p = storeRef?.get(POS_KEY as never) as { x?: number; y?: number } | undefined;
+    if (!p || typeof p.x !== 'number' || typeof p.y !== 'number') return null;
+    // 必须落在某个显示器的工作区内（否则窗口会开在看不见的地方）
+    for (const d of screen.getAllDisplays()) {
+      const a = d.workArea;
+      const insideX = p.x >= a.x - 40 && p.x <= a.x + a.width - 80;
+      const insideY = p.y >= a.y - 20 && p.y <= a.y + a.height - 60;
+      if (insideX && insideY) return { x: Math.round(p.x), y: Math.round(p.y) };
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 /** 选一个「最像主屏」的显示器，把弹窗放在屏幕中上部（不遮挡输入区） */
@@ -72,6 +105,22 @@ function ensurePopup(): BrowserWindow {
     },
   });
   void popup.loadFile(popupFile());
+  // 拖动结束就记住位置（debounce，避免拖动过程中频繁写盘）
+  let saveTimer: NodeJS.Timeout | null = null;
+  popup.on('moved', () => {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      try {
+        const w = popup;
+        if (w && !w.isDestroyed()) {
+          const [x, y] = w.getPosition();
+          storeRef?.set(POS_KEY as never, { x, y } as never);
+        }
+      } catch {
+        /* 忽略 */
+      }
+    }, 400);
+  });
   popup.on('closed', () => {
     popup = null;
   });
@@ -97,7 +146,14 @@ export async function showUpdatePopup(version: string, state: PopupState): Promi
   notesOnly = false;
   currentVersion = version;
   const win = ensurePopup();
-  place(win);
+  const saved = savedPosition();
+  try {
+    if (saved) win.setPosition(saved.x, saved.y);
+    else place(win);
+  } catch (e) {
+    // 定位失败绝不能影响弹窗显示（宁可位置默认，也不能不弹）
+    console.warn('[update-popup] 定位失败，使用默认位置:', e);
+  }
   win.show();
   win.focus();
   try {
@@ -115,7 +171,13 @@ export async function showWhatsNewWindow(version: string): Promise<void> {
   notesOnly = true;
   currentVersion = version;
   const win = ensurePopup();
-  place(win);
+  const saved2 = savedPosition();
+  try {
+    if (saved2) win.setPosition(saved2.x, saved2.y);
+    else place(win);
+  } catch (e) {
+    console.warn('[update-popup] 定位失败，使用默认位置:', e);
+  }
   win.setSize(560, 620);
   win.show();
   win.focus();

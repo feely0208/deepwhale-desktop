@@ -74,6 +74,12 @@ body {
 
 /* 头部 */
 .head { display: flex; align-items: flex-start; gap: 12px; }
+/* 2026-10-04 用户实测：无边框窗口抓哪儿都拖不动 → 头部整条当标题栏。
+   注意：按钮/列表/进度区必须显式 no-drag，否则点不动、也选不中文字。 */
+.card { -webkit-app-region: drag; }
+.head { -webkit-app-region: drag; }
+.foot, .notes, .progress, #items, button, a, input { -webkit-app-region: no-drag; }
+.x { -webkit-app-region: no-drag; }
 .mark {
   flex: none; margin-top: 2px;
   filter: drop-shadow(0 0 12px rgba(20, 165, 184, 0.6));

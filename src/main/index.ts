@@ -47,6 +47,7 @@ import { notesFor } from './whatsnew';
 import {
 
 
+  bindUpdatePopupStore,
   showUpdatePopup,
   showWhatsNewWindow,
   updatePopupState,
@@ -1097,6 +1098,7 @@ function registerIpc(): void {
 
   registerLocalFilesIpc();
   // 更新弹窗的按钮：立即重启 / 稍后（与更新管理器同源）
+  bindUpdatePopupStore(store);
   registerUpdatePopupIpc({
     onRestart: () => {
       try {

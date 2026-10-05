@@ -244,10 +244,10 @@ jobs:
         shell: bash
         run: |
           set -e
-          echo "---- 检查打包产物里的生产依赖 ----"
+          echo "---- 检查打包产物里的生产依赖（electron-builder 输出目录是 release/，见 electron-builder.yml）----"
           MISSING=0
           for mod in tree-kill electron-updater; do
-            if find dist -type d -ipath "*resources/app/node_modules/$mod" | grep -q .; then
+            if find release dist -type d -ipath "*resources/app/node_modules/$mod" 2>/dev/null | grep -q .; then
               echo "  ✅ $mod 在包内"
             else
               echo "  ❌ $mod 不在包内（装完会启动崩溃）"
@@ -255,7 +255,7 @@ jobs:
             fi
           done
           # 逐平台确认 node_modules 整体存在（白名单 files 配置最容易漏掉它）
-          if find dist -type d -ipath "*resources/app/node_modules" | grep -q .; then
+          if find release dist -type d -ipath "*resources/app/node_modules" 2>/dev/null | grep -q .; then
             echo "  ✅ node_modules 已随包"
           else
             echo "  ❌ 包里没有 node_modules —— files 白名单把生产依赖漏掉了"

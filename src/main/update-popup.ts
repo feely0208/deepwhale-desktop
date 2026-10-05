@@ -234,6 +234,22 @@ export function registerUpdatePopupIpc(actions: UpdatePopupActions): void {
       closeUpdatePopup();
     }
   });
+  // 自己实现的拖拽：渲染层给出鼠标处的目标位置，这里设窗位（并夹在显示器工作区内）
+  ipcMain.on('popup:move', (_e, x: number, y: number) => {
+    const win = popup;
+    if (!win || win.isDestroyed()) return;
+    try {
+      const [w, h] = win.getSize();
+      const d = screen.getDisplayNearestPoint({ x: Math.round(x), y: Math.round(y) });
+      const a = d.workArea;
+      const nx = Math.min(Math.max(Math.round(x), a.x - 20), a.x + a.width - w + 20);
+      const ny = Math.min(Math.max(Math.round(y), a.y - 10), a.y + a.height - h + 10);
+      win.setPosition(nx, ny);
+    } catch {
+      /* 忽略拖动中的瞬时错误 */
+    }
+  });
+
   ipcMain.on('popup:ready', () => {
     if (notesOnly) {
       const win = popup;

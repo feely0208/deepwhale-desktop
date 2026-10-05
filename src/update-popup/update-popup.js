@@ -120,9 +120,60 @@
   }
   $('btn-restart').addEventListener('click', function () { send('restart'); });
   $('btn-later').addEventListener('click', function () { send('later'); });
-  $('btn-close').addEventListener('click', function () { send('close'); });
+  // —— 拖拽（保底实现，不依赖 -webkit-app-region）——
+  // 用户实测：首次自动弹出的窗口用 CSS 拖拽区拖不动，再次打开的那个却可以 →
+  // 干脆自己实现：按下头部（非按钮）→ 跟着鼠标设置窗位。
+  (function enableDrag() {
+    var head = document.querySelector('.head');
+    var card = document.querySelector('.card');
+    if (!head || !card) return;
+    function isInteractive(el) {
+      return !!(el && el.closest && el.closest('button, a, input, #items, .notes, .foot, .progress'));
+    }
+    function startDrag(e) {
+      if (e.button !== 0 || isInteractive(e.target)) return;
+      var offX = e.screenX - window.screenX;
+      var offY = e.screenY - window.screenY;
+      e.preventDefault();
+      function onMove(ev) {
+        if (window.dshPopup && typeof window.dshPopup.moveWindow === 'function') {
+          window.dshPopup.moveWindow(ev.screenX - offX, ev.screenY - offY);
+        }
+      }
+      function onUp() {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+      }
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    }
+    head.addEventListener('mousedown', startDrag);
+    card.addEventListener('mousedown', startDrag);
+  })();
+
+  // 关闭：如果正在下载，先提醒一句"会在后台继续"，再关（用户要求：别写在界面常驻文案里）
+  function closeWithHint() {
+    var downloading = !$('progress-wrap').hidden && $('progress-wrap') !== null;
+    if (downloading && window.dshPopup && typeof window.dshPopup.action === 'function') {
+      var tip = document.getElementById('close-tip');
+      if (!tip) {
+        tip = document.createElement('div');
+        tip.id = 'close-tip';
+        tip.style.cssText =
+          'position:absolute;left:50%;bottom:16px;transform:translateX(-50%);padding:8px 14px;border-radius:9px;' +
+          'background:rgba(20,165,184,.92);color:#04131a;font-size:12.5px;font-weight:600;white-space:nowrap;';
+        tip.textContent = '更新将在后台继续，完成后会提示重启';
+        document.querySelector('.card').appendChild(tip);
+        setTimeout(function () { send('close'); }, 900);
+        return;
+      }
+    }
+    send('close');
+  }
+
+  $('btn-close').addEventListener('click', closeWithHint);
   document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape') send('close');
+    if (e.key === 'Escape') closeWithHint();
   });
 
   // 先按"仅说明"渲染，避免打开瞬间是空白

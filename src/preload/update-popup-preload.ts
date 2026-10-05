@@ -10,5 +10,7 @@ contextBridge.exposeInMainWorld('dshPopup', {
     ipcRenderer.on('popup:msg', (_e, msg) => cb(msg));
   },
   action: (action: string) => ipcRenderer.send('popup:action', action),
+  /** 自己实现的拖拽（不依赖 -webkit-app-region：首次自动弹出的窗口上它没生效） */
+  moveWindow: (x: number, y: number) => ipcRenderer.send('popup:move', x, y),
   ready: () => ipcRenderer.send('popup:ready'),
 });

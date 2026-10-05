@@ -2307,6 +2307,49 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
                 } else {
                   console.log('[smoke] 更新弹窗：' + pp.title + ' ' + pp.tag + '，更新条目 ' + String(pp.items) + ' 条，辉光已生效');
                 }
+                // —— 1.0.54 已实现项：① 弹窗可移动（自实现拖拽的 IPC 通路）② 关闭提醒 ——
+                try {
+                  // ① 拖拽：让弹窗页调用 moveWindow，断言窗口真的动了 + 出图
+                  const before = pw.getPosition();
+                  await pw.webContents.executeJavaScript(
+                    "window.dshPopup && window.dshPopup.moveWindow(160, 120); true",
+                  );
+                  await new Promise((r) => setTimeout(r, 600));
+                  const after = pw.getPosition();
+                  const moved = Math.abs(after[0] - before[0]) > 20 || Math.abs(after[1] - before[1]) > 20;
+                  if (!moved) {
+                    console.error(
+                      '[smoke] 弹窗拖拽通路无效：before=' + JSON.stringify(before) + ' after=' + JSON.stringify(after),
+                    );
+                    process.exitCode = 1;
+                  } else {
+                    console.log(
+                      '[smoke] 弹窗可移动 ✓（' + JSON.stringify(before) + ' → ' + JSON.stringify(after) + '）',
+                    );
+                    const shot = await pw.webContents.capturePage();
+                    fs.mkdirSync('/tmp/dsh-154', { recursive: true });
+                    fs.writeFileSync('/tmp/dsh-154/1-弹窗已移动到(160,120).png', shot.toPNG());
+                  }
+                  // ② 关闭提醒：把面板摆成"下载中"，点关闭 → 应出现「后台继续」提示
+                  const tipCycle = await pw.webContents.executeJavaScript(`(async () => {
+                    const wrap = document.getElementById('progress-wrap');
+                    if (wrap) wrap.hidden = false;               // 伪装成下载中
+                    document.getElementById('btn-close').click();
+                    await new Promise((r) => setTimeout(r, 250));
+                    const tip = document.getElementById('close-tip');
+                    return JSON.stringify({ tipShown: !!tip, text: tip ? tip.textContent : '' });
+                  })()`);
+                  const tc = JSON.parse(tipCycle) as { tipShown: boolean; text?: string };
+                  if (!tc.tipShown) {
+                    console.error('[smoke] 下载中关闭弹窗没有出现「后台继续」提醒');
+                    process.exitCode = 1;
+                  } else {
+                    console.log('[smoke] 关闭提醒 ✓：' + String(tc.text));
+                  }
+                } catch (e) {
+                  console.warn('[smoke] 弹窗拖拽/关闭提醒检查异常:', e);
+                }
+
                 try {
                   const img = await pw.webContents.capturePage();
                   fs.mkdirSync('/tmp/dsh-update-popup', { recursive: true });
@@ -2477,6 +2520,27 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
               }
             } catch (e) {
               console.warn('[smoke] 安装器冻结项检查跳过（开发态无该文件）:', e);
+            }
+
+            // —— 关于面板权属：版权必须是公司，不许再出现个人账号 ——
+            try {
+              const pkg = JSON.parse(fs.readFileSync(path.join(app.getAppPath(), 'package.json'), 'utf-8')) as {
+                author?: string;
+              };
+              const author = String(pkg.author || '');
+              const bad = ['feely0208', 'gmail.com'];
+              const hit = bad.filter((b) => author.includes(b));
+              if (hit.length) {
+                console.error('[smoke] 关于面板权属不对：package.json 的 author 仍含个人账号 ' + hit.join('、'));
+                process.exitCode = 1;
+              } else if (!author.includes('深鲸')) {
+                console.error('[smoke] package.json 的 author 不是公司名：' + author);
+                process.exitCode = 1;
+              } else {
+                console.log('[smoke] 关于面板权属 ✓ 公司：' + author);
+              }
+            } catch (e) {
+              console.warn('[smoke] 关于面板权属检查跳过:', e);
             }
 
             // —— Office 预览链路（2026-10-04 修复）：硬判"物化产物 + 引擎执行位"，

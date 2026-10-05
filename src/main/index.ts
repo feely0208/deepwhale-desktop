@@ -1096,6 +1096,22 @@ function registerIpc(): void {
     console.warn('[patch-heal] 自愈检查失败（不影响启动）:', e);
   }
 
+  // 关于面板（2026-10-05 用户：「后面不应该是 feely0208…权属应该是公司的」）：
+  // 原来版权行来自 package.json 的 author（个人 GitHub 账号）→ 现在显式写成公司。
+  // 1.0.54 计划：改用我们自己的品牌关于窗（辉光底 + 大肥鱼），见 1.0.54 待发布清单。
+  try {
+    app.setAboutPanelOptions({
+      applicationName: '深鲸桌面',
+      applicationVersion: resolveShellVersion(),
+      version: `随包 DSH 运行时 ${(app.getVersion && app.getVersion()) || ''}`.trim(),
+      copyright: 'Copyright © 2026 温州深鲸智能科技有限公司',
+      credits: '本地运行 · 不上传你的文件\nhttps://deepwhale.org.cn',
+      authors: ['温州深鲸智能科技有限公司'],
+    });
+  } catch (e) {
+    console.warn('[about] 设置关于面板信息失败:', e);
+  }
+
   registerLocalFilesIpc();
   // 更新弹窗的按钮：立即重启 / 稍后（与更新管理器同源）
   bindUpdatePopupStore(store);

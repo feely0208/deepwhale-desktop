@@ -14,7 +14,7 @@
 #   - macOS 正式发布走 Developer ID 签名 + 公证（fail-loud 预检，见 scripts/release-preflight.js 与 RELEASING.md）
 appId: com.deepwhale.desktop
 productName: DeepWhale Desktop
-copyright: Copyright © 2026 feely0208
+copyright: Copyright © 2026 温州深鲸智能科技有限公司
 directories:
   output: release
 files:

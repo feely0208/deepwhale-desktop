@@ -3,9 +3,67 @@ import * as fs from 'fs';
 import * as http from 'http';
 import * as os from 'os';
 import * as path from 'path';
-import kill from 'tree-kill';
 import { EventEmitter } from 'events';
 import { applyProfileToCommandArgs, profileLaunchArgs } from './profile';
+
+/**
+ * 杀进程树：优先用 tree-kill；**缺这个模块也必须能启动**（2026-10-05 事故）
+ *
+ * 用户实测：Windows 1.0.52 启动即崩 ——
+ *   `Error: Cannot find module 'tree-kill'`（require stack: dist/main/service-manager.js）
+ * 顶层 `import kill from 'tree-kill'` 一旦解析失败，整个主进程直接退出，应用完全打不开。
+ * 这是不可接受的失败模式：**为了"能杀掉子进程树"而让应用起不来**，本末倒置。
+ * 现在改为惰性加载 + 兜底（直接 kill 子进程；Windows 再用 taskkill /T 兜一层）。
+ */
+type KillFn = (pid: number, signal: string, cb: (err?: Error) => void) => void;
+
+let cachedKill: KillFn | null | undefined;
+
+function loadTreeKill(): KillFn | null {
+  if (cachedKill !== undefined) return cachedKill;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const mod = require('tree-kill') as KillFn | { default?: KillFn };
+    cachedKill = typeof mod === 'function' ? mod : (mod.default ?? null);
+  } catch (e) {
+    console.warn('[service] 未能加载 tree-kill（缺模块也不影响启动），改用兜底杀进程:', e);
+    cachedKill = null;
+  }
+  return cachedKill;
+}
+
+/** 统一入口：tree-kill 不在时退化成单进程 kill（必要时 taskkill /T） */
+function killTree(pid: number, signal: string): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const kill = loadTreeKill();
+    if (kill) {
+      try {
+        kill(pid, signal, () => resolve());
+        return;
+      } catch (e) {
+        console.warn('[service] tree-kill 执行失败，改用兜底:', e);
+      }
+    }
+    // 兜底 ①：Windows 上用 taskkill 连子孙一起杀
+    if (process.platform === 'win32') {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { execFile } = require('child_process') as typeof import('child_process');
+        execFile('taskkill', ['/pid', String(pid), '/T', '/F'], () => resolve());
+        return;
+      } catch {
+        /* 落到下面 */
+      }
+    }
+    // 兜底 ②：直接给进程发信号（至少把直接子进程收掉）
+    try {
+      process.kill(pid, signal as NodeJS.Signals);
+    } catch {
+      /* 进程已经没了 */
+    }
+    resolve();
+  });
+}
 
 export interface ServiceOptions {
   /** DSH Web UI 端口 */
@@ -76,7 +134,7 @@ export class ServiceManager extends EventEmitter {
 
     const pid = this.child?.pid;
     if (pid) {
-      await new Promise<void>((resolve) => kill(pid, 'SIGTERM', () => resolve()));
+      await killTree(pid, 'SIGTERM');
       // 等端口释放（优雅退出），超时强杀
       const deadline = Date.now() + 5000;
       while (Date.now() < deadline) {
@@ -84,7 +142,7 @@ export class ServiceManager extends EventEmitter {
         await sleep(300);
       }
       if (this.child && this.child.exitCode === null) {
-        await new Promise<void>((resolve) => kill(pid, 'SIGKILL', () => resolve()));
+        await killTree(pid, 'SIGKILL');
       }
     }
     this.child = null;

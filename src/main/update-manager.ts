@@ -1,6 +1,6 @@
 import { app, dialog, BrowserWindow, shell } from 'electron';
 import * as fs from 'fs';
-import { autoUpdater, type UpdateCheckResult, type UpdateInfo, type ProgressInfo } from 'electron-updater';
+import { autoUpdater, CancellationToken, type UpdateCheckResult, type UpdateInfo, type ProgressInfo } from 'electron-updater';
 import { spawnSync } from 'child_process';
 import * as path from 'path';
 import { needsManualUpdate } from './mac-signature';
@@ -126,6 +126,8 @@ export class UpdateManager {
   private readonly onDownloadStart: (() => void) | undefined;
   /** 本次下载是否已经通知过（避免每个百分比都弹一次） */
   private downloadNotified = false;
+  /** 正在下载时的取消令牌（用户点「取消更新」用它真正中断下载） */
+  private downloadToken: CancellationToken | null = null;
 
   private readonly enabled: boolean;
   private state: UpdateState = { phase: 'idle' };
@@ -159,6 +161,10 @@ export class UpdateManager {
     //     后台下好、只问一次"重启生效"才是贴心（下完 autoInstallOnAppQuit 还会兜底）。
     //   · 为什么 macOS 不开：未签名装不上（Squirrel 校验不过），下载 300MB 纯属浪费 ——
     //     macOS 那条分支会引导用户去下载页手动装。
+    // ⚠️ 1.0.54 计划：用户要求「增加取消按钮 / 别打乱节奏」→ 目标是**点了才下载**
+    //   （autoDownload=false + 我们自己带 CancellationToken 下载，这样「取消」能真正中断）。
+    //   但那需要同时接上弹窗里的「现在更新」按钮，否则会出现"永远下不了更新"。
+    //   因此本版**保持原行为**，完整实现放到 1.0.54 一起做（见 1.0.54 待发布清单）。
     autoUpdater.autoDownload = !macNeedsManualUpdate();
     // 用户选择"稍后"时，退出应用顺带安装，避免反复打扰。
     // macOS 上不能这么做：那里根本装不上（Squirrel 的签名校验过不去，见 macNeedsManualUpdate），
@@ -518,6 +524,8 @@ export class UpdateManager {
       // macOS 不走这条路（见上面的 macNeedsManualUpdate 分支）。
       // autoDownload = true 时 electron-updater **已经在下载了**，这里不再调 downloadUpdate()，
       // 只把状态摆出来给界面用（进度由 download-progress 推过来，下完由 update-downloaded 收尾）。
+      // 1.0.54 计划：这里将改为先问「现在更新 / 稍后」（配合 autoDownload=false 与取消令牌）。
+      // 本版保持原行为：Windows/Linux 后台自动下载，macOS 走手动分支。
       this.setState({ phase: 'downloading', percent: 0, message: '正在后台下载新版本…' });
     } finally {
       this.prompting = false;

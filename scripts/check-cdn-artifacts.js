@@ -36,7 +36,16 @@ const SCOPE = opt('scope', 'all');
 
 /** 更新清单：electron-updater 逐个平台读的那份。
  *  律师端用的是独立通道（lawyer-latest-*），同样必须核对 —— 它今天刚上自动升级。 */
-const ALL_MANIFESTS = ['latest.yml', 'latest-mac.yml', 'latest-linux.yml', 'lawyer-latest-mac.yml'];
+// ⚠️ 2026-10-05 教训：以前只查 lawyer-latest-mac.yml，于是**Windows 那份**（lawyer-latest.yml）
+// 在 CDN 上是私有 ACL（HTTP 403）、律师端用户全部报「无法连接到更新服务器」，我们却一直没发现。
+// 现在四份桌面清单 + 两份律师端清单一起查。
+const ALL_MANIFESTS = [
+  'latest.yml',
+  'latest-mac.yml',
+  'latest-linux.yml',
+  'lawyer-latest.yml',
+  'lawyer-latest-mac.yml',
+];
 const MANIFESTS =
   SCOPE === 'desktop'
     ? ALL_MANIFESTS.filter((n) => !n.startsWith('lawyer-'))

@@ -193,42 +193,6 @@ jobs:
           check bundled-plugins "随包插件（合规 + 公文排版）" 10
           echo "✅ 四个载荷齐备"
 
-      # 离线守卫：不进 CI 的守卫等于没有守卫 —— 这些缺陷当年都是"打出了包才发现"，
-      # 而打出包之后再发现，代价就是让用户下到一个装完不能用的版本。
-      # 两个都是纯 Node、不开窗口、秒级完成：
-      #   · test-inject-race.js  —— home/profile 两层注入、只读载荷、幂等、老用户升级
-      #   · check-menu-i18n.js   —— 每个 role 都必须显式写中文 label
-      #     （Electron 的 role 只给行为不给文案，漏写就会冒出英文默认项）
-      # 打包完整性守卫（2026-10-05 事故）：Windows 1.0.52 启动即崩
-      #   `Error: Cannot find module 'tree-kill'`（主进程顶层 import 失败 → 应用打不开）
-      # 依赖没进包 = 装完就是一个打不开的软件，必须在出门前拦住。
-      - name: 打包完整性守卫（生产依赖必须真的进包）
-        shell: bash
-        run: |
-          set -e
-          echo "---- 检查打包产物里的生产依赖 ----"
-          MISSING=0
-          for mod in tree-kill electron-updater; do
-            if find dist -type d -ipath "*resources/app/node_modules/$mod" | grep -q .; then
-              echo "  ✅ $mod 在包内"
-            else
-              echo "  ❌ $mod 不在包内（装完会启动崩溃）"
-              MISSING=1
-            fi
-          done
-          # 逐平台确认 node_modules 整体存在（白名单 files 配置最容易漏掉它）
-          if find dist -type d -ipath "*resources/app/node_modules" | grep -q .; then
-            echo "  ✅ node_modules 已随包"
-          else
-            echo "  ❌ 包里没有 node_modules —— files 白名单把生产依赖漏掉了"
-            MISSING=1
-          fi
-          if [ "$MISSING" -ne 0 ]; then
-            echo "::error::打包产物缺少生产依赖，禁止发布"
-            exit 1
-          fi
-          echo "✅ 打包完整性检查通过"
-
       - name: 离线守卫（注入竞态 / 菜单中文 / 法律模式花名册）
         run: |
           node scripts/test-inject-race.js
@@ -266,6 +230,42 @@ jobs:
           # —— 可选：Windows 签名 ——
           # WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           # WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+
+      # 离线守卫：不进 CI 的守卫等于没有守卫 —— 这些缺陷当年都是"打出了包才发现"，
+      # 而打出包之后再发现，代价就是让用户下到一个装完不能用的版本。
+      # 两个都是纯 Node、不开窗口、秒级完成：
+      #   · test-inject-race.js  —— home/profile 两层注入、只读载荷、幂等、老用户升级
+      #   · check-menu-i18n.js   —— 每个 role 都必须显式写中文 label
+      #     （Electron 的 role 只给行为不给文案，漏写就会冒出英文默认项）
+      # 打包完整性守卫（2026-10-05 事故）：Windows 1.0.52 启动即崩
+      #   `Error: Cannot find module 'tree-kill'`（主进程顶层 import 失败 → 应用打不开）
+      # 依赖没进包 = 装完就是一个打不开的软件，必须在出门前拦住。
+      - name: 打包完整性守卫（生产依赖必须真的进包）
+        shell: bash
+        run: |
+          set -e
+          echo "---- 检查打包产物里的生产依赖 ----"
+          MISSING=0
+          for mod in tree-kill electron-updater; do
+            if find dist -type d -ipath "*resources/app/node_modules/$mod" | grep -q .; then
+              echo "  ✅ $mod 在包内"
+            else
+              echo "  ❌ $mod 不在包内（装完会启动崩溃）"
+              MISSING=1
+            fi
+          done
+          # 逐平台确认 node_modules 整体存在（白名单 files 配置最容易漏掉它）
+          if find dist -type d -ipath "*resources/app/node_modules" | grep -q .; then
+            echo "  ✅ node_modules 已随包"
+          else
+            echo "  ❌ 包里没有 node_modules —— files 白名单把生产依赖漏掉了"
+            MISSING=1
+          fi
+          if [ "$MISSING" -ne 0 ]; then
+            echo "::error::打包产物缺少生产依赖，禁止发布"
+            exit 1
+          fi
+          echo "✅ 打包完整性检查通过"
 
       - name: Upload artifacts (仅安装包，排除未打包 app 目录)
         uses: actions/upload-artifact@v4

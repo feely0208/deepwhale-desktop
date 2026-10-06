@@ -18,12 +18,14 @@
 
 [![总下载](https://img.shields.io/github/downloads/feely0208/deepwhale-desktop/total?label=%E6%80%BB%E4%B8%8B%E8%BD%BD&color=14a5b8)](https://github.com/feely0208/deepwhale-desktop/releases) [![最新版下载](https://img.shields.io/github/downloads/feely0208/deepwhale-desktop/latest/total?label=%E6%9C%80%E6%96%B0%E7%89%88&color=14a5b8)](https://github.com/feely0208/deepwhale-desktop/releases/latest)
 
-| 平台 | 安装包 | 大小 | 计数 | 下载 |
+| 平台 | 安装包 | 大小 | 计数（官网 CDN 线） | 下载 |
 |---|---|---|---|---|
-| Windows 10/11（x64）| `DeepWhale-Desktop-1.0.53-x64-Setup.exe` | 252 MB | 接入中 | [下载](https://github.com/feely0208/deepwhale-desktop/releases/latest) |
-| macOS · Apple 芯片 | `…-1.0.53-arm64.dmg` | 136 MB | 接入中 | [下载](https://github.com/feely0208/deepwhale-desktop/releases/latest) |
-| macOS · Intel | `…-1.0.53-x64.dmg` | 140 MB | 接入中 | [下载](https://github.com/feely0208/deepwhale-desktop/releases/latest) |
-| Linux | `.AppImage` / `.deb` | 110 MB | 接入中 | [下载](https://github.com/feely0208/deepwhale-desktop/releases/latest) |
+| Windows 10/11（x64）| `DeepWhale-Desktop-1.0.53-x64-Setup.exe` | 240.8 MB | ![Windows](https://img.shields.io/endpoint?url=https%3A%2F%2Fdeepwhale.org.cn%2Flegal-api%2Fbadge%2Fdesktop-win&cacheSeconds=300) | [下载](https://github.com/feely0208/deepwhale-desktop/releases/latest) |
+| macOS · Apple 芯片 | `…-1.0.53-arm64.dmg` | 289.0 MB | ![macOS Apple](https://img.shields.io/endpoint?url=https%3A%2F%2Fdeepwhale.org.cn%2Flegal-api%2Fbadge%2Fdesktop-mac-arm&cacheSeconds=300) | [下载](https://github.com/feely0208/deepwhale-desktop/releases/latest) |
+| macOS · Intel | `…-1.0.53-x64.dmg` | 292.6 MB | ![macOS Intel](https://img.shields.io/endpoint?url=https%3A%2F%2Fdeepwhale.org.cn%2Flegal-api%2Fbadge%2Fdesktop-mac-x64&cacheSeconds=300) | [下载](https://github.com/feely0208/deepwhale-desktop/releases/latest) |
+| Linux | `.AppImage` / `.deb` | 275.4 / 220.5 MB | ![AppImage](https://img.shields.io/endpoint?url=https%3A%2F%2Fdeepwhale.org.cn%2Flegal-api%2Fbadge%2Fdesktop-linux-appimage&cacheSeconds=300) ![deb](https://img.shields.io/endpoint?url=https%3A%2F%2Fdeepwhale.org.cn%2Flegal-api%2Fbadge%2Fdesktop-linux-deb&cacheSeconds=300) | [下载](https://github.com/feely0208/deepwhale-desktop/releases/latest) |
+
+> 表内「计数」取自官网下载线（华为云 CDN + 官网实时点击），每 5 分钟刷新；与上面的 GitHub 徽章是**两条独立渠道，不能相加**。完整看板：<https://deepwhale.org.cn/stats.html>
 
 ## ✨ 免费 · 开源 · 无套路
 

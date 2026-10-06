@@ -19,10 +19,12 @@
 
 | Platform | Asset | Size | Counter | Download |
 |---|---|---|---|---|
-| Windows 10/11 (x64) | `DeepWhale-Desktop-1.0.53-x64-Setup.exe` | 252 MB | soon | [Download](https://github.com/feely0208/deepwhale-desktop/releases/latest) |
-| macOS · Apple Silicon | `…-1.0.53-arm64.dmg` | 136 MB | soon | [Download](https://github.com/feely0208/deepwhale-desktop/releases/latest) |
-| macOS · Intel | `…-1.0.53-x64.dmg` | 140 MB | soon | [Download](https://github.com/feely0208/deepwhale-desktop/releases/latest) |
-| Linux | `.AppImage` / `.deb` | 110 MB | soon | [Download](https://github.com/feely0208/deepwhale-desktop/releases/latest) |
+| Windows 10/11 (x64) | `DeepWhale-Desktop-1.0.53-x64-Setup.exe` | 240.8 MB | ![Windows](https://img.shields.io/endpoint?url=https%3A%2F%2Fdeepwhale.org.cn%2Flegal-api%2Fbadge%2Fdesktop-win&cacheSeconds=300) | [Download](https://github.com/feely0208/deepwhale-desktop/releases/latest) |
+| macOS · Apple Silicon | `…-1.0.53-arm64.dmg` | 289.0 MB | ![macOS Apple](https://img.shields.io/endpoint?url=https%3A%2F%2Fdeepwhale.org.cn%2Flegal-api%2Fbadge%2Fdesktop-mac-arm&cacheSeconds=300) | [Download](https://github.com/feely0208/deepwhale-desktop/releases/latest) |
+| macOS · Intel | `…-1.0.53-x64.dmg` | 292.6 MB | ![macOS Intel](https://img.shields.io/endpoint?url=https%3A%2F%2Fdeepwhale.org.cn%2Flegal-api%2Fbadge%2Fdesktop-mac-x64&cacheSeconds=300) | [Download](https://github.com/feely0208/deepwhale-desktop/releases/latest) |
+| Linux | `.AppImage` / `.deb` | 275.4 / 220.5 MB | ![AppImage](https://img.shields.io/endpoint?url=https%3A%2F%2Fdeepwhale.org.cn%2Flegal-api%2Fbadge%2Fdesktop-linux-appimage&cacheSeconds=300) ![deb](https://img.shields.io/endpoint?url=https%3A%2F%2Fdeepwhale.org.cn%2Flegal-api%2Fbadge%2Fdesktop-linux-deb&cacheSeconds=300) | [Download](https://github.com/feely0208/deepwhale-desktop/releases/latest) |
+
+> The "counts" above come from our own download line (Huawei Cloud CDN + live clicks on the site), refreshed every 5 minutes. They are a **separate channel from the GitHub badges above — do not add them together**. Full dashboard: <https://deepwhale.org.cn/stats.html>
 
 ## ✨ Free & Open Source (MIT) · No Tricks
 

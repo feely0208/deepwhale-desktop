@@ -13,6 +13,17 @@
 ![Electron](https://img.shields.io/badge/Electron-43-green)
 ![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)
 
+## 📥 Downloads
+
+[![total](https://img.shields.io/github/downloads/feely0208/deepwhale-desktop/total?label=total%20downloads&color=14a5b8)](https://github.com/feely0208/deepwhale-desktop/releases) [![latest](https://img.shields.io/github/downloads/feely0208/deepwhale-desktop/latest/total?label=latest&color=14a5b8)](https://github.com/feely0208/deepwhale-desktop/releases/latest)
+
+| Platform | Asset | Size | Counter | Download |
+|---|---|---|---|---|
+| Windows 10/11 (x64) | `DeepWhale-Desktop-1.0.53-x64-Setup.exe` | 252 MB | soon | [Download](https://github.com/feely0208/deepwhale-desktop/releases/latest) |
+| macOS · Apple Silicon | `…-1.0.53-arm64.dmg` | 136 MB | soon | [Download](https://github.com/feely0208/deepwhale-desktop/releases/latest) |
+| macOS · Intel | `…-1.0.53-x64.dmg` | 140 MB | soon | [Download](https://github.com/feely0208/deepwhale-desktop/releases/latest) |
+| Linux | `.AppImage` / `.deb` | 110 MB | soon | [Download](https://github.com/feely0208/deepwhale-desktop/releases/latest) |
+
 ## ✨ Free & Open Source (MIT) · No Tricks
 
 - 💯 **Free and open source (MIT)** — no in-app purchases, no subscriptions, no ads, no hidden fees.

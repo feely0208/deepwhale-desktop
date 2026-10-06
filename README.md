@@ -14,6 +14,17 @@
 ![Electron](https://img.shields.io/badge/Electron-43-green)
 ![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)
 
+## 📥 下载
+
+[![总下载](https://img.shields.io/github/downloads/feely0208/deepwhale-desktop/total?label=%E6%80%BB%E4%B8%8B%E8%BD%BD&color=14a5b8)](https://github.com/feely0208/deepwhale-desktop/releases) [![最新版下载](https://img.shields.io/github/downloads/feely0208/deepwhale-desktop/latest/total?label=%E6%9C%80%E6%96%B0%E7%89%88&color=14a5b8)](https://github.com/feely0208/deepwhale-desktop/releases/latest)
+
+| 平台 | 安装包 | 大小 | 计数 | 下载 |
+|---|---|---|---|---|
+| Windows 10/11（x64）| `DeepWhale-Desktop-1.0.53-x64-Setup.exe` | 252 MB | 接入中 | [下载](https://github.com/feely0208/deepwhale-desktop/releases/latest) |
+| macOS · Apple 芯片 | `…-1.0.53-arm64.dmg` | 136 MB | 接入中 | [下载](https://github.com/feely0208/deepwhale-desktop/releases/latest) |
+| macOS · Intel | `…-1.0.53-x64.dmg` | 140 MB | 接入中 | [下载](https://github.com/feely0208/deepwhale-desktop/releases/latest) |
+| Linux | `.AppImage` / `.deb` | 110 MB | 接入中 | [下载](https://github.com/feely0208/deepwhale-desktop/releases/latest) |
+
 ## ✨ 免费 · 开源 · 无套路
 
 - 💯 **免费开源**：软件本身完全免费——无内购、无订阅、无广告、无隐藏收费，且以 MIT 协议开源，任何人都可以自由使用

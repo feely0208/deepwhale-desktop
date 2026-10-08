@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.deepwhale.org.cn/canvas/packs/video/anim-grow-x.schema.json",
+  "title": "video / grow-x 动效参数（横向生长）",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "easing": {
+      "type": "string"
+    },
+    "distance": {
+      "type": "number"
+    },
+    "distanceX": {
+      "type": "number"
+    },
+    "fromScale": {
+      "type": "number"
+    },
+    "blur": {
+      "type": "number"
+    },
+    "direction": {
+      "enum": [
+        "left",
+        "right",
+        "up",
+        "down"
+      ]
+    },
+    "turns": {
+      "type": "number"
+    },
+    "amount": {
+      "type": "number"
+    },
+    "panX": {
+      "type": "number"
+    },
+    "panY": {
+      "type": "number"
+    }
+  }
+}

@@ -1,0 +1,205 @@
+{
+  "domain": "video",
+  "version": "1.0.0",
+  "engineRange": ">=1.0.0 <2",
+  "canvas": {
+    "units": "px",
+    "presets": [
+      {
+        "name": "竖版 1080x1920",
+        "w": 1080,
+        "h": 1920,
+        "fps": 30,
+        "maxFrames": 5400,
+        "maxW": 2160,
+        "maxH": 3840,
+        "maxFps": 60
+      },
+      {
+        "name": "横版 1920x1080",
+        "w": 1920,
+        "h": 1080,
+        "fps": 30,
+        "maxFrames": 5400,
+        "maxW": 3840,
+        "maxH": 2160,
+        "maxFps": 60
+      }
+    ]
+  },
+  "nodes": [
+    {
+      "type": "text",
+      "propsSchema": "./schema/node-text.json",
+      "description": "文字层，支持 {{变量}} 插值"
+    },
+    {
+      "type": "image",
+      "propsSchema": "./schema/node-image.json",
+      "description": "图片层，素材来自包内或用户槽位"
+    },
+    {
+      "type": "shape",
+      "propsSchema": "./schema/node-shape.json",
+      "description": "基础形状：矩形/圆形/线条"
+    },
+    {
+      "type": "subtitle",
+      "propsSchema": "./schema/node-subtitle.json",
+      "description": "字幕层：按帧号取 SRT 当前条，支持关键词高亮与安全区避让"
+    }
+  ],
+  "animations": [
+    {
+      "name": "slide-up",
+      "paramsSchema": "./schema/anim-slide-up.json",
+      "appliesTo": [
+        "text",
+        "image",
+        "shape"
+      ]
+    },
+    {
+      "name": "ken-burns",
+      "paramsSchema": "./schema/anim-ken-burns.json",
+      "appliesTo": [
+        "image"
+      ]
+    },
+    {
+      "name": "fade-in",
+      "paramsSchema": "./schema/anim-fade-in.json",
+      "appliesTo": [
+        "text",
+        "image",
+        "shape"
+      ]
+    },
+    {
+      "name": "slide-down",
+      "paramsSchema": "./schema/anim-slide-down.json",
+      "appliesTo": [
+        "text",
+        "image",
+        "shape"
+      ]
+    },
+    {
+      "name": "slide-left",
+      "paramsSchema": "./schema/anim-slide-left.json",
+      "appliesTo": [
+        "text",
+        "image",
+        "shape"
+      ]
+    },
+    {
+      "name": "slide-right",
+      "paramsSchema": "./schema/anim-slide-right.json",
+      "appliesTo": [
+        "text",
+        "image",
+        "shape"
+      ]
+    },
+    {
+      "name": "scale-in",
+      "paramsSchema": "./schema/anim-scale-in.json",
+      "appliesTo": [
+        "text",
+        "image",
+        "shape"
+      ]
+    },
+    {
+      "name": "blur-in",
+      "paramsSchema": "./schema/anim-blur-in.json",
+      "appliesTo": [
+        "text",
+        "image",
+        "shape"
+      ]
+    },
+    {
+      "name": "wipe-in",
+      "paramsSchema": "./schema/anim-wipe-in.json",
+      "appliesTo": [
+        "text",
+        "image",
+        "shape"
+      ]
+    },
+    {
+      "name": "grow-x",
+      "paramsSchema": "./schema/anim-grow-x.json",
+      "appliesTo": [
+        "text",
+        "image",
+        "shape"
+      ]
+    },
+    {
+      "name": "float",
+      "paramsSchema": "./schema/anim-float.json",
+      "appliesTo": [
+        "text",
+        "image",
+        "shape"
+      ]
+    },
+    {
+      "name": "pulse",
+      "paramsSchema": "./schema/anim-pulse.json",
+      "appliesTo": [
+        "text",
+        "image",
+        "shape"
+      ]
+    }
+  ],
+  "fonts": [
+    {
+      "id": "source-han-sans",
+      "name": "思源黑体",
+      "license": "OFL-1.1",
+      "licenseUrl": "https://scripts.sil.org/OFL",
+      "bundled": true
+    },
+    {
+      "id": "source-han-serif",
+      "name": "思源宋体",
+      "license": "OFL-1.1",
+      "licenseUrl": "https://scripts.sil.org/OFL",
+      "bundled": true
+    },
+    {
+      "id": "lxgw-wenkai",
+      "name": "霞鹜文楷",
+      "license": "OFL-1.1",
+      "licenseUrl": "https://scripts.sil.org/OFL",
+      "bundled": true
+    }
+  ],
+  "constraints": {
+    "maxNodes": 2000,
+    "maxDepth": 12,
+    "maxResourceMB": 500,
+    "allowExternalUrl": false,
+    "requireAiLabel": true
+  },
+  "validators": [
+    "subtitle-safe-area",
+    "duration-limit"
+  ],
+  "adapters": [
+    "html"
+  ],
+  "bgmRegistry": "./bgm-registry.json",
+  "tools": [
+    {
+      "name": "canvas_video_render",
+      "inputSchema": "./schema/tool-render.json",
+      "description": "渲染一个模板为视频文件"
+    }
+  ]
+}

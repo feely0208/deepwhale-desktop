@@ -1,0 +1,13 @@
+{
+  "name": "canvas_video_render",
+  "description": "把一个 video 领域模板渲染为视频文件（本地渲染，素材不出本机）",
+  "type": "object",
+  "required": ["templateId"],
+  "additionalProperties": false,
+  "properties": {
+    "templateId": { "type": "string" },
+    "quality": { "enum": ["preview", "final"] },
+    "vars": { "type": "object" },
+    "outDir": { "type": "string" }
+  }
+}

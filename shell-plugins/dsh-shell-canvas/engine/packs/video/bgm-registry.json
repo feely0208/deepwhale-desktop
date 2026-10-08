@@ -1,0 +1,36 @@
+{
+  "_comment": "BGM 入库台账。真实条目只能由 bgm-license-audit skill 写入（含来源/许可快照/SHA-256/复审日期）。下面这条是格式演示条目，未启用。",
+  "registryVersion": 1,
+  "tracks": [
+    {
+      "id": "bgm-test-000",
+      "title": "（测试音 · 合成垫底音，非曲库曲目）",
+      "source": {
+        "platform": "generated",
+        "url": "",
+        "fetchedAt": "2026-10-07T13:20:41+08:00"
+      },
+      "license": {
+        "type": "generated-test-tone",
+        "commercial": false,
+        "attribution": false,
+        "redistribute": false,
+        "snapshot": ""
+      },
+      "file": {
+        "path": "assets/bgm/bgm-test-000.m4a",
+        "sha256": "d01653641cdc4b01bec60bebca05fba7fcb392523c2c9fedb8e42b5a1aa505b9",
+        "bytes": 1209996
+      },
+      "usage": {
+        "inApp": false,
+        "inTemplatePack": false,
+        "note": "仅用于链路验证；禁止出现在对外发布物里。真实曲目必须经 bgm-license-audit 入库。"
+      },
+      "review": {
+        "nextReviewAt": "",
+        "reviewedBy": "n/a"
+      }
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.deepwhale.org.cn/canvas/packs/video/anim-slide-up.schema.json",
+  "title": "video / slide-up 动效参数（上滑入场）",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "distance": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 2000
+    },
+    "easing": {
+      "enum": [
+        "linear",
+        "ease-out",
+        "ease-in-out",
+        "spring"
+      ]
+    },
+    "delayFrames": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 600
+    }
+  }
+}

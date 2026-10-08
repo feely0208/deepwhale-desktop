@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.deepwhale.org.cn/canvas/packs/video/node-image.schema.json",
+  "title": "video / image 节点 props",
+  "type": "object",
+  "required": [
+    "src"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "src": {
+      "type": "string",
+      "description": "user:<slot> 或 assets/ 下的包内相对路径"
+    },
+    "fit": {
+      "enum": [
+        "cover",
+        "contain",
+        "fill"
+      ]
+    },
+    "radius": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 2000
+    },
+    "opacity": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "blur": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "width": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 8000
+    },
+    "height": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 8000
+    }
+  }
+}

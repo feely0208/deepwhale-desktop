@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.deepwhale.org.cn/canvas/packs/video/anim-ken-burns.schema.json",
+  "title": "video / ken-burns 动效参数（Ken Burns 缓推）",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "fromScale": {
+      "type": "number",
+      "minimum": 0.1,
+      "maximum": 10
+    },
+    "toScale": {
+      "type": "number",
+      "minimum": 0.1,
+      "maximum": 10
+    },
+    "panX": {
+      "type": "number",
+      "minimum": -2000,
+      "maximum": 2000
+    },
+    "panY": {
+      "type": "number",
+      "minimum": -2000,
+      "maximum": 2000
+    }
+  }
+}

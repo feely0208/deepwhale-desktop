@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.deepwhale.org.cn/canvas/packs/video/node-shape.schema.json",
+  "title": "video / shape 节点 props",
+  "type": "object",
+  "required": [
+    "shape"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "shape": {
+      "enum": [
+        "rect",
+        "circle",
+        "line"
+      ]
+    },
+    "fill": {
+      "type": "string",
+      "pattern": "^(#[0-9a-fA-F]{6}|none)$"
+    },
+    "stroke": {
+      "type": "string",
+      "pattern": "^(#[0-9a-fA-F]{6}|none)$"
+    },
+    "strokeWidth": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 200
+    },
+    "radius": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 2000
+    },
+    "opacity": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "width": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 8000
+    },
+    "height": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 8000
+    }
+  }
+}

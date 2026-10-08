@@ -1,0 +1,131 @@
+{
+  "spec": 1,
+  "domain": "video",
+  "domainVersion": "1.0.0",
+  "canvas": {
+    "units": "px",
+    "w": 1080,
+    "h": 1920,
+    "fps": 30,
+    "frames": 1800,
+    "preset": "竖版 1080x1920",
+    "background": "#071523",
+    "safeArea": {
+      "bottom": 330
+    }
+  },
+  "vars": [
+    {
+      "key": "title",
+      "type": "text",
+      "required": true
+    },
+    {
+      "key": "subtitle",
+      "type": "text",
+      "required": true,
+      "label": "字幕（SRT）"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "bg",
+      "type": "shape",
+      "props": {
+        "shape": "rect",
+        "fill": "#0A1A2B"
+      }
+    },
+    {
+      "id": "accent",
+      "type": "shape",
+      "props": {
+        "shape": "rect",
+        "fill": "#14A5B8",
+        "width": 10,
+        "height": 600,
+        "radius": 5
+      },
+      "transform": {
+        "x": 90,
+        "y": 540
+      }
+    },
+    {
+      "id": "quote",
+      "type": "text",
+      "props": {
+        "text": "{{title}}",
+        "font": "source-han-serif",
+        "size": 72,
+        "weight": 600,
+        "color": "#FFFFFF",
+        "align": "left",
+        "lineHeight": 1.4,
+        "maxLines": 4
+      },
+      "transform": {
+        "x": 170,
+        "y": 540
+      }
+    },
+    {
+      "id": "sub",
+      "type": "subtitle",
+      "props": {
+        "srtVar": "subtitle",
+        "font": "source-han-sans",
+        "size": 46,
+        "color": "#E6F3F6",
+        "highlightColor": "#3FD0E0",
+        "keywords": [
+          "AI",
+          "画布"
+        ],
+        "outline": 3,
+        "shadow": true,
+        "anchor": "bottom",
+        "safeBottom": 300,
+        "maxCharsPerLine": 15
+      }
+    }
+  ],
+  "timeline": [
+    {
+      "nodeId": "accent",
+      "from": 0,
+      "to": 30,
+      "anim": {
+        "name": "slide-up",
+        "params": {
+          "distance": 80
+        }
+      }
+    },
+    {
+      "nodeId": "quote",
+      "from": 0,
+      "to": 45,
+      "anim": {
+        "name": "slide-up",
+        "params": {
+          "distance": 50,
+          "easing": "ease-out"
+        }
+      }
+    }
+  ],
+  "meta": {
+    "id": "video/02-quote-v",
+    "name": "02-quote-v",
+    "author": "深鲸",
+    "license": "CC-BY-4.0",
+    "version": "1.0.0",
+    "aiGenerated": false,
+    "tags": [
+      "竖版",
+      "字幕",
+      "配音"
+    ]
+  }
+}

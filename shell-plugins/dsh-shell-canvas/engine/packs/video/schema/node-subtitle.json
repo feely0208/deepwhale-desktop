@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.deepwhale.org.cn/canvas/packs/video/node-subtitle.schema.json",
+  "title": "video / subtitle 节点 props",
+  "description": "按帧号从 SRT 里取当前字幕条显示；支持关键词高亮与安全区避让。",
+  "type": "object",
+  "required": ["font", "size", "srtVar"],
+  "additionalProperties": false,
+  "properties": {
+    "srtVar": { "type": "string", "description": "引用一个变量名，其值是 SRT 文本（模板不写死字幕）" },
+    "font": { "type": "string", "description": "字体 ID，必须命中领域包 fonts 白名单" },
+    "size": { "type": "number", "exclusiveMinimum": 0, "maximum": 200 },
+    "color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+    "highlightColor": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+    "keywords": { "type": "array", "maxItems": 12, "items": { "type": "string", "minLength": 1, "maxLength": 16 } },
+    "outline": { "type": "number", "minimum": 0, "maximum": 20 },
+    "shadow": { "type": "boolean" },
+    "align": { "enum": ["left", "center", "right"] },
+    "anchor": { "enum": ["bottom", "center", "top"] },
+    "safeBottom": { "type": "number", "minimum": 0, "description": "距底部安全区（避开平台 UI 遮挡）" },
+    "lineHeight": { "type": "number", "exclusiveMinimum": 0.5, "maximum": 3 },
+    "maxCharsPerLine": { "type": "integer", "minimum": 4, "maximum": 40 }
+  }
+}

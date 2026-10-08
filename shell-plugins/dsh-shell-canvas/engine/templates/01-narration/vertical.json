@@ -1,0 +1,275 @@
+{
+  "spec": 1,
+  "domain": "video",
+  "domainVersion": "1.0.0",
+  "canvas": {
+    "units": "px",
+    "w": 1080,
+    "h": 1920,
+    "fps": 30,
+    "frames": 1800,
+    "preset": "竖版 1080x1920",
+    "background": "#071523",
+    "safeArea": {
+      "bottom": 330
+    }
+  },
+  "vars": [
+    {
+      "key": "title",
+      "type": "text",
+      "required": true
+    },
+    {
+      "key": "subtitle",
+      "type": "text",
+      "required": true,
+      "label": "字幕（SRT）"
+    },
+    {
+      "key": "shots",
+      "type": "image",
+      "max": 3
+    }
+  ],
+  "nodes": [
+    {
+      "id": "bg",
+      "type": "shape",
+      "props": {
+        "shape": "rect",
+        "fill": "#071523"
+      }
+    },
+    {
+      "id": "glow",
+      "type": "shape",
+      "props": {
+        "shape": "circle",
+        "fill": "#0E2C42",
+        "width": 1200,
+        "height": 1200
+      },
+      "transform": {
+        "x": -360,
+        "y": -420
+      }
+    },
+    {
+      "id": "title",
+      "type": "text",
+      "props": {
+        "text": "{{title}}",
+        "font": "source-han-sans",
+        "size": 76,
+        "weight": 700,
+        "color": "#FFFFFF",
+        "align": "left",
+        "lineHeight": 1.25,
+        "maxLines": 2
+      },
+      "transform": {
+        "x": 90,
+        "y": 300
+      }
+    },
+    {
+      "id": "bar",
+      "type": "shape",
+      "props": {
+        "shape": "rect",
+        "fill": "#14A5B8",
+        "width": 120,
+        "height": 8,
+        "radius": 4
+      },
+      "transform": {
+        "x": 90,
+        "y": 560
+      }
+    },
+    {
+      "id": "shot1",
+      "type": "image",
+      "props": {
+        "src": "user:shots",
+        "fit": "cover",
+        "width": 900,
+        "height": 900,
+        "radius": 28
+      },
+      "transform": {
+        "x": 90,
+        "y": 680
+      }
+    },
+    {
+      "id": "sub",
+      "type": "subtitle",
+      "props": {
+        "srtVar": "subtitle",
+        "font": "source-han-sans",
+        "size": 50,
+        "color": "#FFFFFF",
+        "highlightColor": "#3FD0E0",
+        "keywords": [
+          "AI",
+          "深鲸画布",
+          "本地"
+        ],
+        "outline": 3,
+        "shadow": true,
+        "anchor": "bottom",
+        "safeBottom": 300,
+        "maxCharsPerLine": 15
+      }
+    },
+    {
+      "id": "glow2",
+      "type": "shape",
+      "props": {
+        "shape": "circle",
+        "fill": "#123A55",
+        "width": 760,
+        "height": 760,
+        "opacity": 0.55
+      },
+      "transform": {
+        "x": 420,
+        "y": 1120
+      }
+    },
+    {
+      "id": "brandchip",
+      "type": "text",
+      "props": {
+        "text": "深鲸画布",
+        "font": "source-han-sans",
+        "size": 30,
+        "weight": 600,
+        "color": "#5FD6E4",
+        "letterSpacing": 2
+      },
+      "transform": {
+        "x": 90,
+        "y": 140
+      }
+    },
+    {
+      "id": "prog",
+      "type": "shape",
+      "props": {
+        "shape": "rect",
+        "fill": "#14A5B8",
+        "width": 900,
+        "height": 4,
+        "radius": 2,
+        "opacity": 0.85
+      },
+      "transform": {
+        "x": 90,
+        "y": 1810
+      }
+    }
+  ],
+  "timeline": [
+    {
+      "nodeId": "brandchip",
+      "from": 8,
+      "to": 34,
+      "anim": {
+        "name": "fade-in",
+        "params": {
+          "easing": "ease-out"
+        }
+      }
+    },
+    {
+      "nodeId": "glow",
+      "from": 0,
+      "to": 1800,
+      "anim": {
+        "name": "float",
+        "params": {
+          "distance": 26,
+          "distanceX": 18,
+          "turns": 0.6
+        }
+      }
+    },
+    {
+      "nodeId": "glow2",
+      "from": 0,
+      "to": 1800,
+      "anim": {
+        "name": "pulse",
+        "params": {
+          "amount": 0.06,
+          "turns": 1.2
+        }
+      }
+    },
+    {
+      "nodeId": "title",
+      "from": 0,
+      "to": 42,
+      "anim": {
+        "name": "slide-up",
+        "params": {
+          "distance": 70,
+          "easing": "ease-out"
+        }
+      }
+    },
+    {
+      "nodeId": "bar",
+      "from": 20,
+      "to": 52,
+      "anim": {
+        "name": "wipe-in",
+        "params": {
+          "direction": "left",
+          "easing": "ease-out"
+        }
+      }
+    },
+    {
+      "nodeId": "shot1",
+      "from": 44,
+      "to": 1800,
+      "anim": {
+        "name": "ken-burns",
+        "params": {
+          "fromScale": 1.0,
+          "toScale": 1.1,
+          "panY": -36
+        }
+      }
+    },
+    {
+      "nodeId": "prog",
+      "from": 0,
+      "to": 1800,
+      "anim": {
+        "name": "wipe-in",
+        "params": {
+          "direction": "right",
+          "easing": "linear"
+        }
+      }
+    }
+  ],
+  "meta": {
+    "id": "video/01-narration-v",
+    "name": "01-narration-v（动效版）",
+    "author": "深鲸",
+    "license": "CC-BY-4.0",
+    "version": "1.0.0",
+    "aiGenerated": false,
+    "tags": [
+      "竖版",
+      "字幕",
+      "配音"
+    ]
+  }
+}

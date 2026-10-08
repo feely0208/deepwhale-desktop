@@ -1,0 +1,431 @@
+{
+  "spec": 1,
+  "domain": "video",
+  "domainVersion": "1.0.0",
+  "canvas": {
+    "units": "px",
+    "w": 1080,
+    "h": 1920,
+    "fps": 30,
+    "frames": 1200,
+    "preset": "竖版 1080x1920",
+    "background": "#081726",
+    "safeArea": {
+      "bottom": 330
+    }
+  },
+  "vars": [
+    {
+      "key": "kicker",
+      "type": "text",
+      "default": "三步搞定"
+    },
+    {
+      "key": "title",
+      "type": "text",
+      "required": true
+    },
+    {
+      "key": "step1",
+      "type": "text",
+      "required": true
+    },
+    {
+      "key": "step2",
+      "type": "text",
+      "required": true
+    },
+    {
+      "key": "step3",
+      "type": "text",
+      "required": true
+    },
+    {
+      "key": "subtitle",
+      "type": "text",
+      "required": true
+    }
+  ],
+  "nodes": [
+    {
+      "id": "bg",
+      "type": "shape",
+      "props": {
+        "shape": "rect",
+        "fill": "#081726"
+      }
+    },
+    {
+      "id": "glow",
+      "type": "shape",
+      "props": {
+        "shape": "circle",
+        "fill": "#0E2C42",
+        "width": 1100,
+        "height": 1100
+      },
+      "transform": {
+        "x": -320,
+        "y": -460
+      }
+    },
+    {
+      "id": "kicker",
+      "type": "text",
+      "props": {
+        "text": "{{kicker}}",
+        "font": "source-han-sans",
+        "size": 34,
+        "weight": 600,
+        "color": "#3FD0E0",
+        "align": "left"
+      },
+      "transform": {
+        "x": 90,
+        "y": 240
+      }
+    },
+    {
+      "id": "title",
+      "type": "text",
+      "props": {
+        "text": "{{title}}",
+        "font": "source-han-sans",
+        "size": 78,
+        "weight": 700,
+        "color": "#FFFFFF",
+        "align": "left",
+        "lineHeight": 1.22,
+        "maxLines": 2
+      },
+      "transform": {
+        "x": 90,
+        "y": 320
+      }
+    },
+    {
+      "id": "bar",
+      "type": "shape",
+      "props": {
+        "shape": "rect",
+        "fill": "#14A5B8",
+        "width": 120,
+        "height": 8,
+        "radius": 4
+      },
+      "transform": {
+        "x": 90,
+        "y": 620
+      }
+    },
+    {
+      "id": "s1n",
+      "type": "shape",
+      "props": {
+        "shape": "circle",
+        "fill": "#14A5B8",
+        "width": 72,
+        "height": 72
+      },
+      "transform": {
+        "x": 90,
+        "y": 740
+      }
+    },
+    {
+      "id": "s1t",
+      "type": "text",
+      "props": {
+        "text": "1",
+        "font": "source-han-sans",
+        "size": 40,
+        "weight": 700,
+        "color": "#04121C",
+        "align": "center"
+      },
+      "transform": {
+        "x": 90,
+        "y": 752
+      }
+    },
+    {
+      "id": "s1",
+      "type": "text",
+      "props": {
+        "text": "{{step1}}",
+        "font": "source-han-sans",
+        "size": 44,
+        "color": "#E6F3F6",
+        "align": "left",
+        "lineHeight": 1.4,
+        "maxLines": 2
+      },
+      "transform": {
+        "x": 196,
+        "y": 736
+      }
+    },
+    {
+      "id": "s2n",
+      "type": "shape",
+      "props": {
+        "shape": "circle",
+        "fill": "#1D5A73",
+        "width": 72,
+        "height": 72
+      },
+      "transform": {
+        "x": 90,
+        "y": 920
+      }
+    },
+    {
+      "id": "s2t",
+      "type": "text",
+      "props": {
+        "text": "2",
+        "font": "source-han-sans",
+        "size": 40,
+        "weight": 700,
+        "color": "#04121C",
+        "align": "center"
+      },
+      "transform": {
+        "x": 90,
+        "y": 932
+      }
+    },
+    {
+      "id": "s2",
+      "type": "text",
+      "props": {
+        "text": "{{step2}}",
+        "font": "source-han-sans",
+        "size": 44,
+        "color": "#E6F3F6",
+        "align": "left",
+        "lineHeight": 1.4,
+        "maxLines": 2
+      },
+      "transform": {
+        "x": 196,
+        "y": 916
+      }
+    },
+    {
+      "id": "s3n",
+      "type": "shape",
+      "props": {
+        "shape": "circle",
+        "fill": "#1D5A73",
+        "width": 72,
+        "height": 72
+      },
+      "transform": {
+        "x": 90,
+        "y": 1100
+      }
+    },
+    {
+      "id": "s3t",
+      "type": "text",
+      "props": {
+        "text": "3",
+        "font": "source-han-sans",
+        "size": 40,
+        "weight": 700,
+        "color": "#04121C",
+        "align": "center"
+      },
+      "transform": {
+        "x": 90,
+        "y": 1112
+      }
+    },
+    {
+      "id": "s3",
+      "type": "text",
+      "props": {
+        "text": "{{step3}}",
+        "font": "source-han-sans",
+        "size": 44,
+        "color": "#E6F3F6",
+        "align": "left",
+        "lineHeight": 1.4,
+        "maxLines": 2
+      },
+      "transform": {
+        "x": 196,
+        "y": 1096
+      }
+    },
+    {
+      "id": "sub",
+      "type": "subtitle",
+      "props": {
+        "srtVar": "subtitle",
+        "font": "source-han-sans",
+        "size": 48,
+        "color": "#FFFFFF",
+        "highlightColor": "#3FD0E0",
+        "keywords": [
+          "AI",
+          "深鲸画布"
+        ],
+        "outline": 3,
+        "shadow": true,
+        "anchor": "bottom",
+        "safeBottom": 330,
+        "maxCharsPerLine": 15
+      }
+    }
+  ],
+  "timeline": [
+    {
+      "nodeId": "kicker",
+      "from": 0,
+      "to": 24,
+      "anim": {
+        "name": "slide-up",
+        "params": {
+          "distance": 30
+        }
+      }
+    },
+    {
+      "nodeId": "title",
+      "from": 0,
+      "to": 40,
+      "anim": {
+        "name": "slide-up",
+        "params": {
+          "distance": 50,
+          "easing": "ease-out"
+        }
+      }
+    },
+    {
+      "nodeId": "bar",
+      "from": 20,
+      "to": 45,
+      "anim": {
+        "name": "slide-up",
+        "params": {
+          "distance": 20
+        }
+      }
+    },
+    {
+      "nodeId": "s1n",
+      "from": 45,
+      "to": 65,
+      "anim": {
+        "name": "slide-up",
+        "params": {
+          "distance": 30
+        }
+      }
+    },
+    {
+      "nodeId": "s1t",
+      "from": 45,
+      "to": 65,
+      "anim": {
+        "name": "slide-up",
+        "params": {
+          "distance": 30
+        }
+      }
+    },
+    {
+      "nodeId": "s1",
+      "from": 50,
+      "to": 70,
+      "anim": {
+        "name": "slide-up",
+        "params": {
+          "distance": 30
+        }
+      }
+    },
+    {
+      "nodeId": "s2n",
+      "from": 90,
+      "to": 110,
+      "anim": {
+        "name": "slide-up",
+        "params": {
+          "distance": 30
+        }
+      }
+    },
+    {
+      "nodeId": "s2t",
+      "from": 90,
+      "to": 110,
+      "anim": {
+        "name": "slide-up",
+        "params": {
+          "distance": 30
+        }
+      }
+    },
+    {
+      "nodeId": "s2",
+      "from": 95,
+      "to": 115,
+      "anim": {
+        "name": "slide-up",
+        "params": {
+          "distance": 30
+        }
+      }
+    },
+    {
+      "nodeId": "s3n",
+      "from": 135,
+      "to": 155,
+      "anim": {
+        "name": "slide-up",
+        "params": {
+          "distance": 30
+        }
+      }
+    },
+    {
+      "nodeId": "s3t",
+      "from": 135,
+      "to": 155,
+      "anim": {
+        "name": "slide-up",
+        "params": {
+          "distance": 30
+        }
+      }
+    },
+    {
+      "nodeId": "s3",
+      "from": 140,
+      "to": 160,
+      "anim": {
+        "name": "slide-up",
+        "params": {
+          "distance": 30
+        }
+      }
+    }
+  ],
+  "meta": {
+    "id": "video/03-steps-v",
+    "name": "步骤清单",
+    "author": "深鲸",
+    "license": "CC-BY-4.0",
+    "version": "1.0.0",
+    "aiGenerated": false,
+    "tags": [
+      "竖版",
+      "步骤",
+      "字幕"
+    ]
+  }
+}

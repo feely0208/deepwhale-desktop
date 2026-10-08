@@ -149,13 +149,32 @@ export function registerLocalFilesIpc(): void {
       if (!st.isFile()) return { ok: false, error: '不是文件' };
       const ext = path.extname(p).toLowerCase();
       const IMG = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg'];
-      const TXT = ['.txt', '.md', '.json', '.js', '.ts', '.log', '.csv', '.yml', '.yaml', '.html', '.css', '.py', '.sh'];
+      // ⚠️ 2026-10-08：`.html` 从 TXT 里**挪出来**单独处理。
+      // 原因（用户原话）：「.html 走的是文本分支（显示源码）」—— 点开网页只看到一堆代码，
+      // 那不叫预览。现在返回 kind:'html'，由前端塞进**沙箱 iframe** 真渲染（不给脚本权限）。
+      const HTML = ['.html', '.htm'];
+      const TXT = ['.txt', '.md', '.json', '.js', '.ts', '.log', '.csv', '.yml', '.yaml', '.css', '.py', '.sh'];
       const OFFICE = ['.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt'];
+      // 视频（2026-10-08 加）：用户拿 6 秒 mp4 和 2.2MB 成片测过 —— 原来**根本没有视频分支**，
+      // 点下去只会落到最后那句「这种格式暂不支持」。这是用户最早提出、却一直没做的那件事。
+      const VIDEO = ['.mp4', '.m4v', '.mov', '.webm', '.ogv'];
 
       if (IMG.includes(ext)) {
         if (st.size > 24 * 1024 * 1024) return { ok: false, error: '图片太大（>24MB），请用系统程序打开' };
         const mime = ext === '.svg' ? 'image/svg+xml' : ext === '.png' ? 'image/png' : ext === '.gif' ? 'image/gif' : ext === '.webp' ? 'image/webp' : ext === '.bmp' ? 'image/bmp' : 'image/jpeg';
         return { ok: true, kind: 'image', dataUri: `data:${mime};base64,` + fs.readFileSync(p).toString('base64'), size: st.size };
+      }
+      if (VIDEO.includes(ext)) {
+        // data URI 走的是和图片/PDF 完全相同的通路（那段已经验证过），不引入新机制。
+        // 上限 120MB：base64 会涨 1/3，再大就转字符串会卡，那种情况退回"用系统程序打开"更合理。
+        if (st.size > 120 * 1024 * 1024) return { ok: false, error: '视频太大（>120MB），请用系统程序打开' };
+        const vmime = ext === '.webm' ? 'video/webm' : ext === '.ogv' ? 'video/ogg' : ext === '.mov' ? 'video/quicktime' : 'video/mp4';
+        return { ok: true, kind: 'video', dataUri: `data:${vmime};base64,` + fs.readFileSync(p).toString('base64'), size: st.size };
+      }
+      if (HTML.includes(ext)) {
+        const cap = 2 * 1024 * 1024;
+        if (st.size > cap) return { ok: false, error: '网页太大（>2MB），请用系统程序打开' };
+        return { ok: true, kind: 'html', text: fs.readFileSync(p, 'utf-8'), size: st.size };
       }
       if (ext === '.pdf') {
         if (st.size > 60 * 1024 * 1024) return { ok: false, error: 'PDF 太大（>60MB），请用系统程序打开' };

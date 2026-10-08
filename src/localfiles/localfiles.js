@@ -428,6 +428,31 @@
       if (res.truncated) {
         body.appendChild(el('div', 'padding:0 12px 10px;font-size:11.5px;color:' + P.faint + ';', '（内容较长，仅显示前 300KB）'));
       }
+    } else if (res.kind === 'video') {
+      /* 视频（2026-10-08 加）：用户最早要的就是这个 —— 点开 mp4 能直接播。
+         用 <video controls>，不自动播放（自动播会突然出声，很唐突）。 */
+      var v = document.createElement('video');
+      v.src = res.dataUri;
+      v.controls = true;
+      v.preload = 'metadata';
+      v.style.cssText = 'display:block;width:100%;max-height:46vh;background:#000;';
+      body.appendChild(v);
+    } else if (res.kind === 'html') {
+      /* 本地网页（2026-10-08 加）：以前走文本分支，只显示源码 —— 那不叫预览。
+         现在塞进 iframe 真渲染。**安全是这个分支的第一约束**：
+           · sandbox="" —— 不带 allow-scripts（脚本一律不执行）、不带 allow-same-origin
+             （iframe 拿到不透明源，拿不到应用的 origin/存储/DOM）；
+           · 用 srcdoc 而不是 src=file://，避免以文件协议加载本地资源。
+         代价（已知并接受）：页面里的**相对资源**（外链 css/图片）在沙箱里取不到，
+         自包含的单文件网页正常显示。 */
+      var htmlFrame = document.createElement('iframe');
+      htmlFrame.setAttribute('sandbox', '');
+      htmlFrame.setAttribute('referrerpolicy', 'no-referrer');
+      htmlFrame.srcdoc = res.text || '';
+      htmlFrame.style.cssText = 'display:block;width:100%;height:46vh;border:0;background:#fff;';
+      body.appendChild(htmlFrame);
+    } else {
+      body.appendChild(el('div', 'padding:14px;font-size:12.5px;color:' + P.dim + ';', '这种格式暂不支持预览。'));
     }
   }
 

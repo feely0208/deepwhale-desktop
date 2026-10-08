@@ -1,0 +1,4 @@
+{
+  "title": "DeepWhale Canvas",
+  "description": "Narration script + assets → vertical and horizontal cuts; rendering runs in a separate process so the UI stays responsive."
+}

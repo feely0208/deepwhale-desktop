@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 36" width="36" height="36" fill="none">
+  <!-- 网页预览：一块屏 + 地球。规格同其它深鲸插件（36 viewBox / 纯填充 / #54ECE7→#658EFF）。 -->
+  <defs>
+    <linearGradient id="dsh-webpreview-g" x1="7" y1="8" x2="29" y2="28" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#54ECE7"/>
+      <stop offset="1" stop-color="#658EFF"/>
+    </linearGradient>
+  </defs>
+  <rect x="5.4" y="8.4" width="25.2" height="19.6" rx="6" fill="url(#dsh-webpreview-g)"/>
+  <path d="M18 12.2c-3.2 0-5.8 2.6-5.8 5.8s2.6 5.8 5.8 5.8 5.8-2.6 5.8-5.8-2.6-5.8-5.8-5.8zm0 1.7c1 0 2 1.7 2.2 4.1h-4.4c.2-2.4 1.2-4.1 2.2-4.1zm-4 4.1c0-.6.1-1.2.2-1.7h1.6c-.1.5-.1 1.1-.1 1.7s0 1.2.1 1.7h-1.6c-.1-.5-.2-1.1-.2-1.7zm4 4.2c-1 0-2-1.7-2.2-4.2h4.4c-.2 2.5-1.2 4.2-2.2 4.2zm2.3-1.9c.1-.5.1-1.1.1-1.7s0-1.2-.1-1.7h1.6c.1.5.2 1.1.2 1.7s-.1 1.2-.2 1.7h-1.6z" fill="#fff" fill-opacity="0.96"/>
+</svg>

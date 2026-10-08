@@ -1,0 +1,28 @@
+{
+  "name": "@deepwhale-cn/dsh-shell-reload",
+  "version": "1.0.0",
+  "description": "深鲸桌面：给 DSH 界面加一个 ⌘R / Ctrl+R「重新加载界面」。桌面端的应用菜单里没有 reload 角色，浏览器窗口的默认重载也就没绑上——改完插件让用户刷新时，用户按了没反应。这个插件用 DSH 自己的快捷键服务把这一键补回来。",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "icon": "./icon.svg",
+  "meta": {
+    "title": "重新加载界面",
+    "description": "⌘R / Ctrl+R 重新加载 DSH 界面。"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": ["@deepseek-ai/dsh-client-runtime"],
+      "platform": "web",
+      "immediately": true
+    }
+  }
+}

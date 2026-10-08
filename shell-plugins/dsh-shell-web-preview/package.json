@@ -1,0 +1,22 @@
+{
+  "name": "@deepwhale-cn/dsh-shell-web-preview",
+  "version": "1.0.0",
+  "description": "深鲸桌面：只把官方右栏「网页预览」那一条的 disabled 覆盖成 false —— 不改 profile 名（那会连带打开官方遥测与埋点）。",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json"
+  },
+  "icon": "./icon.svg",
+  "meta": {
+    "title": "网页预览",
+    "description": "打开官方右栏的沙箱化网页预览（不改 profile 名，避免连带开遥测）。"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

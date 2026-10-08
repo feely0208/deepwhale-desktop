@@ -1,0 +1,9 @@
+# @deepwhale-cn/dsh-shell-reload 的组合层
+#
+# 插件行挂在 profile 里之后，客户端半边（lib/client.js）会往 DSH 的快捷键服务
+# 注册一条 `shell.reload`：⌘R（Windows/Linux 是 Ctrl+R）重新加载界面。
+#
+# 约定（官方 verify-cordis-config 强制）：name 必须与 package.json 的 name 完全一致。
+- insert:
+    - id: shell-reload
+      name: '@deepwhale-cn/dsh-shell-reload'

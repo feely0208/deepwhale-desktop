@@ -1,0 +1,27 @@
+# @deepwhale-cn/dsh-shell-web-preview 的组合层
+#
+# 本包**不插入任何自己的行** —— 它只是一个"覆盖层"，只做一件事：
+# 把官方 `ui-sidebar-browser` 那一条的 `disabled` 覆盖成 false。
+#
+# ── 官方为什么默认关掉它 ─────────────────────────────────────────────
+# 见 `@deepseek-ai/dsh-web-app/cordis.patch.yml`：
+#
+#     # Web profiles opt in; Desktop retains sandboxed HTTP(S) Browser tabs.
+#     - id: ui-sidebar-browser
+#       name: '@deepseek-ai/dsh-client-ui-sidebar-browser'
+#       disabled: !!js "ctx.get('profileContext')?.name !== 'desktop'"
+#
+# 而我们的 profile 不叫 `desktop`（那个名字被官方 Electron 宿主保留，用它会直接被
+# `rejectElectronProfile()` 挡掉、启动不了），所以那个条件**恒为 true** →
+# 右栏的「网页预览」一直是关着的。
+#
+# ⚠️ **为什么不干脆把 profile 改名 `desktop`**：同一个
+#    `profileContext.name === 'desktop'` 条件**还开着官方遥测
+#    `dsh-host-product-telemetry-otel` 与产品埋点 `dsh-client-product-analytics`**
+#    （两个包都在随包运行时里）。改 profile 名 = 顺手把遥测一起打开 → 这是红线。
+#    所以只单独覆盖这一条。
+#
+# 官方 `verify-cordis-config` 的约定：具名行要能解析，name 必须与目标行完全一致。
+- id: ui-sidebar-browser
+  name: '@deepseek-ai/dsh-client-ui-sidebar-browser'
+  disabled: false

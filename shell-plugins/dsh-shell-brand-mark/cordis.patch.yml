@@ -1,0 +1,9 @@
+# @deepwhale-cn/dsh-shell-brand-mark 的组合层
+#
+# 挂上这一行之后，`@deepseek-ai/dsh-client-modules` 才会扫到本包的 `dsh.client` 声明，
+# 把 `./client` 下发给浏览器；客户端半边再把 `conversation.hero.brand.mark` 插槽占掉。
+#
+# 约定（官方 verify-cordis-config 强制）：name 必须与 package.json 的 name 完全一致。
+- insert:
+    - id: shell-brand-mark
+      name: '@deepwhale-cn/dsh-shell-brand-mark'

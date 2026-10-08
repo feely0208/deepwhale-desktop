@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 36" width="36" height="36" fill="none">
+  <!-- 深鲸画布：一块屏 + 播放键 —— 一眼是"出片"，不是"处理图片"。
+       规格刻意对齐宿主自己的插件图标（@deepseek-ai/dsh-client-ui-primitives 的
+       PluginArtworkDefault）：**36 的 viewBox、纯填充、青→蓝渐变 #54ECE7 → #658EFF**。
+       第一版是 24 viewBox + 1.8px 细描边 + 单色，摆在插件列表里比邻居单薄一大截
+       （用户原话："太普通了，没点科技感"）。
+       图形占 25.2×19.6 而不是满框：满框会顶到 48px 卡片框的边，显得挤。 -->
+  <defs>
+    <linearGradient id="dsh-canvas-g" x1="6" y1="9" x2="30" y2="27" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#54ECE7"/>
+      <stop offset="1" stop-color="#658EFF"/>
+    </linearGradient>
+  </defs>
+  <rect x="5.4" y="8.4" width="25.2" height="19.6" rx="6" fill="url(#dsh-canvas-g)"/>
+  <path d="M15.6 13.5 22.9 18.2l-7.3 4.7z" fill="#FFFFFF" fill-opacity="0.96"/>
+</svg>

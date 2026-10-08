@@ -299,7 +299,7 @@ export function presetBackgroundCss(preset: string): string | null {
          核对过：全树只有「.<hash>_overlay」一条规则拿该 token 当背景；
              「VOzbGW_overlay」（设置弹窗遮罩）自身没有背景，只会让它的**子面板**变实
              —— 那恰好是用户 2026-10-01 提过的方向（「设置里面看有点透底」）。 */
-      [class*="_overlay"] { --dsw-alias-bg-base: #ffffff !important; }
+      [class*="_overlay"], [class*="_Overlay"] { --dsw-alias-bg-base: #ffffff !important; }
 
       /* ── 深色 ── */
       body[data-ds-dark-theme] {${glowBackgroundCss('dark')}
@@ -318,7 +318,8 @@ export function presetBackgroundCss(preset: string): string | null {
       body[data-ds-dark-theme] [class*="sidebarCol"] { background: rgba(14, 17, 22, 0.78) !important; }
       /* 深色下同理：铺满视口的浮层用**实底色**（取值与本预设正文底同色 rgb(11,16,24)），
          这样全屏时不会透出底下的会话文字。见上面浅色那段的说明。 */
-      body[data-ds-dark-theme] [class*="_overlay"] { --dsw-alias-bg-base: #0b1018 !important; }
+      body[data-ds-dark-theme] [class*="_overlay"],
+      body[data-ds-dark-theme] [class*="_Overlay"] { --dsw-alias-bg-base: #0b1018 !important; }
     `;
 }
 

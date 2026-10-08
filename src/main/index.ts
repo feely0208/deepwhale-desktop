@@ -2048,7 +2048,11 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
                 try { rules = sheet.cssRules; } catch (e) { continue; } // 跨域表会抛
                 for (const r of Array.from(rules || [])) {
                   const sel = r.selectorText || '';
-                  if (!sel || sel.indexOf('_overlay') < 0) continue;
+                  // ⚠️ 必须**大小写不敏感**：铺满层有两种命名 ——
+                  //    「.<hash>_overlay」（账号/设置全屏）与「.<hash>_onboardingOverlay」（引导层），
+                  //    后者是大写 O。第一版用 indexOf('_overlay') 直接漏掉了引导层。
+                  //    注意：这段在模板字符串里，注释里**不能出现反引号**。
+                  if (!sel || !/_overlay/i.test(sel)) continue;
                   const bg = (r.style && r.style.getPropertyValue('background')) || '';
                   const bgi = (r.style && r.style.getPropertyValue('background-image')) || '';
                   if (/--dsw-alias-bg-base/.test(bg + ' ' + bgi)) basePainters.push({ sel: sel.slice(0, 80), bg: bg.slice(0, 80) });

@@ -95,12 +95,12 @@ window.__ModuleLoader__.load({
      * 不做重阴影、不做花哨渐变 —— 那些正是"廉价感"的来源。
      */
     const CSS = `
-.dshcv-root{display:flex;flex-direction:column;height:100%;min-height:0;background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;line-height:1.55}
+.dshcv-root{display:flex;flex-direction:column;height:100%;min-height:0;background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);font:inherit;font-size:13.5px;line-height:1.6}
 
 /* ── 顶栏 ───────────────────────────────────────────────────────── */
 .dshcv-head{display:flex;align-items:center;gap:10px;padding:14px 20px;border-bottom:.5px solid var(--dsw-alias-border-l1);flex:none;flex-wrap:wrap}
-.dshcv-title{font-weight:600;font-size:15px;letter-spacing:.01em}
-.dshcv-sub{color:var(--dsw-alias-label-secondary);font-size:11.5px;line-height:1.5}
+.dshcv-title{font-weight:700;font-size:18px;letter-spacing:-.01em}
+.dshcv-sub{color:var(--dsw-alias-label-secondary);font-size:12.5px;line-height:1.55}
 .dshcv-spacer{flex:1}
 .dshcv-dot{width:6px;height:6px;border-radius:50%;background:var(--dsw-alias-state-success-primary);flex:none}
 .dshcv-dot-off{background:var(--dsw-alias-state-idle-primary)}
@@ -108,36 +108,44 @@ window.__ModuleLoader__.load({
 /* ── 两栏骨架 ───────────────────────────────────────────────────── */
 .dshcv-body{display:flex;flex:1;min-height:0}
 .dshcv-col{display:flex;flex-direction:column;min-height:0;overflow:auto;gap:14px}
-.dshcv-left{width:268px;flex:none;padding:16px 14px;border-right:.5px solid var(--dsw-alias-border-l1);gap:8px}
+.dshcv-left{width:312px;flex:none;padding:16px 14px;border-right:.5px solid var(--dsw-alias-border-l1);gap:10px}
 .dshcv-right{flex:1;min-width:0;padding:20px 24px}
 /* 表单行宽超过 ~700px 就开始难读，所以给内容一个上限并居中 */
-.dshcv-stack{display:flex;flex-direction:column;gap:14px;width:100%;max-width:700px;margin:0 auto}
+.dshcv-stack{display:flex;flex-direction:column;gap:18px;width:100%;max-width:700px;margin:0 auto}
 
 /* ── 区块 ───────────────────────────────────────────────────────── */
-.dshcv-card{border:.5px solid var(--dsw-alias-border-l1);border-radius:12px;background:var(--dsw-alias-bg-layer-1);padding:16px}
-.dshcv-sec{display:flex;align-items:center;gap:8px;margin:2px 0 10px}
-.dshcv-sec-t{font-size:12px;font-weight:600;letter-spacing:.04em;color:var(--dsw-alias-label-secondary)}
+.dshcv-card{border:1px solid var(--dsw-alias-border-l1);border-radius:14px;background:var(--dsw-alias-bg-layer-1);padding:20px}
+.dshcv-sec{display:flex;align-items:center;gap:9px;margin:4px 0 12px}
+.dshcv-sec-t::before{content:"";display:inline-block;width:3px;height:13px;border-radius:2px;background:var(--dsw-alias-brand-primary);margin-right:8px;vertical-align:-2px}
+.dshcv-sec-t{font-size:13px;font-weight:700;letter-spacing:.02em;color:var(--dsw-alias-label-primary)}
 .dshcv-sec-line{flex:1;height:.5px;background:var(--dsw-alias-border-l1)}
 
 /* ── 模板卡片 ───────────────────────────────────────────────────── */
-.dshcv-tpl{display:flex;gap:11px;align-items:center;width:100%;text-align:left;padding:8px;border-radius:11px;border:.5px solid transparent;background:transparent;color:inherit;cursor:pointer;font:inherit;transition:background .12s ease,border-color .12s ease}
-.dshcv-tpl:hover{background:var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2))}
-.dshcv-tpl[aria-pressed="true"]{border-color:var(--dsw-alias-brand-primary);background:var(--dsw-alias-bg-layer-1)}
-.dshcv-poster{width:62px;flex:none;aspect-ratio:9/16;border-radius:8px;overflow:hidden;border:.5px solid var(--dsw-alias-border-l1);object-fit:cover;display:block;background:var(--dsw-alias-bg-layer-2)}
-.dshcv-poster-wide{width:96px;aspect-ratio:16/9}
-.dshcv-poster-ph{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;text-align:center;font-size:9px;line-height:1.35;letter-spacing:.02em;color:var(--dsw-alias-label-secondary);background:
+/* ── 模板墙（2026-10-08 改版：用户要"一眼看过去有食欲"）────────────
+   改前是小横卡（62×110 缩略图 + 右侧两行小字），像一份报销单；
+   改后是**竖排海报卡**：缩略图占满卡片上半部、信息在下，选中时品牌色描边 + 外发光，
+   悬停轻微上浮。模板是"能出什么片子"的第一眼印象，必须让它当视觉主角。 */
+.dshcv-tpl{display:flex;flex-direction:column;gap:0;align-items:stretch;width:100%;text-align:left;padding:0;border-radius:14px;overflow:hidden;border:1px solid transparent;background:var(--dsw-alias-bg-layer-1);color:inherit;cursor:pointer;font:inherit;transition:transform .14s ease,box-shadow .14s ease,border-color .14s ease,background .14s ease}
+.dshcv-tpl:hover{transform:translateY(-2px);box-shadow:0 6px 18px rgba(0,0,0,.18);border-color:var(--dsw-alias-border-l2)}
+.dshcv-tpl[aria-pressed="true"]{border-color:var(--dsw-alias-brand-primary);box-shadow:0 0 0 2px color-mix(in srgb, var(--dsw-alias-brand-primary) 28%, transparent),0 6px 18px rgba(0,0,0,.16)}
+.dshcv-poster{width:100%;flex:none;height:104px;overflow:hidden;border:0;border-bottom:1px solid var(--dsw-alias-border-l1);object-fit:cover;display:block;background:var(--dsw-alias-bg-layer-2)}
+/* ⚠️ 缩略图统一成 104px 高的"横条"：第一次改成 width:100%+aspect-ratio 后，
+   竖版模板把卡片撑成 300×550 的巨块，**模板名/参数/标签全被挤出可视区**
+   （静态预览截图一看就露）。列表是"选一个"，可比性比原比例重要 —— 版式信息用 chip 标。 */
+.dshcv-poster-wide{width:100%;height:104px}
+.dshcv-poster-ph{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;text-align:center;font-size:11.5px;line-height:1.4;letter-spacing:.02em;color:var(--dsw-alias-label-secondary);background:
   repeating-linear-gradient(135deg, transparent 0 7px, var(--dsw-alias-bg-layer-2) 7px 14px), var(--dsw-alias-bg-base)}
-.dshcv-tpl-body{min-width:0;flex:1}
-.dshcv-tpl-name{font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.dshcv-tpl-meta{color:var(--dsw-alias-label-secondary);font-size:11px;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dshcv-tpl-body{min-width:0;flex:1;padding:11px 12px 12px}
+.dshcv-tpl-name{font-weight:650;font-size:14.5px;line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dshcv-tpl-meta{color:var(--dsw-alias-label-secondary);font-size:12px;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dshcv-tpl-chips{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap}
 
 /* ── 表单 ───────────────────────────────────────────────────────── */
-.dshcv-field{margin-bottom:14px}
+.dshcv-field{margin-bottom:16px}
 .dshcv-field:last-child{margin-bottom:0}
-.dshcv-label{display:block;font-size:12px;font-weight:500;color:var(--dsw-alias-label-primary);margin-bottom:5px}
+.dshcv-label{display:block;font-size:13px;font-weight:600;color:var(--dsw-alias-label-primary);margin-bottom:7px}
 .dshcv-req{color:var(--dsw-alias-state-error-primary);margin-left:3px}
-.dshcv-hint{color:var(--dsw-alias-label-secondary);font-size:11px;margin-top:5px;line-height:1.5}
+.dshcv-hint{color:var(--dsw-alias-label-secondary);font-size:12px;margin-top:6px;line-height:1.55}
 .dshcv-input,.dshcv-area{width:100%;box-sizing:border-box;padding:7px 10px;border-radius:9px;border:.5px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;outline:none;transition:border-color .12s ease}
 .dshcv-input{height:34px}
 .dshcv-input:focus,.dshcv-area:focus{border-color:var(--dsw-alias-brand-primary)}
@@ -145,11 +153,14 @@ window.__ModuleLoader__.load({
 .dshcv-area{min-height:104px;resize:vertical;line-height:1.6;font-family:inherit}
 
 /* ── 按钮 ───────────────────────────────────────────────────────── */
-.dshcv-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;padding:0 14px;border-radius:9px;border:.5px solid var(--dsw-alias-border-l2);background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:12.5px;cursor:pointer;white-space:nowrap;transition:background .12s ease,opacity .12s ease}
+.dshcv-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:36px;padding:0 16px;border-radius:10px;font-weight:550;border:.5px solid var(--dsw-alias-border-l2);background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:12.5px;cursor:pointer;white-space:nowrap;transition:background .12s ease,opacity .12s ease}
 .dshcv-btn:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2))}
 .dshcv-btn:disabled{opacity:.45;cursor:not-allowed}
 .dshcv-btn.sm{height:26px;padding:0 10px;font-size:11.5px;border-radius:8px}
-.dshcv-btn-primary{background:var(--dsw-alias-button-primary-fill, var(--dsw-alias-brand-primary));border-color:transparent;color:var(--dsw-alias-label-primary-foreground, #fff);font-weight:500}
+.dshcv-btn-primary{background:linear-gradient(135deg, var(--dsw-alias-brand-primary), color-mix(in srgb, var(--dsw-alias-brand-primary) 74%, #001014));border-color:transparent;color:#fff;font-weight:650;box-shadow:0 3px 14px color-mix(in srgb, var(--dsw-alias-brand-primary) 36%, transparent)}
+.dshcv-btn-primary:hover:not(:disabled){filter:brightness(1.07);background:linear-gradient(135deg, var(--dsw-alias-brand-primary), color-mix(in srgb, var(--dsw-alias-brand-primary) 74%, #001014))}
+/* 主操作（出片）按钮再大一号：一屏里最想让用户点的就是它 */
+.dshcv-btn-main{height:42px;padding:0 22px;border-radius:12px;font-size:14.5px}
 .dshcv-btn-primary:hover:not(:disabled){background:var(--dsw-alias-button-primary-hover, var(--dsw-alias-brand-primary))}
 .dshcv-btn-danger{color:var(--dsw-alias-state-error-primary)}
 .dshcv-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
@@ -195,7 +206,7 @@ window.__ModuleLoader__.load({
 .dshcv-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--dsw-alias-label-secondary);font-size:12px;padding:34px 18px;text-align:center;border:.5px dashed var(--dsw-alias-border-l1);border-radius:12px;line-height:1.6}
 .dshcv-empty-mark{opacity:.5}
 .dshcv-banner{padding:11px 13px;border-radius:10px;background:var(--dsw-alias-bg-layer-2);border:.5px solid var(--dsw-alias-border-l1);font-size:12px;line-height:1.6}
-.dshcv-pre{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10.5px;color:var(--dsw-alias-label-secondary);white-space:pre-wrap;word-break:break-all;line-height:1.7}
+.dshcv-pre{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;color:var(--dsw-alias-label-secondary);white-space:pre-wrap;word-break:break-all;line-height:1.7}
 `;
 
     function StyleTag() {
@@ -204,10 +215,10 @@ window.__ModuleLoader__.load({
     }
 
     // ── 小控件 ────────────────────────────────────────────────────────
-    function Btn({ children, primary, danger, size, ...rest }) {
+    function Btn({ children, primary, danger, size, main, ...rest }) {
       return h('button', {
         type: 'button',
-        className: `dshcv-btn${primary ? ' dshcv-btn-primary' : ''}${danger ? ' dshcv-btn-danger' : ''}${size === 'sm' ? ' sm' : ''}`,
+        className: `dshcv-btn${primary ? ' dshcv-btn-primary' : ''}${danger ? ' dshcv-btn-danger' : ''}${size === 'sm' ? ' sm' : ''}${main ? ' dshcv-btn-main' : ''}`,
         ...rest,
       }, children);
     }
@@ -654,7 +665,7 @@ window.__ModuleLoader__.load({
                 h('div', { className: 'dshcv-actions', key: 'actions' }, [
                   h(Btn, { key: 'v', onClick: doValidate, disabled: !!busy }, busy === '校验' ? '校验中…' : '校验'),
                   h(Btn, { key: 'p', onClick: doPreview, disabled: !!busy }, busy === '预览' ? '起任务…' : '预览'),
-                  h(Btn, { key: 'f', primary: true, onClick: doFinal, disabled: !!busy },
+                  h(Btn, { key: 'f', primary: true, main: true, onClick: doFinal, disabled: !!busy },
                     busy === '出终版' ? '起任务…' : '出终版（横竖双版）'),
                 ]),
               ]) : h('div', { className: 'dshcv-card', key: 'noform' },

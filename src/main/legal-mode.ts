@@ -180,6 +180,9 @@ function mergeDirTree(from: string, to: string): boolean {
 }
 
 export function migrateLegacyHomeOnce(home: string, legacyHomes: string[]): boolean {
+  // 2026-10-05：宣传/演示截图用的临时实例**不要迁移旧 home** ——
+  // 迁移会把真实会话与工作区复制进来（截图里就会出现真实会话名，属隐私事故）。
+  if (process.env.DSH_PROMO_SHOTS === '1') return false;
   if (fs.existsSync(path.join(home, MIGRATION_MARKER))) return false;
   if (hasSessions(home)) return false;
   const source = legacyHomes.find((dir) => dir !== home && hasSessions(dir));

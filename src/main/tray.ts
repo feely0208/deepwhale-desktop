@@ -10,6 +10,16 @@ export interface TrayMenuActions {
   onRefreshUsage: () => void;
   /** 打开设置（Cmd+,）：聚焦主窗口并打开 DSH 设置页 */
   onOpenSettings?: () => void;
+  /**
+   * 重新加载主窗口的界面（视图菜单，⇧⌘R）。
+   *
+   * 为什么是**显式回调**而不是 `role: 'reload'`：role 会带上它自己的默认快捷键 ⌘R，
+   * 而 **⌘R 已经被官方占了** —— `@deepseek-ai/dsh-client-ui-sidebar-right` 的
+   * 「刷新当前页面」(`page.refresh`) 在 desktop 上绑的就是 `KeyR + primary`。
+   * 菜单快捷键会**吞掉按键、不再传给页面**，用 ⌘R 就等于把右侧栏的刷新功能抢掉。
+   * 显式写 accelerator（⇧⌘R）不留这个隐患，行为也一眼看得懂。
+   */
+  reloadMainWindow?: () => void;
   /** 打开宠物目录 */
   onOpenPetsFolder?: () => void;
   /** 手动检查更新（有结果会如实告知，含"已是最新"与失败原因） */
@@ -127,6 +137,32 @@ export function buildAppMenuTemplate(a: TrayMenuActions): MenuItemConstructorOpt
         { role: 'copy' as const, label: '复制' },
         { role: 'paste' as const, label: '粘贴' },
         { role: 'selectAll' as const, label: '全选' },
+      ],
+    },
+    // 「视图」菜单（2026-10-07 加）：**这个菜单以前不存在，于是 Cmd+R 是被吞掉的**。
+    //
+    // 踩到的场景：改了 DSH 插件（深鲸画布面板），让用户"刷新一下看看" —— 用户按了
+    // Cmd+R，界面纹丝不动，于是变成"我改了、你刷新了、界面没变"的扯皮。
+    // 原因很简单：macOS 的快捷键来自应用菜单，而我们的菜单里从来没有 reload 角色，
+    // 浏览器窗口的默认重载也就没绑上。
+    //
+    // ⚠️ **故意用 ⇧⌘R 而不是 ⌘R**：⌘R 已经被官方占了 —— 官方右侧栏的
+    // 「刷新当前页面」(`page.refresh`，见 `@deepseek-ai/dsh-client-ui-sidebar-right`)
+    // 在 desktop 上绑的就是 `KeyR + primary`。菜单快捷键会吞掉按键、不再传给页面，
+    // 用 ⌘R 就等于把这个既有功能抢掉。⇧⌘R 全库无占用（已逐包核对），
+    // 而且它本来就是浏览器里"重新加载"的通用手势。
+    //
+    // 只放"重新加载"这一件事，而且只有一项：`role: 'forceReload'` 的默认快捷键
+    // 也是 ⇧⌘R，会跟上面这条撞，所以不提供。
+    // 开发者工具故意不放（普通用户不需要，误开还会吓一跳）。
+    {
+      label: '视图',
+      submenu: [
+        {
+          label: '重新加载界面',
+          accelerator: 'Shift+CmdOrCtrl+R',
+          click: () => a.reloadMainWindow?.(),
+        },
       ],
     },
     { label: '皮肤', submenu: a.skinSubmenu },

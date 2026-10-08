@@ -721,6 +721,13 @@ function buildMenuActions(): TrayMenuActions {
     onOpenCustomCss: () => skin.openCustomCss(),
     onSetApiKey: () => openApiKeyDialog(),
     onOpenSettings: () => openSettingsPage(),
+    // 视图菜单的「重新加载界面」（⇧⌘R）。用**显式回调**而不是 `role: 'reload'`：
+    // role 自带 ⌘R 默认键，而 ⌘R 已经被官方右侧栏的「刷新当前页面」占着
+    // （`@deepseek-ai/dsh-client-ui-sidebar-right` 的 page.refresh），
+    // 菜单快捷键会把它吞掉。详见 TrayMenuActions.reloadMainWindow 的说明。
+    reloadMainWindow: () => {
+      if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.reload();
+    },
     onOpenPetsFolder: () => pet?.openPetsFolder(),
     onToggleUsagePanel: (visible) => {
       store.set('usagePanelVisible', visible);
@@ -733,6 +740,13 @@ function buildMenuActions(): TrayMenuActions {
     onRefreshUsage: () => void usage.refresh(),
     onCheckUpdate: () => void updates?.checkNow(),
     onPreviewUpdateProgress: () => previewUpdateProgress(),
+    // ⚠️ 这个开关原来**从来没有被传过**（2026-10-08 修）：`tray.ts` 里
+    //    「预览更新进度条（测试）」那一项是 `...(a.showDevMenu ? [...] : [])`，
+    //    而这里不传 → `showDevMenu` 恒为 undefined → **那一项永远进不了菜单**，
+    //    于是冒烟里"开发菜单里缺「预览更新进度条」"**必然失败**。
+    //    判断口径与冒烟里那条断言（`!app.isPackaged || DSH_DEV_MENU==='1'`）保持一致：
+    //    开发态可见、打包后对用户隐藏（用户实测反馈过"这是我们测试时的东西"）。
+    showDevMenu: !app.isPackaged || process.env.DSH_DEV_MENU === '1',
     onOpenLocalFiles: () => {
       try {
         if (mainWin && !mainWin.isDestroyed()) {
@@ -759,7 +773,7 @@ function buildMenuActions(): TrayMenuActions {
 }
 
 function rebuildMenus(): void {
-  // 应用菜单（macOS 顶栏/窗口菜单栏）：完整 macOS 结构（应用/文件/编辑/窗口/帮助）
+  // 应用菜单（macOS 顶栏/窗口菜单栏）：完整 macOS 结构（应用/文件/编辑/视图/皮肤/宠物/窗口/帮助）
   //
   // ⚠️ 这一行**不能**放在 `if (!tray) return` 之后（2026-10-02 修）：
   //    托盘创建失败（图标缺失、菜单栏异常）时，原写法会连应用菜单一起跳过，
@@ -1503,6 +1517,28 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
     });
     await showStartingPage(mainWin);
 
+    /*
+     * ⚠️ 这个探测必须在**拉起 DSH 之前**做（2026-10-08 修）。
+     *
+     * 它问的是"用户的 DSH 是不是本来就在跑"。原来它写在 `service.ensureReady()`
+     * **之后** —— 而 ensureReady 会顺手把 DSH 拉起来，于是端口必然已经有应答，
+     * `dshAlreadyUp` 恒为 true，下面那整段"首次启动补注入"（含 INJECT_ATTEMPTS 重试）
+     * **从来没执行过**（死代码）。
+     *
+     * 后果（用户可见）：全新安装第一次打开时，profile 还不存在 →
+     * `ensureBundledPlugins` 只能把包拷进 `<home>/plugins/`、profile 侧写不进去、
+     * 返回 `profilePending: true`；而唯一的补救路径就是这段死代码 →
+     * **第一次启动没有任何随包插件**（法律模式 / 右键菜单 / 打印 / 品牌标记 / 网页预览…），
+     * 要等第二次启动才出现。
+     *
+     * 实测：冒烟在全新 home 上跑，报 `品牌标记插件没被加载（boot 列表里没有 dsh-shell-brand-mark）`。
+     * 挪到前面之后，语义恢复成最初注释里写的那样：
+     * "复用已在跑的 DSH 时**一个字都不能写**"（否则 DSH 的 chokidar 会触发第二次
+     * HMR runExclusive，抛 `HMR transactions cannot be nested`）；
+     * 而"我们自己刚把它拉起来"这条路径，正该补写。
+     */
+    const dshAlreadyUp = await dshPortAnswered();
+
     let dshReady = false;
     try {
       await service.ensureReady();
@@ -1556,8 +1592,8 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
       //   runExclusive，直接抛 `HMR transactions cannot be nested`
       //   （dsh-hmr/lib/index.js:280）—— 用户在插件页点「启用」失败就是这么来的。
       //   而 DSH 还活着，说明它早把这份配置读进去了，此刻重写没有任何收益。
-      const dshAlreadyUp = await dshPortAnswered();
-      if (dshAlreadyUp && SMOKE) {
+      const dshAlreadyUpNote = dshAlreadyUp; // 探测已上移到 ensureReady() 之前
+      if (dshAlreadyUpNote && SMOKE) {
         console.log('[smoke] DSH 已在运行 —— 跳过注入写盘（避免与其配置写入冲突）');
       }
       if (!dshAlreadyUp) {
@@ -1805,10 +1841,58 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
     }
 
     if (SMOKE) {
+      /**
+       * 检查链是否真的跑完了。
+       *
+       * ⚠️ 2026-10-08 修：这里原来是 `setTimeout(() => { …app.quit(); }, 15000)` —— **写死 15 秒**。
+       *    而下面那条检查链里的显式 sleep 合计就有 **34 秒**，于是从"whatsnew 回源"（约 2413 行）
+       *    往后的断言（**品牌标记** / 快捷键 / 菜单 / 宠物动画…）**从来没执行过**，
+       *    而冒烟照样打印 `[smoke] ok`、照样退 0 —— 这道门实际上一直是摆设。
+       *    这正是 brand-mark / web-preview 两个插件能丢失两个多月没人发现的原因之一。
+       */
+      let smokeChecksDone = false;
       // 端到端检查：打开设置页 → 验证注入的"宠物/用量/皮肤"导航项与面板激活
       setTimeout(() => {
         void (async () => {
           try {
+            /**
+             * 页面稳定闸门（2026-10-08 加）。
+             *
+             * 为什么必须有：首次启动时 profile 还不存在，`ensureBundledPlugins` 会返回
+             * `profilePending: true`，等 DSH 建好 profile 后**补注入并让窗口重载一次**
+             * （见本文件"首次启动：DSH 这时才建好 profiles/web"那段）。
+             *
+             * 重载期间页面是空的 —— 此时任何 DOM 探测都会得到**假失败**。实测（隔离实例、
+             * 全新 home）：`settings-ext` 全 false、`sidebar-probe` 的 sidebarNav=null、
+             * `skin` 外圈与中心同色（辉光没出来）、`进度条 runner=false`。
+             * 这些都不是功能坏了，是**探测撞在重载的空窗期里**。
+             *
+             * 所以先等到"侧栏「设置」可点 + 正文有内容"再开始查。
+             * 注意这**不是**放宽断言：等不到照样记失败（下面会 exitCode=1）。
+             */
+            const settled = await (async () => {
+              for (let i = 0; i < 90; i += 1) {
+                const ok = await mainWin!.webContents
+                  .executeJavaScript(
+                    `(() => {
+                       const els = [...document.querySelectorAll('span')];
+                       const s = els.find((e) => e.textContent.trim() === '设置');
+                       return !!(s && s.closest('button,[role="button"],a') && document.body.innerText.length > 200);
+                     })()`,
+                  )
+                  .catch(() => false);
+                if (ok) return i;
+                await new Promise((r) => setTimeout(r, 500));
+              }
+              return -1;
+            })();
+            if (settled < 0) {
+              console.error('[smoke] ❌ 页面 45 秒内没有稳定下来（侧栏「设置」始终不可点）—— 后续探测不可信');
+              process.exitCode = 1;
+            } else if (settled > 0) {
+              console.log(`[smoke] 等页面稳定：重试 ${settled} 次（首启补注入会触发一次重载）`);
+            }
+
             const r = await mainWin!.webContents.executeJavaScript(`(async () => {
               const clickTxt = (txt) => { const els = [...document.querySelectorAll('span')].filter(e => e.textContent.trim() === txt); if (els[0]) { els[0].click(); return true; } return false; };
               clickTxt('设置');
@@ -2122,6 +2206,143 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
               }
             } catch (e) {
               console.warn('[smoke] 面板检查异常:', e);
+            }
+
+            // —— 演示模式（DSH_PROMO_DEMO=1）：**只切状态不截图**，每 90 秒一个，
+            //    供用户自己从容截图；应用保持运行不退出。
+            if (process.env.DSH_PROMO_DEMO === '1') {
+              const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+              const js2 = (code: string) => mainWin!.webContents.executeJavaScript(code).catch(() => null);
+              const setTheme = (dark: boolean) =>
+                js2(dark
+                  ? "document.body.setAttribute('data-ds-dark-theme','');document.documentElement.setAttribute('data-ds-dark-theme','');true"
+                  : "document.body.removeAttribute('data-ds-dark-theme');document.documentElement.removeAttribute('data-ds-dark-theme');true");
+              void (async () => {
+                // ① 自动点掉首启「预览版说明」弹窗
+                for (let i = 0; i < 10; i++) {
+                  await wait(2000);
+                  const clicked = await mainWin!.webContents.executeJavaScript(`(() => {
+                    const b = Array.from(document.querySelectorAll('button'))
+                      .find((e) => ['继续','知道了','我知道了','开始使用'].includes((e.textContent||'').trim()));
+                    if (b) { b.click(); return true; }
+                    return false;
+                  })()`).catch(() => false);
+                  if (clicked) break;
+                }
+                console.log('[demo] ===== 演示模式开始（每 90 秒换一个状态）=====');
+                console.log('[demo] 状态 1/4：主界面 · 深色   （90 秒）');
+                await setTheme(true);
+                await wait(90_000);
+                console.log('[demo] 状态 2/4：主界面 · 浅色   （90 秒）');
+                await setTheme(false);
+                await wait(90_000);
+                console.log('[demo] 状态 3/4：本机内文件面板（示例文件）· 浅色（90 秒）');
+                await js2("window.__dshLocalFiles && window.__dshLocalFiles.open && window.__dshLocalFiles.open(); true");
+                await wait(1200);
+                await js2(`(() => { const i = document.getElementById('dsh-local-files-panel-path'); if (i) { i.value = '/Users/mac/DeepSeek Harness/演示素材/示例案件材料'; i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); } return true; })()`);
+                await wait(90_000);
+                console.log('[demo] 状态 4/4：文档预览（点开示例合同）· 浅色（90 秒）');
+                await js2("(() => { const rows = Array.from(document.querySelectorAll('#dsh-local-files-panel-list > div')); const d = rows.find((r) => (r.textContent||'').indexOf('示例-采购合同') >= 0); if (d) d.click(); return true; })()");
+                await wait(120_000);
+                console.log('[demo] 演示结束：应用保持打开，你可以继续截任何状态');
+              })();
+            }
+
+            // —— 宣传截图采集（DSH_PROMO_SHOTS=1）：深色/浅色 × 本机内文件面板/文档预览 ——
+            // 用全新 user-data-dir 跑，所以会话列表天然为空（无需折叠，也更干净）。
+            if (process.env.DSH_PROMO_SHOTS === '1') {
+              const dir = '/tmp/dsh-promo';
+              fs.mkdirSync(dir, { recursive: true });
+              const shot = async (name: string) => {
+                try {
+                  const img = await mainWin!.webContents.capturePage();
+                  fs.writeFileSync(path.join(dir, name + '.png'), img.toPNG());
+                  console.log('[promo] ok ' + name);
+                } catch (e) {
+                  console.error('[promo] 失败 ' + name + ': ' + String(e));
+                }
+              };
+              const js = async (code: string): Promise<void> => {
+                try {
+                  await mainWin!.webContents.executeJavaScript(code);
+                } catch (e) {
+                  console.error('[promo] 脚本失败: ' + String(e).slice(0, 120));
+                }
+              };
+              // PROMO_NO_THEME_FORCE：不改主题（由 settings.json 决定），避免重渲染打断采集
+              const theme = async (_dark?: boolean) => { await new Promise((r) => setTimeout(r, 600)); };
+              const demo = '/Users/mac/DeepSeek Harness/演示素材/示例案件材料';
+              // ① 打开本机内文件面板并进入示例目录
+              // PROMO_V3：**必须先退出设置页**，否则截到的是设置 ✗
+              //   ① Esc ② 关掉可能的遮罩 ③ 点侧栏「新会话」（多策略，避免点不动）
+              await js(`(async () => {
+                document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+                document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+                await new Promise((r) => setTimeout(r, 400));
+                const leaves = Array.from(document.querySelectorAll('span,div,a,button'))
+                  .filter((e) => e.children.length === 0 && (e.textContent || '').trim() === '新会话');
+                for (const leaf of leaves) {
+                  let p = leaf;
+                  for (let i = 0; i < 5 && p; i++) {
+                    if (p.tagName === 'BUTTON' || p.getAttribute && p.getAttribute('role') === 'button' || p.tagName === 'A') {
+                      p.click();
+                      break;
+                    }
+                    p = p.parentElement;
+                  }
+                }
+                return true;
+              })()`);
+              // PROMO_V4：先点掉「预览版说明」等首启弹窗（它们会挡住整个工作区）
+              await js(`(async () => {
+                for (let round = 0; round < 3; round++) {
+                  const btns = Array.from(document.querySelectorAll('button,div,span'))
+                    .filter((e) => ['继续', '知道了', '我知道了', '开始使用'].includes((e.textContent || '').trim()));
+                  if (!btns.length) break;
+                  let p = btns[0];
+                  for (let i = 0; i < 4 && p; i++) { if (p.tagName === 'BUTTON') { p.click(); break; } p = p.parentElement; }
+                  await new Promise((r) => setTimeout(r, 600));
+                }
+                return true;
+              })()`);
+              await new Promise((r) => setTimeout(r, 2000));
+              await shot('0-正面全景');
+              await new Promise((r) => setTimeout(r, 300));
+              await shot('0b-主界面');
+              await js("window.__dshLocalFiles && window.__dshLocalFiles.open && window.__dshLocalFiles.open(); true");
+              await new Promise((r) => setTimeout(r, 900));
+              await js(`(() => { const i = document.getElementById('dsh-local-files-panel-path'); if (i) { i.value = ${JSON.stringify(demo)}; i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); } return true; })()`);
+              await new Promise((r) => setTimeout(r, 1200));
+              await theme(true);
+              await shot('1-深色-本机内文件面板');
+              await theme(false);
+              await shot('2-浅色-本机内文件面板');
+              // ② 点开示例 docx → 侧栏预览（转换要几秒）
+              await js("(() => { const rows = Array.from(document.querySelectorAll('#dsh-local-files-panel-list > div')); const d = rows.find((r) => (r.textContent||'').indexOf('示例-采购合同') >= 0); if (d) d.click(); return true; })()");
+              await new Promise((r) => setTimeout(r, 4000));
+              await theme(true);
+              await shot('3-深色-文档预览');
+              await theme(false);
+              await shot('4-浅色-文档预览');
+              // ③ 单独截桌面宠物（大肥鱼）→ 后续合成到画面右下角
+              try {
+                const all = BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed() && w !== mainWin);
+                const petWin = all.find((w) => {
+                  const [ww, hh] = w.getSize();
+                  return ww > 60 && ww < 600 && hh > 60 && hh < 600;
+                });
+                if (petWin) {
+                  const img = await petWin.webContents.capturePage();
+                  fs.writeFileSync(path.join(dir, 'pet.png'), img.toPNG());
+                  console.log('[promo] ok pet（大肥鱼）');
+                } else {
+                  console.log('[promo] 未找到宠物窗（可能未开启）');
+                }
+              } catch (e) {
+                console.error('[promo] 截宠物失败: ' + String(e));
+              }
+              await theme(true);
+              console.log('[promo] 采集结束 → ' + dir);
             }
 
             // —— 皮肤：双主题截图 + 像素验证（用户要求"确切验证辉光和洗白"）——
@@ -2712,7 +2933,23 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
                   if (it.submenu) walk(it.submenu.items);
                 }
               };
+              // ⚠️ 这一行原来**漏了**（2026-10-08 修）：`walk` 只被定义、从来没被调用，
+              //    于是 `labels` 永远是空数组 —— 下面两条菜单断言**只要跑到就必然失败**
+              //    （报"开发菜单里缺…""菜单里没有「本机内文件…」"），而实际菜单是好的。
+              //    之所以一直没暴露：整条检查链被 15 秒写死的计时器截断，这段根本没执行过
+              //    （见本文件 SMOKE 段开头关于 `smokeChecksDone` 的说明）。
+              if (appMenu) walk(appMenu.items);
+
+              // 诊断：断言失败时光说"缺"没法定位 —— 把实际扫到的 label 打出来，
+              // 一眼就能分清"菜单没建起来"和"模板里那一项没进去"。
               const hasPreview = labels.some((l) => l.indexOf('预览更新进度条') >= 0);
+              const hasLocalFiles = labels.some((l) => l.indexOf('本机内文件') >= 0);
+              if (!hasPreview || !hasLocalFiles) {
+                console.log(
+                  '[smoke] 菜单实际扫到 ' + String(labels.length) + ' 项：' +
+                    JSON.stringify(labels.filter((l) => l !== '').slice(0, 45)),
+                );
+              }
               // 预览进度条是开发/测试用的，用户菜单里不应该出现（用户实测反馈）
               const devMenu = !app.isPackaged || process.env.DSH_DEV_MENU === '1';
               if (devMenu && !hasPreview) {
@@ -3165,14 +3402,26 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
           } catch (e) {
             console.error('[smoke] 青色大肥鱼宠物检查失败:', e);
             process.exitCode = 1;
+          } finally {
+            // 链跑完（无论成败）才置位；看门狗计时器等它。
+            smokeChecksDone = true;
           }
         })();
       }, 2500);
 
-      setTimeout(() => {
+      // 等检查链真的跑完再退（原来写死 15 秒，导致后半段断言根本没跑；见上面的说明）。
+      // 300 秒是看门狗：真卡住了也要退出，并且**明确报错**而不是假装成功。
+      const smokeDeadline = Date.now() + 300_000;
+      const smokeWatchdog = setInterval(() => {
+        if (!smokeChecksDone && Date.now() < smokeDeadline) return;
+        clearInterval(smokeWatchdog);
+        if (!smokeChecksDone) {
+          console.error('[smoke] ❌ 检查链没有在 300 秒内跑完 —— 有断言未执行，本次结果不可信');
+          process.exitCode = 1;
+        }
         console.log('[smoke] ok');
         app.quit();
-      }, 15000);
+      }, 500);
     }
   });
 
@@ -3204,7 +3453,13 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
       .catch((error: unknown) => {
         console.error('[smoke] 停止 DSH 服务失败:', error);
       })
-      .finally(() => app.exit(0));
+      .finally(() => {
+        // ⚠️ 2026-10-08 修：原来是 `app.exit(0)` —— 它会**直接忽略 `process.exitCode`**
+        //    （Electron 的 app.exit(code) 立即终止，不等正常退出流程）。
+        //    于是所有断言写的 `process.exitCode = 1` 全被吞掉，**冒烟永远退 0**，
+        //    "红了"这件事根本没有出口。现在把真实退出码带出去。
+        app.exit(typeof process.exitCode === 'number' ? process.exitCode : 0);
+      });
   });
 
   app.on('window-all-closed', () => {

@@ -129,6 +129,19 @@ export async function notesFor(version: string): Promise<WhatsNewEntry | null> {
     //（force=true 跳过内存与文件缓存）。
     entry = pick(await loadWhatsNew(true));
   }
+  if (!entry) {
+    // 2026-10-08 补：**CDN 命中了、但里面没有这一版**的情况。
+    //
+    // `loadWhatsNew(true)` 一旦从 CDN 拿到合法数据就**直接 return**，
+    // 永远不会走到它自己第 ③ 步的"随包内容"回退。于是**发版后 CDN 还没同步完的那几分钟**
+    //（`release.yml` 是先 build、之后才把 whatsnew 拷进 obs-desktop 同步上去的），
+    // 用户升级到新版、点「本版更新内容」会看到**空白** —— 而随包那份其实是有内容的。
+    //
+    // 冒烟里那条回归检查抓的就是这个（它写一份过期缓存 → 走 force 回源 → 期望拿到当前版本）。
+    // 所以这里必须再补一次"直接读随包"。这不是"为了让冒烟变绿"，
+    // 而是它确实是一条用户可见的空白路径。
+    entry = pick(readJson(bundledPath()) ?? { versions: {} });
+  }
   return entry;
 }
 

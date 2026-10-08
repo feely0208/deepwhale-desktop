@@ -175,6 +175,79 @@ async function main() {
   fs.cpSync(localPrintPlugin, path.join(outDir, 'dsh-shell-document-print'), { recursive: true });
   console.log('[bundled-plugins]   → dsh-shell-document-print（本地源码）');
 
+  // ⛔ 「深鲸画布」面板不进 1.0.54（2026-10-07 定）：成片效果我们自己还没实测过，
+  //    引擎也不随包分发。**怎么开**：取消下面这段注释，同时把
+  //    `src/main/bundled-plugins.ts` 里对应那一行也取消注释 —— 两处必须同进同出，
+  //    否则就是"声明了但载荷里没有"（ensureBundledPlugins 会静默跳过，没人会发现）。
+  //
+  // const localCanvasPlugin = path.join(__dirname, '..', 'shell-plugins', 'dsh-shell-canvas');
+  // if (!fs.existsSync(path.join(localCanvasPlugin, 'cordis.patch.yml'))) {
+  //   throw new Error(`缺少本地插件源码：${localCanvasPlugin}（应随仓库提交，不是构建产物）`);
+  // }
+  // fs.cpSync(localCanvasPlugin, path.join(outDir, 'dsh-shell-canvas'), { recursive: true });
+  // console.log('[bundled-plugins]   → dsh-shell-canvas（本地源码）');
+
+  // ⌘R「重新加载界面」（2026-10-07）。
+  //
+  // 桌面端的应用菜单里没有 reload 角色，所以 Cmd+R 从来没绑上 —— 改完插件让用户
+  // "刷新一下看看"，用户按了没反应。这个插件用 DSH 自己的快捷键服务把它补回来。
+  const localReloadPlugin = path.join(__dirname, '..', 'shell-plugins', 'dsh-shell-reload');
+  if (!fs.existsSync(path.join(localReloadPlugin, 'cordis.patch.yml'))) {
+    throw new Error(`缺少本地插件源码：${localReloadPlugin}（应随仓库提交，不是构建产物）`);
+  }
+  fs.cpSync(localReloadPlugin, path.join(outDir, 'dsh-shell-reload'), { recursive: true });
+  console.log('[bundled-plugins]   → dsh-shell-reload（本地源码）');
+
+  // 空白会话顶部的品牌标记 → 青色大肥鱼。
+  //
+  // ⚠️ 这个插件**曾经丢失过**（同理还有下面的 web-preview）：源码被放进了本目录
+  //    （gitignore 的构建产物），而本脚本一进来就把它整个清空重建 —— 跑一次就没了，
+  //    git 里也看不见。详见 src/main/bundled-plugins.ts 的同处说明。
+  //    下面那道"声明 == 载荷"闸门就是为了让这种丢失**当场报错**，而不是安静少一个插件。
+  const localBrandMarkPlugin = path.join(__dirname, '..', 'shell-plugins', 'dsh-shell-brand-mark');
+  if (!fs.existsSync(path.join(localBrandMarkPlugin, 'cordis.patch.yml'))) {
+    throw new Error(`缺少本地插件源码：${localBrandMarkPlugin}（应随仓库提交，不是构建产物）`);
+  }
+  fs.cpSync(localBrandMarkPlugin, path.join(outDir, 'dsh-shell-brand-mark'), { recursive: true });
+  console.log('[bundled-plugins]   → dsh-shell-brand-mark（本地源码）');
+
+  // 官方右栏「网页预览」的 disabled 覆盖（本包不插自己的行，只是覆盖层）。
+  const localWebPreviewPlugin = path.join(__dirname, '..', 'shell-plugins', 'dsh-shell-web-preview');
+  if (!fs.existsSync(path.join(localWebPreviewPlugin, 'cordis.patch.yml'))) {
+    throw new Error(`缺少本地插件源码：${localWebPreviewPlugin}（应随仓库提交，不是构建产物）`);
+  }
+  fs.cpSync(localWebPreviewPlugin, path.join(outDir, 'dsh-shell-web-preview'), { recursive: true });
+  console.log('[bundled-plugins]   → dsh-shell-web-preview（本地源码）');
+
+  // ── 闸门：**清单里声明的每一个，载荷里都必须真的有** ──────────────────
+  //
+  // 为什么必须有这道闸门：`ensureBundledPlugins()` 是按"载荷目录里有没有
+  // cordis.patch.yml"来过滤的（`available`）—— 声明了但载荷里没有，它会**静默跳过**，
+  // 不报错、不警告。于是打出一个少插件的包，用户那边表现为"功能凭空消失"，
+  // 而本机一切正常（本机是手动装进 profile 的）。brand-mark / web-preview
+  // 就是这么消失的，而且**消失了两个多月没人发现**。
+  //
+  // 这里把「声明」与「载荷」对齐，不一致就直接失败 —— 宁可构建失败，也不要安静地少东西。
+  {
+    // 只认**真实的清单条目**形态：`{ name: '…', dir: '…' }`。
+    // 不要用宽松的 /dir:\s*'/ 去扫全文 —— 本文里还有 `dir: \`link:${pluginDir}\``
+    // 这类写法，宽松正则会抓进来变成假条目，闸门就自己失真了（第一版就是这么写坏的）。
+    const tsSource = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'bundled-plugins.ts'), 'utf8')
+      .replace(/^\s*\/\/.*$/gm, ''); // 先去掉整行注释（被注释掉的条目不算声明）
+    const declared = [...new Set(
+      [...tsSource.matchAll(/\{\s*name:\s*'[^']+',\s*dir:\s*'([a-z0-9-]+)'\s*\}/g)].map((m) => m[1]),
+    )];
+    const missing = declared.filter((dir) => !fs.existsSync(path.join(outDir, dir, 'cordis.patch.yml')));
+    if (missing.length > 0) {
+      throw new Error(
+        `随包清单声明了但载荷里没有：${missing.join('、')}\n` +
+        `  → 这两处必须同进同出：src/main/bundled-plugins.ts 的 BUNDLED_PLUGINS，与 scripts/build-bundled-plugins.js 里的拷贝步骤。\n` +
+        `  → 否则 ensureBundledPlugins 会静默跳过，打出一个"功能凭空消失"的包。`,
+      );
+    }
+    console.log(`[bundled-plugins]   ✅ 闸门：清单声明的 ${declared.length} 个，载荷里全都在`);
+  }
+
   // 到这里才算全部成功 —— 替换目标目录（先删旧的再改名，同分区内是瞬时的）
   fs.rmSync(finalDir, { recursive: true, force: true });
   fs.renameSync(outDir, finalDir);

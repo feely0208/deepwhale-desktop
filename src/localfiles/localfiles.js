@@ -479,6 +479,40 @@
       v.preload = 'metadata';
       v.style.cssText = 'display:block;width:100%;max-height:46vh;background:#000;';
       body.appendChild(v);
+    } else if (res.kind === 'audio') {
+      /* 音频（2026-10-08 加）：用户要试听配音样本，面板答「该格式文件暂时无法预览」。
+         配音/成片这条链上最常点的一类文件，**必须能听**（对比音色、检查成片配音）。
+         格式支持分两档（主进程给出 res.playable）：
+           · 浏览器能解的直接 <audio> 播；
+           · 解不了的（wma/amr/ape/aiff/caf…）**不假装能播**，给「用系统程序打开」这条真出路。
+         另外 <audio> 上加 error 兜底：万一 playable 判断错了，也不会只留一个点不动的坏控件。 */
+      var audioFallback = function (why) {
+        var tip = el('div', 'padding:14px;font-size:12.5px;line-height:1.7;color:' + P.dim + ';',
+          why || '这种音频格式浏览器放不了。');
+        var ob = el('button', 'margin:0 14px 14px;padding:6px 12px;border-radius:8px;cursor:pointer;' +
+          'border:1px solid ' + P.border + ';background:transparent;color:' + P.text + ';font-size:12.5px;',
+          '用系统程序打开');
+        ob.addEventListener('click', function () {
+          if (typeof dsh.localFilesOpen === 'function') dsh.localFilesOpen(entry.path);
+        });
+        body.textContent = '';
+        body.appendChild(tip);
+        body.appendChild(ob);
+      };
+      if (res.playable === false) {
+        audioFallback('这种音频格式浏览器放不了（.wma / .amr / .aiff / .ape 等），用系统程序可以正常播放。');
+        return;
+      }
+      var au = document.createElement('audio');
+      au.src = res.dataUri;
+      au.controls = true;
+      au.preload = 'metadata';
+      au.style.cssText = 'display:block;width:100%;';
+      au.addEventListener('error', function () { audioFallback(); });
+      var auWrap = el('div', 'padding:14px 12px;background:' +
+        (isDarkTheme() ? 'rgba(0,0,0,.22)' : 'rgba(0,0,0,.03)') + ';border-radius:10px;');
+      auWrap.appendChild(au);
+      body.appendChild(auWrap);
     } else if (res.kind === 'html') {
       /* 本地网页（2026-10-08 加）：以前走文本分支，只显示源码 —— 那不叫预览。
          现在塞进 iframe 真渲染。**安全是这个分支的第一约束**：

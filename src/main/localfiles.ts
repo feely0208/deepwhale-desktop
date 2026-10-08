@@ -158,6 +158,24 @@ export function registerLocalFilesIpc(): void {
       // 视频（2026-10-08 加）：用户拿 6 秒 mp4 和 2.2MB 成片测过 —— 原来**根本没有视频分支**，
       // 点下去只会落到最后那句「这种格式暂不支持」。这是用户最早提出、却一直没做的那件事。
       const VIDEO = ['.mp4', '.m4v', '.mov', '.webm', '.ogv'];
+      // 音频（2026-10-08 加）：用户要试听配音样本，面板却答「该格式文件暂时无法预览」——
+      // 音频是配音/成片这条链上最常点的一类文件，没有分支就等于「打包好的配音听不了」。
+      // ⚠️ 这份清单要**认全**（用户原话：「不要只能支持 m4a」）——
+      //   凡是音频都应进音频分支、都已能"打开/试听"；
+      //   其中浏览器原生能解码的（mp3/m4a/aac/wav/flac/ogg/opus/weba…）直接 <audio> 播放，
+      //   解不了的（aiff/wma/amr/ape/ac3/mka/wv/ra/au/caf…）由前端**优雅降级**为
+      //   「这种格式浏览器放不了」+「用系统程序打开」按钮（调用 localFilesOpen）。
+      //   分成两档而不是一刀切：既不让用户看到"暂不支持"这种死路，也不假装都能播。
+      const AUDIO = [
+        // —— 常见 / 浏览器可播 ——
+        '.mp3', '.mp2', '.m4a', '.m4b', '.aac', '.wav', '.flac', '.ogg', '.oga', '.opus', '.weba',
+        // —— 能识别但 Chromium 解不了（走降级按钮）——
+        '.aiff', '.aif', '.aifc', '.caf', '.wma', '.amr', '.3gp', '.3gpp', '.mka', '.ac3', '.ape', '.wv', '.ra', '.au',
+      ];
+      /** 浏览器（Chromium 内核）能直接解码的音频扩展名 —— 用来决定"直接播"还是"给降级按钮"。 */
+      const AUDIO_PLAYABLE = [
+        '.mp3', '.mp2', '.m4a', '.m4b', '.aac', '.wav', '.flac', '.ogg', '.oga', '.opus', '.weba',
+      ];
 
       if (IMG.includes(ext)) {
         if (st.size > 24 * 1024 * 1024) return { ok: false, error: '图片太大（>24MB），请用系统程序打开' };
@@ -170,6 +188,26 @@ export function registerLocalFilesIpc(): void {
         if (st.size > 120 * 1024 * 1024) return { ok: false, error: '视频太大（>120MB），请用系统程序打开' };
         const vmime = ext === '.webm' ? 'video/webm' : ext === '.ogv' ? 'video/ogg' : ext === '.mov' ? 'video/quicktime' : 'video/mp4';
         return { ok: true, kind: 'video', dataUri: `data:${vmime};base64,` + fs.readFileSync(p).toString('base64'), size: st.size };
+      }
+      if (AUDIO.includes(ext)) {
+        // 与视频同一套 data URI 通路。上限 80MB：够了（一小时 128kbps mp3 约 56MB），
+        // 再大就退回"用系统程序打开"更合理。
+        if (st.size > 80 * 1024 * 1024) return { ok: false, error: '音频太大（>80MB），请用系统程序打开' };
+        const amime = ext === '.mp3' ? 'audio/mpeg'
+          : ext === '.wav' ? 'audio/wav'
+            : ext === '.aiff' || ext === '.aif' ? 'audio/aiff'
+              : ext === '.flac' ? 'audio/flac'
+                : ext === '.ogg' || ext === '.oga' ? 'audio/ogg'
+                  : ext === '.opus' ? 'audio/opus'
+                    : ext === '.aac' ? 'audio/aac'
+                      : 'audio/mp4'; // .m4a
+        return {
+          ok: true,
+          kind: 'audio',
+          playable: AUDIO_PLAYABLE.includes(ext),
+          dataUri: `data:${amime};base64,` + fs.readFileSync(p).toString('base64'),
+          size: st.size,
+        };
       }
       if (HTML.includes(ext)) {
         const cap = 2 * 1024 * 1024;

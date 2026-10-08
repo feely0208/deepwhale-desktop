@@ -128,6 +128,7 @@ function waitPort(port, timeoutMs) {
     for (const [file, kind, ext] of [
       ['示例视频.mp4', 'video', 'mp4'],
       ['示例网页.html', 'html', 'html'],
+      ['示例音频.m4a', 'audio', 'audio'],
     ]) {
       const full = path.join(DIR, file);
       if (!fs.existsSync(full)) { check(file + ' 存在', false, '测试素材没找到：' + full); continue; }
@@ -153,11 +154,14 @@ function waitPort(port, timeoutMs) {
         const body = document.getElementById('dsh-local-files-panel-preview-body');
         const video = body ? body.querySelector('video') : null;
         const frame = body ? body.querySelector('iframe') : null;
+        const audio = body ? body.querySelector('audio') : null;
         return {
           ipcKind: res && res.kind,
           ipcError: res && res.error,
           hasRow: !!row,
           hasVideo: !!video,
+          hasAudio: !!audio,
+          audioDur: audio ? audio.duration : 0,
           videoW: video ? video.videoWidth : 0,
           videoH: video ? video.videoHeight : 0,
           videoDur: video ? video.duration : 0,
@@ -174,6 +178,10 @@ function waitPort(port, timeoutMs) {
         check('面板里生成了 <video>', out.hasVideo, '');
         check('视频**真的解码出画面**（videoWidth>0）', out.videoW > 0,
           `videoWidth=${out.videoW} videoHeight=${out.videoH} duration=${(out.videoDur || 0).toFixed(2)}s`);
+      } else if (kind === 'audio') {
+        check('面板里生成了 <audio>', out.hasAudio, '');
+        check('音频**真的能解码**（duration>0）', out.audioDur > 0,
+          'duration=' + (out.audioDur || 0).toFixed(2) + 's');
       } else {
         check('面板里生成了 <iframe>', out.hasIframe, '');
         check('iframe 带 sandbox（脚本不许跑）', out.iframeSandbox === '', 'sandbox=' + JSON.stringify(out.iframeSandbox));

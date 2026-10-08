@@ -232,6 +232,44 @@ function waitPort(port, timeoutMs) {
     check('最大化后视频跟着铺满', mx.hasBtn && mx.after.videoH === '100%', 'video height=' + (mx.after && mx.after.videoH));
     await shot(path.join(OUT, 'maximized.png'));
     console.log('     截图: ' + path.join(OUT, 'maximized.png'));
+
+    // ⑤ 面板全屏（用户 2026-10-08：要像官方「工作区文件」那样全屏显示）
+    // 分两步：先点全屏 → 截图 → 再还原（同一个 evaluate 里没法中途截图）
+    const fsc1 = await evaluate(async () => {
+      if (window.__dshLocalFiles) window.__dshLocalFiles.open();
+      await new Promise((r) => setTimeout(r, 500));
+      const panel = document.querySelector('#dsh-local-files-panel');
+      const btn = document.querySelector('#dsh-local-files-panel-full');
+      if (!panel || !btn) return { hasBtn: false };
+      const before = getComputedStyle(panel).width;
+      btn.click();
+      await new Promise((r) => setTimeout(r, 500));
+      return { hasBtn: true, before: before, full: getComputedStyle(panel).width, vw: window.innerWidth };
+    }, {});
+    await shot(path.join(OUT, 'fullscreen.png'));
+    const fsc2 = await evaluate(async () => {
+      const panel = document.querySelector('#dsh-local-files-panel');
+      const btn = document.querySelector('#dsh-local-files-panel-full');
+      btn.click();
+      await new Promise((r) => setTimeout(r, 400));
+      return { after: getComputedStyle(panel).width };
+    }, {});
+    const fsc = { hasBtn: fsc1.hasBtn, before: fsc1.before, full: fsc1.full, vw: fsc1.vw, after: fsc2.after };
+    check('面板有全屏按钮', fsc.hasBtn, '');
+    check('点全屏后铺满窗口宽度', fsc.hasBtn && Math.abs(parseFloat(fsc.full) - fsc.vw) < 2,
+      `${fsc.before} → ${fsc.full}（窗口宽 ${fsc.vw}）`);
+    check('还原后回到窄栏', fsc.hasBtn && fsc.after === fsc.before, '还原后=' + fsc.after);
+
+    // ⑥ 关掉面板后主界面不能留痕迹（用户原话：「不能对主界面有干扰」）
+    const clean = await evaluate(async () => {
+      if (window.__dshLocalFiles && window.__dshLocalFiles.close) window.__dshLocalFiles.close();
+      await new Promise((r) => setTimeout(r, 400));
+      const panel = document.querySelector('#dsh-local-files-panel');
+      return { display: panel ? getComputedStyle(panel).display : 'gone',
+        count: document.querySelectorAll('#dsh-local-files-panel').length };
+    }, {});
+    check('关闭后面板不可见（主界面无残留）', clean.display === 'none' || clean.display === 'gone',
+      'display=' + clean.display + ' · DOM 中面板数=' + clean.count);
     ws.close();
   } catch (e) {
     check('验证过程本身', false, e.message);

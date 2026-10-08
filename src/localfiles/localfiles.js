@@ -134,6 +134,7 @@
   var state = {
     filter: '',      // 搜索栏的关键词（2026-10-08 用户要求：文件太多难找）
     pvMax: false,    // 预览是否最大化到整栏
+    full: false,     // 面板是否全屏（2026-10-08 用户：要像官方「工作区文件」那样全屏）
     home: '', shortcuts: [], dir: '', parent: '', entries: [] };
 
   /**
@@ -239,9 +240,15 @@
       'fill="#F2B21B" opacity=".95"/><path d="M3 10h18v6.5A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5V10z" fill="#FFC94A"/></svg>';
     tab.appendChild(tabIcon);
     tab.appendChild(el('span', '', '本机内文件'));
+    var tabFull = el('button', 'border:0;background:transparent;color:inherit;opacity:.55;cursor:pointer;' +
+      'font-size:13px;line-height:1;padding:0 4px;', '⛶');
+    tabFull.id = PANEL_ID + '-full';
+    tabFull.title = '全屏 / 还原';
+    tabFull.addEventListener('click', function () { toggleFull(); });
     var tabClose = el('button', 'border:0;background:transparent;color:inherit;opacity:.55;cursor:pointer;' +
       'font-size:13px;line-height:1;padding:0 2px;', '✕');
     tabClose.addEventListener('click', closePanel);
+    tab.appendChild(tabFull);
     tab.appendChild(tabClose);
     tabRow.appendChild(tab);
     panel.appendChild(tabRow);
@@ -546,6 +553,34 @@
       return;
     }
     items.forEach(function (entry) { list.appendChild(rowFor(entry)); });
+  }
+
+  /** 面板全屏 / 还原（2026-10-08 用户：要像官方「工作区文件」那样全屏显示）。
+   *  ⚠️ 约束是用户原话「不能对主界面有干扰」——所以：
+   *    · 面板本就是 position:fixed 的**浮层**，全屏只是把宽度从 460px 改成 100vw，
+   *      不改主界面的任何布局（主界面在它下面原样待着）；
+   *    · 点 ✕ 关掉时全部恢复（closePanel 只做 display:none + 清内容），不留痕迹。 */
+  function toggleFull() {
+    var panel = document.getElementById(PANEL_ID);
+    var btn = document.getElementById(PANEL_ID + '-full');
+    var body = document.getElementById(PANEL_ID + '-preview-body');
+    if (!panel) return;
+    var P = palette();
+    state.full = !state.full;
+    if (state.full) {
+      panel.style.width = '100vw';
+      panel.style.borderLeft = '0';
+      panel.style.boxShadow = 'none';
+      if (btn) { btn.textContent = '⤡'; btn.title = '还原'; }
+      // 全屏时预览天然能更大（没最大化时给到 70vh；已最大化则维持铺满）
+      if (body && !state.pvMax) body.style.maxHeight = '70vh';
+    } else {
+      panel.style.width = 'min(460px,94vw)';
+      panel.style.borderLeft = '1px solid ' + P.border;
+      panel.style.boxShadow = '-10px 0 28px rgba(0,0,0,.28)';
+      if (btn) { btn.textContent = '⛶'; btn.title = '全屏 / 还原'; }
+      if (body && !state.pvMax) body.style.maxHeight = '46vh';
+    }
   }
 
   /** 预览最大化 / 还原：把预览铺满整栏（列表先收起来），还原时原样放回 */

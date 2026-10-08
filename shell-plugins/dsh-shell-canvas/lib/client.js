@@ -126,8 +126,8 @@ window.__ModuleLoader__.load({
    改后是**竖排海报卡**：缩略图占满卡片上半部、信息在下，选中时品牌色描边 + 外发光，
    悬停轻微上浮。模板是"能出什么片子"的第一眼印象，必须让它当视觉主角。 */
 .dshcv-tpl{display:flex;flex-direction:column;gap:0;align-items:stretch;width:100%;text-align:left;padding:0;border-radius:14px;overflow:hidden;border:1px solid transparent;background:var(--dsw-alias-bg-layer-1);color:inherit;cursor:pointer;font:inherit;transition:transform .14s ease,box-shadow .14s ease,border-color .14s ease,background .14s ease}
-.dshcv-tpl:hover{transform:translateY(-2px);box-shadow:0 6px 18px rgba(0,0,0,.18);border-color:var(--dsw-alias-border-l2)}
-.dshcv-tpl[aria-pressed="true"]{border-color:var(--dsw-alias-brand-primary);box-shadow:0 0 0 2px color-mix(in srgb, var(--dsw-alias-brand-primary) 28%, transparent),0 6px 18px rgba(0,0,0,.16)}
+.dshcv-tpl:hover{transform:translateY(-2px);box-shadow:0 6px 18px color-mix(in srgb, var(--dsw-alias-label-primary) 14%, transparent);border-color:var(--dsw-alias-border-l2)}
+.dshcv-tpl[aria-pressed="true"]{border-color:var(--dsw-alias-brand-primary);box-shadow:0 0 0 2px color-mix(in srgb, var(--dsw-alias-brand-primary) 30%, transparent),0 6px 18px color-mix(in srgb, var(--dsw-alias-label-primary) 12%, transparent)}
 .dshcv-poster{width:100%;flex:none;height:104px;overflow:hidden;border:0;border-bottom:1px solid var(--dsw-alias-border-l1);object-fit:cover;display:block;background:var(--dsw-alias-bg-layer-2)}
 /* ⚠️ 缩略图统一成 104px 高的"横条"：第一次改成 width:100%+aspect-ratio 后，
    竖版模板把卡片撑成 300×550 的巨块，**模板名/参数/标签全被挤出可视区**
@@ -157,8 +157,12 @@ window.__ModuleLoader__.load({
 .dshcv-btn:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2))}
 .dshcv-btn:disabled{opacity:.45;cursor:not-allowed}
 .dshcv-btn.sm{height:26px;padding:0 10px;font-size:11.5px;border-radius:8px}
-.dshcv-btn-primary{background:linear-gradient(135deg, var(--dsw-alias-brand-primary), color-mix(in srgb, var(--dsw-alias-brand-primary) 74%, #001014));border-color:transparent;color:#fff;font-weight:650;box-shadow:0 3px 14px color-mix(in srgb, var(--dsw-alias-brand-primary) 36%, transparent)}
-.dshcv-btn-primary:hover:not(:disabled){filter:brightness(1.07);background:linear-gradient(135deg, var(--dsw-alias-brand-primary), color-mix(in srgb, var(--dsw-alias-brand-primary) 74%, #001014))}
+/* ⚠️ 主按钮**不许出现硬编码颜色**（2026-10-08）：第一版写了 #001014 和 #fff，
+   浅色主题下按钮会变成"深色渐变 + 白字"，和整个浅色界面打架。
+   现在只用宿主 token 自混：深色下自然变深、浅色下自然变亮。
+   注意：这段在模板字符串里，**注释里不能出现反引号**（踩过）。 */
+.dshcv-btn-primary{background:var(--dsw-alias-button-primary-fill, var(--dsw-alias-brand-primary));border-color:transparent;color:var(--dsw-alias-label-primary-foreground);font-weight:650;box-shadow:0 3px 14px color-mix(in srgb, var(--dsw-alias-brand-primary) 34%, transparent)}
+.dshcv-btn-primary:hover:not(:disabled){background:color-mix(in srgb, var(--dsw-alias-button-primary-fill, var(--dsw-alias-brand-primary)) 90%, var(--dsw-alias-label-primary))}
 /* 主操作（出片）按钮再大一号：一屏里最想让用户点的就是它 */
 .dshcv-btn-main{height:42px;padding:0 22px;border-radius:12px;font-size:14.5px}
 .dshcv-btn-primary:hover:not(:disabled){background:var(--dsw-alias-button-primary-hover, var(--dsw-alias-brand-primary))}

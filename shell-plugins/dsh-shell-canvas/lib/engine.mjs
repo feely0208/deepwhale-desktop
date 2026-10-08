@@ -12,7 +12,7 @@
 import { existsSync, readFileSync, readdirSync, statSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { homedir } from 'node:os';
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL, fileURLToPath } from 'node:url';
 
 /** 判定"这就是深鲸画布引擎根目录"的必备文件。 */
 const MARKERS = [
@@ -60,13 +60,31 @@ export function probe(root) {
   return { root: abs, ok: missing.length === 0, missing };
 }
 
-/** 探测链：显式覆盖 → 环境变量 → 常见检出位置。 */
+/** 插件自带的引擎核心目录（`<plugin>/engine`，由 scripts/sync-canvas-engine.sh 同步产生）。
+ *  2026-10-08：插件开始**内置引擎核心**（1.4 MB，零模型），用户不该再被要求"指定引擎目录"。*/
+export function bundledRoot() {
+  try {
+    return resolve(dirname(fileURLToPath(import.meta.url)), '..', 'engine');
+  } catch {
+    return null;
+  }
+}
+
+/** 探测链：显式覆盖 → 环境变量 → 配置文件 → **插件自带** → 常见检出位置。
+ *
+ *  顺序为什么这么排（2026-10-08 定）：
+ *    · `explicit` / `DSH_CANVAS_ROOT` / 配置文件 都排在前面 —— **用户说了算**，
+ *      开发时想用活的源码目录就设它们；
+ *    · 自带引擎排在**开发机常见路径之前** —— 它是随包发的、必然存在且与插件版本一致，
+ *      不该被"恰好存在的另一个目录"抢走；
+ *    · 常见检出位置留在最后 —— 方便老开发机无配置直接跑，坏了也不影响用户。 */
 export function candidates(explicit) {
   const home = homedir();
   return [
     explicit,
     process.env.DSH_CANVAS_ROOT,
     readOverride(),
+    bundledRoot(),
     join(home, 'DeepSeek Harness', 'canvas'),
     join(home, 'deepwhale-canvas'),
     join(home, 'canvas'),

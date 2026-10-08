@@ -286,6 +286,21 @@ export function presetBackgroundCss(preset: string): string | null {
       }
       [class*="sidebarCol"] { background: rgba(247, 248, 250, 0.40) !important; }
 
+      /* ⚠️ 铺满视口的浮层必须**不透明**（2026-10-08 修）。
+         病根：DSH 的账号/设置全屏层拿 var(--dsw-alias-bg-base) 当底色 ——
+             「.<hash>_overlay{background:var(--dsw-alias-bg-base);position:fixed;inset:0}」
+             （实测来自 dsh-client-ui-settings-account），
+             而上面为了"让辉光透出来"把这个 token 设成了 transparent / 半透明 →
+             全屏时底下的会话正文**整片透上来**，就是用户反复报的那句
+             「全屏时一整片怪白页、会话文字透上来」。
+         为什么只覆盖浮层子树、**不动 token 本身**：框架层（壁纸/辉光那一层）**不在**任何
+             「*_overlay」子树里，所以主界面观感**按构造零变化** —— 这正是用户
+             「修这个不能影响主界面白屏」的要求；改 token 本身会把框架层也做实、辉光就没了。
+         核对过：全树只有「.<hash>_overlay」一条规则拿该 token 当背景；
+             「VOzbGW_overlay」（设置弹窗遮罩）自身没有背景，只会让它的**子面板**变实
+             —— 那恰好是用户 2026-10-01 提过的方向（「设置里面看有点透底」）。 */
+      [class*="_overlay"] { --dsw-alias-bg-base: #ffffff !important; }
+
       /* ── 深色 ── */
       body[data-ds-dark-theme] {${glowBackgroundCss('dark')}
         /* 正文底半实：辉光透一点、文字压得住（全透会让辉光糊到文字上） */
@@ -301,6 +316,9 @@ export function presetBackgroundCss(preset: string): string | null {
         --dsw-specific-sidebar-nav-item-hover: rgba(255, 255, 255, 0.05) !important;
       }
       body[data-ds-dark-theme] [class*="sidebarCol"] { background: rgba(14, 17, 22, 0.78) !important; }
+      /* 深色下同理：铺满视口的浮层用**实底色**（取值与本预设正文底同色 rgb(11,16,24)），
+         这样全屏时不会透出底下的会话文字。见上面浅色那段的说明。 */
+      body[data-ds-dark-theme] [class*="_overlay"] { --dsw-alias-bg-base: #0b1018 !important; }
     `;
 }
 

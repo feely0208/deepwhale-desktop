@@ -198,18 +198,16 @@ async function main() {
   fs.cpSync(localReloadPlugin, path.join(outDir, 'dsh-shell-reload'), { recursive: true });
   console.log('[bundled-plugins]   → dsh-shell-reload（本地源码）');
 
-  // 空白会话顶部的品牌标记 → 青色大肥鱼。
-  //
-  // ⚠️ 这个插件**曾经丢失过**（同理还有下面的 web-preview）：源码被放进了本目录
-  //    （gitignore 的构建产物），而本脚本一进来就把它整个清空重建 —— 跑一次就没了，
-  //    git 里也看不见。详见 src/main/bundled-plugins.ts 的同处说明。
-  //    下面那道"声明 == 载荷"闸门就是为了让这种丢失**当场报错**，而不是安静少一个插件。
-  const localBrandMarkPlugin = path.join(__dirname, '..', 'shell-plugins', 'dsh-shell-brand-mark');
-  if (!fs.existsSync(path.join(localBrandMarkPlugin, 'cordis.patch.yml'))) {
-    throw new Error(`缺少本地插件源码：${localBrandMarkPlugin}（应随仓库提交，不是构建产物）`);
-  }
-  fs.cpSync(localBrandMarkPlugin, path.join(outDir, 'dsh-shell-brand-mark'), { recursive: true });
-  console.log('[bundled-plugins]   → dsh-shell-brand-mark（本地源码）');
+  // ⛔ 品牌标记（空白会话顶部的青色大肥鱼）—— **不进包**（2026-10-08 用户决定：
+  //    「不要换新会话的大肥鱼头像，还是用官方原生的」）。
+  //    源码保留在 shell-plugins/dsh-shell-brand-mark/，谁要谁自己装。
+  //    要重新进包：取消下面这段注释，**并同时**打开 src/main/bundled-plugins.ts 里那条声明。
+  // const localBrandMarkPlugin = path.join(__dirname, '..', 'shell-plugins', 'dsh-shell-brand-mark');
+  // if (!fs.existsSync(path.join(localBrandMarkPlugin, 'cordis.patch.yml'))) {
+  //   throw new Error(`缺少本地插件源码：${localBrandMarkPlugin}（应随仓库提交，不是构建产物）`);
+  // }
+  // fs.cpSync(localBrandMarkPlugin, path.join(outDir, 'dsh-shell-brand-mark'), { recursive: true });
+  // console.log('[bundled-plugins]   → dsh-shell-brand-mark（本地源码）');
 
   // 官方右栏「网页预览」的 disabled 覆盖（本包不插自己的行，只是覆盖层）。
   const localWebPreviewPlugin = path.join(__dirname, '..', 'shell-plugins', 'dsh-shell-web-preview');

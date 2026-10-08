@@ -189,6 +189,13 @@ export class SkinManager {
       body:not([data-ds-dark-theme]) [class*="sidebarCol"] {
         background: linear-gradient(to right, rgba(247, 248, 250, 0.94), rgba(247, 248, 250, 0.18)) !important;
       }
+      /* ⚠️ 铺满视口的浮层必须**不透明**（2026-10-08 修，壁纸模式）。
+         上面把 --dsw-alias-bg-base 设成 transparent 是为了让壁纸透出来 —— 但 DSH 的
+         账号/设置全屏层正是拿这个 token 当底色（.<hash>_overlay{background:var(--dsw-alias-bg-base);
+         position:fixed;inset:0}，实测来自 dsh-client-ui-settings-account），
+         于是全屏时底下的会话正文整片透上来（用户反复报的「怪白页/会话文字透上来」）。
+         只覆盖浮层子树：壁纸/框架层不在任何「*_overlay」子树里，主界面观感**按构造零变化**。 */
+      [class*="_overlay"] { --dsw-alias-bg-base: #ffffff !important; }
       /* 深色：壁纸必须压得够暗。只压到 0.92 的话，浅色壁纸（雾/白底图）会把
          整个内容区托成灰蓝，而侧栏和卡片是深色 → "只有模块是黑的、背景一片灰"。
          0.30 让壁纸退成质感，底色重新掌握在深色主题手里。 */
@@ -211,6 +218,8 @@ export class SkinManager {
       body[data-ds-dark-theme] [class*="sidebarCol"] {
         background: #14171c !important;
       }
+      /* 深色壁纸模式同理：全屏浮层用实底色（与本模式的浮层色一致），不透出会话文字。 */
+      body[data-ds-dark-theme] [class*="_overlay"] { --dsw-alias-bg-base: #16191e !important; }
     `;
     try {
       const key = await win.webContents.insertCSS(css, { cssOrigin: 'author' });

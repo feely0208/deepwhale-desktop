@@ -2018,38 +2018,115 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
             console.log('[smoke] sidebar-probe:', probe);
 
             // ⚠️ 2026-10-04 回归断言（用户实机："全屏时一整片怪白页、会话文字透上来"）：
-            //    皮肤不能把 `--dsw-alias-bg-base` 打薄 —— DSH 的平台浮层/onboarding 层
-            //    （`.[hash]_overlay{background:var(--dsw-alias-bg-base);position:fixed;inset:0}`）
-            //    就是用它当底色的；同时框架层必须仍透明，否则壁纸/预设就白做了。
+            //    皮肤不能把 `--dsw-alias-bg-base` 打薄 —— DSH **铺满视口**的平台浮层
+            //    （实测：`.<hash>_overlay{background:var(--dsw-alias-bg-base);position:fixed;inset:0}`，
+            //     来自 dsh-client-ui-settings-account）就是用它当底色的。
+            //
+            // ⚠️ 2026-10-08：**这道断言此前是坏的**，永远通过 —— 这正是白屏反复复发的原因。
+            //    两个毛病：
+            //      ① 探针元素 `className = 'dsh-probe-overlay'` **匹配不到任何 CSS 规则**
+            //         （真实类是带 hash 的 `.<hash>_overlay`）→ 量到的永远是 `rgba(0,0,0,0)`；
+            //      ② 判定写成 `!/rgba\([^)]*,\s*0?\.\d+\)|transparent/`：
+            //         `rgba(0, 0, 0, 0)` 里既没有 `0.xx` 也没有 `transparent` 这个词，
+            //         于是**全透明被判成"不透明"**，还打印「浮层不透明（不会被掏空）」。
+            //    现在改成：从**真实存在的浮层元素**上取计算样式，并按 alpha 数值判定（必须 =1）。
             const skinProbe = await mainWin!.webContents.executeJavaScript(`(() => {
               const cs = getComputedStyle(document.body);
               const token = (cs.getPropertyValue('--dsw-alias-bg-base') || '').trim();
               const frame = document.querySelector('[class*="frame"]');
               const frameBg = frame ? getComputedStyle(frame).backgroundColor : 'no-frame';
-              // 借一个同 class 特征的临时元素，量"浮层"规则有没有生效
+
+              // 找出**真正拿 --dsw-alias-bg-base 当背景**的浮层规则。
+              // 为什么要查规则而不是查元素：透明的浮层分两种 ——
+              //   ① 合法的：纯布局包装层（如设置弹窗的 VOzbGW_overlay，自身没有背景）
+              //   ② 有病的：铺满视口、用该 token 当底色（如 _44HXVa_overlay，账号/设置全屏层）
+              // 只看计算样式分不出来（token 是 transparent 时两者都算出 rgba(0,0,0,0)），
+              // 所以直接读规则里有没有 background: var(--dsw-alias-bg-base)。
+              const basePainters = [];
+              for (const sheet of Array.from(document.styleSheets)) {
+                let rules;
+                try { rules = sheet.cssRules; } catch (e) { continue; } // 跨域表会抛
+                for (const r of Array.from(rules || [])) {
+                  const sel = r.selectorText || '';
+                  if (!sel || sel.indexOf('_overlay') < 0) continue;
+                  const bg = (r.style && r.style.getPropertyValue('background')) || '';
+                  const bgi = (r.style && r.style.getPropertyValue('background-image')) || '';
+                  if (/--dsw-alias-bg-base/.test(bg + ' ' + bgi)) basePainters.push({ sel: sel.slice(0, 80), bg: bg.slice(0, 80) });
+                }
+              }
+
+              // 页面上真有这种浮层时，直接量它的实际底色
+              const live = [...document.querySelectorAll('[class*="_overlay"]')]
+                .map((el) => {
+                  const s = getComputedStyle(el);
+                  return { cls: String(el.className || '').slice(0, 60), bg: s.backgroundColor, pos: s.position };
+                })
+                .filter((o) => o.pos === 'fixed' && o.bg && o.bg !== 'rgba(0, 0, 0, 0)');
+
+              // 关键探针：在**一个匹配 [class*="_overlay"] 的真实元素**上量 token。
+              // 这正是原来那条断言想做但做错的事 —— 它用的类名匹配不到任何 CSS 规则，
+              // 所以永远量到 rgba(0,0,0,0)。这里让探针**真的命中我们的覆盖规则**。
               const probe = document.createElement('div');
-              probe.className = 'dsh-probe-overlay';
-              probe.style.cssText = 'position:fixed;left:-9999px;top:0;width:10px;height:10px;';
+              probe.className = 'dsh-probe-x_overlay';
+              probe.style.cssText = 'position:fixed;left:-9999px;top:0;width:4px;height:4px;';
               document.body.appendChild(probe);
-              const overlayBg = getComputedStyle(probe).backgroundColor;
+              const probeToken = getComputedStyle(probe).getPropertyValue('--dsw-alias-bg-base').trim();
+              const probeBg = getComputedStyle(probe).backgroundColor;
               probe.remove();
-              return JSON.stringify({ token, frameBg, overlayBg });
+
+              return JSON.stringify({ token, frameBg, basePainters, live, probeToken, probeBg });
             })()`);
             console.log('[smoke] skin-token:', skinProbe);
             {
-              const sp = JSON.parse(skinProbe) as { token: string; frameBg: string; overlayBg?: string };
-              // 2026-10-04 定稿：**皮肤按 1.0.47 的标准**（用户拍板："直接按照47的标准，
-              // 辉光就可以正常显示"）—— 所以这里不再对 --dsw-alias-bg-base 做要求
-              // （47 的深色预设本来就是半透明底色，那是对的）。
-              // 真正要守的两条改由"像素检查"承担：辉光可见 + 面板可读（见后面的双主题验证）。
+              const sp = JSON.parse(skinProbe) as {
+                token: string;
+                frameBg: string;
+                basePainters?: { sel: string; bg: string }[];
+                live?: { cls: string; bg: string; pos: string }[];
+                probeToken?: string;
+              };
+              // 皮肤底色按 1.0.47 标准（用户拍板）：**不对 token 本身做要求** ——
+              // 47 的深色预设本来就是半透明底色，那是对的（辉光要靠它透出来）。
               console.log('[smoke] 皮肤底色（按 47 标准，不做限制）：' + sp.token);
-              const ob = String(sp.overlayBg || '');
-              const overlayOpaque = ob && !/rgba\([^)]*,\s*0?\.\d+\)|transparent/.test(ob);
-              if (!overlayOpaque) {
-                console.error('[smoke] 浮层底色不是不透明的（' + ob + '）→ 全屏会出现"怪白页/文字透上来"');
+
+              /** 按计算样式的 alpha 数值判定是否不透明（支持 rgb()/rgba()/transparent/百分比）。 */
+              const alphaOf = (v: string): number => {
+                const s = String(v || '').trim();
+                if (!s || s === 'transparent') return 0;
+                const m = s.match(/rgba?\(([^)]+)\)/i);
+                if (!m) return 1; // 非 rgb 形式按不透明处理，避免误报
+                const parts = m[1].split(/[,/]/).map((x) => x.trim()).filter((x) => x !== '');
+                if (parts.length < 4) return 1;
+                const raw = parts[3];
+                const a = Number(raw.replace('%', ''));
+                if (Number.isNaN(a)) return 1;
+                return raw.includes('%') ? a / 100 : a;
+              };
+
+              const painters = sp.basePainters || [];
+              const live = (sp.live || []).filter((o) => alphaOf(o.bg) < 1);
+              const probeAlpha = alphaOf(String(sp.probeToken || ''));
+              if (painters.length === 0) {
+                // 没找到"拿 token 当底色"的浮层规则 —— 可能 DSH 换了实现，值得知道
+                console.log('[smoke] 没有找到拿 --dsw-alias-bg-base 当背景的浮层规则（DSH 实现可能变了）');
+              } else if (probeAlpha < 1) {
+                console.error(
+                  '[smoke] ❌ 浮层子树里的 --dsw-alias-bg-base 仍是半透明（' + String(sp.probeToken) +
+                    '）→ 全屏会出现"怪白页/会话文字透上来"。受影响规则=' + JSON.stringify(painters),
+                );
+                process.exitCode = 1;
+              } else if (live.length > 0) {
+                console.error(
+                  '[smoke] ❌ 页面上铺满视口的浮层底色不是不透明的 → 全屏会出现"怪白页/会话文字透上来"：' +
+                    JSON.stringify(live),
+                );
                 process.exitCode = 1;
               } else {
-                console.log('[smoke] 浮层不透明（不会被掏空）：' + ob);
+                console.log(
+                  '[smoke] ✅ 浮层不透明：拿 bg-base 当底色的规则 ' + String(painters.length) +
+                    ' 条；浮层子树内 token=' + String(sp.probeToken) +
+                    '（正文层仍是 ' + sp.token + '，辉光不受影响）',
+                );
               }
             }
 
@@ -2890,34 +2967,34 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
               console.warn('[smoke] 快捷键检查异常:', e);
             }
 
-            // —— 品牌标记：空白会话顶部应是「青色大肥鱼」（用户要求与弹窗/宠物统一）——
+            // —— 品牌标记：空白会话顶部**保留 DSH 官方原生标记**（2026-10-08 用户决定）——
+            //
+            // 用户原话：「不要换新会话的大肥鱼头像，还是用官方原生的」。
+            // 所以本断言**跟着决定反过来**：`dsh-shell-brand-mark` **不该**被加载；
+            // 一旦它又进了 boot 列表，说明有人把插件加回了随包清单，这里必须报红。
+            //
+            // ⚠️ 别和 `sidebar.brand.mark`（侧栏左上那个 deepseek 鲸标）搞混 ——
+            //    那个任何时候都不许碰，从来没被占过。
             try {
               const mark = await mainWin!.webContents.executeJavaScript(`(async () => {
                 const el = document.querySelector('[data-dsh-brand-mark]');
-                const img = el ? el.querySelector('img') : null;
                 let loaded = false;
                 try {
                   const r = await fetch('/', { credentials: 'same-origin' });
                   const html = await r.text();
                   loaded = html.indexOf('dsh-shell-brand-mark') >= 0;
                 } catch (e) { loaded = false; }
-                return JSON.stringify({
-                  present: !!el,
-                  isDataUri: !!img && String(img.src || '').indexOf('data:image/png') === 0,
-                  w: img ? img.width : 0,
-                  loaded: loaded,
-                });
+                return JSON.stringify({ present: !!el, loaded: loaded });
               })()`);
-              const mk = JSON.parse(mark) as { present: boolean; isDataUri: boolean; w: number; loaded: boolean };
-              if (!mk.loaded) {
-                console.error('[smoke] 品牌标记插件没被加载（boot 列表里没有 dsh-shell-brand-mark）');
-                process.exitCode = 1;
-              } else if (mk.present) {
-                console.log(
-                  '[smoke] 品牌标记已替换为青色大肥鱼（' + String(mk.w) + 'px，data URI=' + String(mk.isDataUri) + '）',
+              const mk = JSON.parse(mark) as { present: boolean; loaded: boolean };
+              if (mk.loaded || mk.present) {
+                console.error(
+                  '[smoke] ❌ 空白会话的品牌标记被替换了（dsh-shell-brand-mark 出现在 boot 列表里，' +
+                    'present=' + String(mk.present) + '）—— 用户要求保留官方原生标记',
                 );
+                process.exitCode = 1;
               } else {
-                console.log('[smoke] 品牌标记插件已加载（插槽本轮未渲染：它只在空白会话出现）');
+                console.log('[smoke] ✅ 空白会话品牌标记保持官方原生（没被我们的插件替换）');
               }
             } catch (e) {
               console.warn('[smoke] 品牌标记检查异常:', e);

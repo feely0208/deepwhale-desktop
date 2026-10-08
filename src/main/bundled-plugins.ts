@@ -47,8 +47,8 @@ const BUNDLED_PLUGINS: BundledPlugin[] = [
   // 官方把它挂在 `profileContext.name === 'desktop'` 条件下，而同一个条件还开着
   // 官方遥测与产品埋点 —— 所以我们不改 profile 名，只单独覆盖这一条 disabled。
   { name: '@deepwhale-cn/dsh-shell-web-preview', dir: 'dsh-shell-web-preview' },
-  // 空白会话顶部的品牌标记 → 青色大肥鱼（与更新弹窗、宠物统一视觉）
-  { name: '@deepwhale-cn/dsh-shell-brand-mark', dir: 'dsh-shell-brand-mark' },
+  // ⛔ 品牌标记（空白会话顶部的青色大肥鱼）**不进包** —— 见文件末尾那条说明
+  //    （2026-10-08 用户决定：保留 DSH 官方原生的品牌标记）。原来这里是它的声明，已摘掉。
   // 「深鲸画布」面板（2026-10-07，S3）：选模板 → 填参数 → 校验 → 预览 → 出横竖双版成片。
   // 宿主半边挂了 /dsh-canvas HTTP 出口并起渲染子进程；**引擎（canvas/）不在本仓库里**，
   // 由 `$DSH_HOME/dsh-canvas.json` 或面板里的「引擎设置」指定目录。
@@ -69,19 +69,19 @@ const BUNDLED_PLUGINS: BundledPlugin[] = [
   // 「改完插件让用户刷新一下」变成一句空话。本插件用 DSH 的快捷键服务把这一键补回来。
   // 零界面、零依赖，解决的是"用户界面出问题时没有自救入口"，该随包发。
   { name: '@deepwhale-cn/dsh-shell-reload', dir: 'dsh-shell-reload' },
-  // 空白会话顶部的品牌标记 → 青色大肥鱼（与首次启动面板、更新弹窗、桌面宠物统一视觉）。
+  // ⛔ 品牌标记（空白会话顶部的青色大肥鱼）—— **不进包**（2026-10-08 用户决定）。
   //
-  // ⚠️ 这两个（brand-mark / web-preview）**曾经丢失过**：1.0.48 / 1.0.53 期间它们的源码
-  //    被放进了 gitignore 的 `bundled-plugins/` 目录，而 `build-bundled-plugins.js`
-  //    每次开头就把那个目录整个清空重建 → 跑一次构建就没了，git 里也看不见。
-  //    结果：功能从来没随包发出去过，而冒烟断言一直在等它们（brand-mark 那条会
-  //    `process.exitCode = 1`，也就是冒烟一直是红的）。
-  //    2026-10-08 按 git 历史里的规格补齐源码，并加了"声明 == 载荷"的构建闸门防复发。
-  { name: '@deepwhale-cn/dsh-shell-brand-mark', dir: 'dsh-shell-brand-mark' },
-  // 官方右栏「网页预览」：官方把 `ui-sidebar-browser` 挂在
-  // `profileContext.name === 'desktop'` 条件下，而同一个条件还开着官方遥测与埋点 ——
-  // 所以不改 profile 名，只单独覆盖这一条的 disabled。
-  { name: '@deepwhale-cn/dsh-shell-web-preview', dir: 'dsh-shell-web-preview' },
+  // 用户原话：「不要换新会话的大肥鱼头像，还是用官方原生的」。
+  // 即：空白会话顶部那个品牌标记**保留 DSH 官方原样**，不换成我们的大肥鱼。
+  //
+  // ⚠️ 别和 `sidebar.brand.mark`（侧栏左上那个 deepseek 鲸标）搞混：
+  //    那个**任何时候都不要碰**，本插件也从来没占过它。
+  //
+  // 源码保留在 `shell-plugins/dsh-shell-brand-mark/`（1.0.48~1.0.53 期间丢过一次，
+  // 现在源码已入库），谁想要谁自己装。
+  // 要重新进包：把下面这行取消注释，**并同时**打开 `scripts/build-bundled-plugins.js`
+  // 里对应的拷贝步骤 —— 两处必须同进同出（否则掉进"声明了但载荷里没有"的坑）。
+  // { name: '@deepwhale-cn/dsh-shell-brand-mark', dir: 'dsh-shell-brand-mark' },
 ];
 
 /** 注入结果。 */

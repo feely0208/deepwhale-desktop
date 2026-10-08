@@ -202,9 +202,16 @@ window.__ModuleLoader__.load({
 .dshcv-job-h{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
 .dshcv-job-t{font-weight:600;font-size:12.5px}
 .dshcv-log{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10.5px;line-height:1.65;color:var(--dsw-alias-label-secondary);max-height:170px;overflow:auto;white-space:pre-wrap;margin:0;padding:10px 12px;border-radius:9px;background:var(--dsw-alias-bg-layer-2);border:.5px solid var(--dsw-alias-border-l1)}
-.dshcv-result{display:flex;gap:14px;flex-wrap:wrap;margin-top:2px}
+/* 成片并排（2026-10-08）：以前是 flex-wrap 上下堆，两个成片各占一行、
+   还把视频挤到 330px 高。评审要看"横竖两版一起"，改成两列网格，窄屏才堆叠。 */
+.dshcv-result{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:2px}
+@media (max-width:900px){.dshcv-result{grid-template-columns:1fr}}
+/* 全屏浮层看片：点 ⛶ 后铺满整块面板，点空白关闭 */
+.dshcv-big{position:fixed;inset:0;z-index:2147483000;background:rgba(0,0,0,.9);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;cursor:zoom-out}
+.dshcv-big video{max-width:94vw;max-height:86vh;border-radius:12px;background:#000}
+.dshcv-big-hint{color:rgba(255,255,255,.75);font-size:12.5px}
 .dshcv-video{display:flex;flex-direction:column;gap:7px}
-.dshcv-video video{border-radius:10px;border:.5px solid var(--dsw-alias-border-l1);background:#000;max-height:330px;display:block;max-width:100%}
+.dshcv-video video{border-radius:10px;border:.5px solid var(--dsw-alias-border-l1);background:#000;width:100%;max-height:min(48vh,460px);display:block}
 
 /* ── 空态 ───────────────────────────────────────────────────────── */
 .dshcv-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--dsw-alias-label-secondary);font-size:12px;padding:34px 18px;text-align:center;border:.5px dashed var(--dsw-alias-border-l1);border-radius:12px;line-height:1.6}
@@ -277,6 +284,7 @@ window.__ModuleLoader__.load({
     /** 模板缩略图：图挂了就退回占位，而不是留一个空框（"图片裂了"比"没有图"更廉价）。 */
     function Poster({ url, wide, alt }) {
       const [broken, setBroken] = useState(false);
+      const [big, setBig] = useState(null);   // 全屏看片：存视频 URL
       const cls = `dshcv-poster${wide ? ' dshcv-poster-wide' : ''}`;
       if (!url || broken) {
         return h('div', { className: `${cls} dshcv-poster-ph` }, [
@@ -794,9 +802,21 @@ window.__ModuleLoader__.load({
                 `${f.orientation === 'vertical' ? '竖版' : '横版'}` +
                 (typeof f.bytes === 'number' ? ` · ${(f.bytes / 1048576).toFixed(2)} MB` : '') +
                 (typeof f.durationSec === 'number' ? ` · ${f.durationSec}s` : '')),
+              h(Btn, { key: 'z', size: 'sm', onClick: () => setBig(fileUrl(f.file)) }, '⛶ 放大'),
+              h(Btn, { key: 'p', size: 'sm', onClick: () => run('打开', () => api('/open', { method: 'POST', body: { path: f.file } })) }, '播放器打开'),
+              h(Btn, {
+                key: 'cp', size: 'sm',
+                onClick: () => { try { navigator.clipboard.writeText(f.file); } catch (e) { /* 剪贴板不可用就算了 */ } },
+              }, '复制路径'),
               h(Btn, { key: 'o', size: 'sm', onClick: () => onReveal(f.file) }, '打开位置'),
             ]),
           ]))),
+          big ? h('div', {
+            key: 'big', className: 'dshcv-big', onClick: () => setBig(null),
+          }, [
+            h('video', { key: 'bv', src: big, controls: true, autoPlay: true, onClick: (e) => e.stopPropagation() }),
+            h('div', { key: 'h', className: 'dshcv-big-hint' }, '点空白处关闭'),
+          ]) : null,
           srt ? h('div', { key: 'srt', className: 'dshcv-row', style: { marginTop: 10 } }, [
             h('span', { className: 'dshcv-sub', key: 'l' }, `字幕 ${job.result.subtitle.cues} 条`),
             h(Btn, { key: 'b', size: 'sm', onClick: () => onReveal(srt) }, '打开字幕'),

@@ -190,6 +190,7 @@ export function apply(ctx) {
       if (p === `${ROUTE}/api/cancel` && req.method === 'POST') return send(res, 200, jobs.cancel(body.id, body));
       if (p === `${ROUTE}/api/posters` && req.method === 'POST') return send(res, 200, apiPosters(body));
       if (p === `${ROUTE}/api/reveal` && req.method === 'POST') return send(res, 200, apiReveal(body));
+      if (p === `${ROUTE}/api/open` && req.method === 'POST') return send(res, 200, apiOpen(body));
       if (p === `${ROUTE}/api/osr` && req.method === 'POST') return send(res, 200, await ensureElectron(!!body.force));
       if (p === `${ROUTE}/api/engine` && req.method === 'GET') return send(res, 200, state.resolved);
 
@@ -279,6 +280,30 @@ export function apply(ctx) {
   function apiPosters(body) {
     const { spec, catalog } = buildPosterSpec(body);
     return jobs.start(spec, { kind: 'posters' }, { title: `模板预览图（${catalog.length} 组）` });
+  }
+
+  /** 用系统默认程序打开文件本身（2026-10-08）——评审成片要看真实色彩/流畅度，
+   *  浏览器里的 <video> 看不准，得能在系统播放器里放。
+   *  与 apiReveal 的区别：reveal 是"在文件夹里选中它"，open 是"直接打开它"。
+   *  权限与 reveal 一致：**只允许产物目录/引擎目录里的文件**（别让它变成任意文件执行口）。 */
+  function apiOpen(body) {
+    const target = String(body.path || '');
+    const root = outputRoot();
+    const abs = resolve(target);
+    if (!inside(abs, root) && !inside(abs, state.resolved?.root || '')) {
+      throw httpError(403, '只允许打开产物目录里的文件');
+    }
+    if (!existsSync(abs)) throw httpError(404, `路径不存在：${abs}`);
+    if (statSync(abs).isDirectory()) throw httpError(400, '这是目录，用「打开位置」');
+    const cmd = process.platform === 'darwin' ? ['open', [abs]]
+      : process.platform === 'win32' ? ['cmd', ['/c', 'start', '', abs]]
+        : ['xdg-open', [abs]];
+    try {
+      spawn(cmd[0], cmd[1], { detached: true, stdio: 'ignore' }).unref();
+    } catch (error) {
+      throw httpError(500, `打不开：${error.message}`);
+    }
+    return { ok: true, path: abs };
   }
 
   function apiReveal(body) {

@@ -198,16 +198,10 @@ async function main() {
   fs.cpSync(localReloadPlugin, path.join(outDir, 'dsh-shell-reload'), { recursive: true });
   console.log('[bundled-plugins]   → dsh-shell-reload（本地源码）');
 
-  // ⛔ 品牌标记（空白会话顶部的青色大肥鱼）—— **不进包**（2026-10-08 用户决定：
-  //    「不要换新会话的大肥鱼头像，还是用官方原生的」）。
-  //    源码保留在 shell-plugins/dsh-shell-brand-mark/，谁要谁自己装。
-  //    要重新进包：取消下面这段注释，**并同时**打开 src/main/bundled-plugins.ts 里那条声明。
-  // const localBrandMarkPlugin = path.join(__dirname, '..', 'shell-plugins', 'dsh-shell-brand-mark');
-  // if (!fs.existsSync(path.join(localBrandMarkPlugin, 'cordis.patch.yml'))) {
-  //   throw new Error(`缺少本地插件源码：${localBrandMarkPlugin}（应随仓库提交，不是构建产物）`);
-  // }
-  // fs.cpSync(localBrandMarkPlugin, path.join(outDir, 'dsh-shell-brand-mark'), { recursive: true });
-  // console.log('[bundled-plugins]   → dsh-shell-brand-mark（本地源码）');
+  // ⛔ 品牌标记插件（空白会话顶部的青色大肥鱼）—— **已彻底删除**（2026-10-08 用户决定：
+  //    「彻底删除掉，一毛钱的用处都没有」）。
+  //    不要再加回来。它当年还踩过一个坑（只导出 name、没导出可挂载形态 →
+  //    客户端清单扫不到、安静地不生效），壳插件请照 dsh-shell-web-preview 的形态写。
 
   // 官方右栏「网页预览」的 disabled 覆盖（本包不插自己的行，只是覆盖层）。
   const localWebPreviewPlugin = path.join(__dirname, '..', 'shell-plugins', 'dsh-shell-web-preview');

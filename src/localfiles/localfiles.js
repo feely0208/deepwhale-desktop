@@ -131,7 +131,10 @@
        · 再下面是**条目列表**（目录在前、文件显示大小），点目录进入、点文件用系统程序打开
      数据来自主进程 localfiles:list（只读列目录，不递归）。 */
 
-  var state = { home: '', shortcuts: [], dir: '', parent: '', entries: [] };
+  var state = {
+    filter: '',      // 搜索栏的关键词（2026-10-08 用户要求：文件太多难找）
+    pvMax: false,    // 预览是否最大化到整栏
+    home: '', shortcuts: [], dir: '', parent: '', entries: [] };
 
   /**
    * 主题色板（2026-10-04 用户实测：浅色主题下这个面板白底 + 浅灰字 = 看不见）。
@@ -310,6 +313,11 @@
       'border-bottom:1px solid ' + P.border + ';');
     var pvName = el('span', 'flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;', '');
     pvName.id = PANEL_ID + '-preview-name';
+    var pvMax = el('button', 'flex:none;border:0;background:transparent;color:' + P.dim + ';cursor:pointer;' +
+      'font-size:13px;line-height:1;padding:0 4px;', '⛶');
+    pvMax.id = PANEL_ID + '-preview-max';
+    pvMax.title = '最大化 / 还原预览';   // 用户反复提的「预览最大化」：以前**根本没有这个控件**，预览高度写死 46vh
+    pvMax.addEventListener('click', function () { togglePreviewMax(); });
     var pvClose = el('button', 'flex:none;border:0;background:transparent;color:' + P.dim + ';cursor:pointer;font-size:12px;', '关闭');
     pvClose.addEventListener('click', function () {
       preview.style.display = 'none';
@@ -318,12 +326,39 @@
       preview.appendChild(pvBody);
     });
     pvHead.appendChild(pvName);
+    pvHead.appendChild(pvMax);
     pvHead.appendChild(pvClose);
     var pvBody = el('div', 'max-height:46vh;overflow:auto;background:' + (isDarkTheme() ? 'rgba(0,0,0,.25)' : 'rgba(0,0,0,.03)') + ';');
     pvBody.id = PANEL_ID + '-preview-body';
     preview.appendChild(pvHead);
     preview.appendChild(pvBody);
     panel.appendChild(preview);
+
+    // 搜索栏（2026-10-08 用户要求：「文件太多，很难找到」）——
+    // 只过滤**当前目录**的文件名（不做递归全盘查找：那要先知道用户想找什么范围，反而更慢）
+    var searchRow = el('div', 'flex:none;padding:0 12px 8px;');
+    var search = document.createElement('input');
+    search.id = PANEL_ID + '-search';
+    search.type = 'text';
+    search.spellcheck = false;
+    search.placeholder = '搜索当前目录的文件…';
+    search.style.cssText =
+      'width:100%;box-sizing:border-box;padding:7px 10px;border-radius:8px;font-size:12.5px;' +
+      'border:1px solid ' + P.border + ';background:' + P.inputBg + ';color:' + P.text + ';outline:none;';
+    search.addEventListener('input', function () {
+      state.filter = search.value;
+      renderList();
+    });
+    search.addEventListener('keydown', function (e) {
+      // ⚠️ 必须吞掉 Escape：全局那个监听会把**整个面板**关掉
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        if (search.value) { search.value = ''; state.filter = ''; renderList(); }
+        else { search.blur(); }
+      }
+    });
+    searchRow.appendChild(search);
+    panel.appendChild(searchRow);
 
     // 列表
     var list = el('div', 'flex:1 1 auto;overflow:auto;padding:2px 6px 14px;');
@@ -486,12 +521,57 @@
     state.entries = res.entries || [];
     if (input) input.value = res.dir;
 
+    // 换目录时清掉搜索词（否则新目录看起来"空的"）
+    var searchEl = document.getElementById(PANEL_ID + '-search');
+    if (searchEl) { searchEl.value = ''; }
+    state.filter = '';
+    renderList();
+  }
+
+  /** 按搜索词过滤后渲染列表 */
+  function renderList() {
+    var list = document.getElementById(PANEL_ID + '-list');
+    if (!list) return;
+    var q = String(state.filter || '').trim().toLowerCase();
+    var items = state.entries || [];
+    if (q) {
+      items = items.filter(function (e) {
+        return String(e.name || '').toLowerCase().indexOf(q) >= 0;
+      });
+    }
     list.textContent = '';
-    if (!state.entries.length) {
-      list.appendChild(el('div', 'padding:12px;opacity:.6;', '这个目录里没有可直接显示的内容'));
+    if (!items.length) {
+      list.appendChild(el('div', 'padding:12px;opacity:.6;',
+        q ? ('没有匹配「' + state.filter + '」的文件') : '这个目录里没有可直接显示的内容'));
       return;
     }
-    state.entries.forEach(function (entry) { list.appendChild(rowFor(entry)); });
+    items.forEach(function (entry) { list.appendChild(rowFor(entry)); });
+  }
+
+  /** 预览最大化 / 还原：把预览铺满整栏（列表先收起来），还原时原样放回 */
+  function togglePreviewMax() {
+    var preview = document.getElementById(PANEL_ID + '-preview');
+    var body = document.getElementById(PANEL_ID + '-preview-body');
+    var list = document.getElementById(PANEL_ID + '-list');
+    var btn = document.getElementById(PANEL_ID + '-preview-max');
+    if (!preview || !body) return;
+    state.pvMax = !state.pvMax;
+    var medias = body.querySelectorAll('iframe,video');
+    if (state.pvMax) {
+      preview.style.flex = '1 1 auto';
+      body.style.maxHeight = 'none';
+      body.style.flex = '1 1 auto';
+      if (list) list.style.display = 'none';
+      [].forEach.call(medias, function (m) { m.style.height = '100%'; });
+      if (btn) { btn.textContent = '⤡'; btn.title = '还原预览'; }
+    } else {
+      preview.style.flex = 'none';
+      body.style.maxHeight = '46vh';
+      body.style.flex = '';
+      if (list) list.style.display = '';
+      [].forEach.call(medias, function (m) { m.style.height = '46vh'; });
+      if (btn) { btn.textContent = '⛶'; btn.title = '最大化 / 还原预览'; }
+    }
   }
 
   /* ---------------- 启动：拉 roots，然后注入卡片 ---------------- */

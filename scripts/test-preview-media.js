@@ -182,6 +182,56 @@ function waitPort(port, timeoutMs) {
       await shot(path.join(OUT, ext + '.png'));
       console.log(`     截图: ${path.join(OUT, ext + '.png')}`);
     }
+
+    // ③ 搜索栏（2026-10-08 用户要求：文件太多难找）
+    const sr = await evaluate(async (args) => {
+      if (window.__dshLocalFiles) window.__dshLocalFiles.open();
+      const input = document.querySelector('#dsh-local-files-panel-path');
+      if (input) { input.value = args.dir; input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); }
+      await new Promise((r) => setTimeout(r, 1200));
+      const rows = () => document.querySelectorAll('#dsh-local-files-panel-list > div').length;
+      const s = document.querySelector('#dsh-local-files-panel-search');
+      if (!s) return { hasSearch: false };
+      const all = rows();
+      s.value = 'mp4'; s.dispatchEvent(new Event('input', { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 300));
+      const filtered = rows();
+      s.value = 'zzzzz'; s.dispatchEvent(new Event('input', { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 300));
+      const none = rows();
+      s.value = ''; s.dispatchEvent(new Event('input', { bubbles: true }));
+      return { hasSearch: true, all: all, filtered: filtered, none: none };
+    }, { dir: DIR });
+    check('搜索栏存在', sr.hasSearch, '');
+    check('搜索能过滤（mp4 → 行数变少）', sr.hasSearch && sr.filtered > 0 && sr.filtered < sr.all,
+      `${sr.all} → ${sr.filtered}`);
+    check('搜不到时有"无匹配"提示', sr.hasSearch && sr.none === 1, '行数=' + sr.none);
+
+    // ④ 预览最大化（用户反复提的那件事）
+    const mx = await evaluate(async (args) => {
+      const rowsAll = Array.from(document.querySelectorAll('#dsh-local-files-panel-list > div'));
+      const row = rowsAll.find((x) => (x.title || '').indexOf('示例视频.mp4') >= 0);
+      if (row) row.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 2200));
+      const btn = document.querySelector('#dsh-local-files-panel-preview-max');
+      const body = document.querySelector('#dsh-local-files-panel-preview-body');
+      const list = document.querySelector('#dsh-local-files-panel-list');
+      if (!btn || !body) return { hasBtn: false };
+      const before = { maxH: body.style.maxHeight, listShown: list ? list.style.display !== 'none' : null };
+      btn.click();
+      await new Promise((r) => setTimeout(r, 400));
+      const v = body.querySelector('video');
+      const after = { maxH: body.style.maxHeight, listShown: list ? list.style.display !== 'none' : null,
+        videoH: v ? v.style.height : '' };
+      return { hasBtn: true, before: before, after: after };
+    }, {});
+    check('预览头有最大化按钮', mx.hasBtn, '');
+    check('点最大化后预览铺满（不再 46vh，列表收起）',
+      mx.hasBtn && mx.after.maxH === 'none' && mx.after.listShown === false,
+      JSON.stringify(mx.after));
+    check('最大化后视频跟着铺满', mx.hasBtn && mx.after.videoH === '100%', 'video height=' + (mx.after && mx.after.videoH));
+    await shot(path.join(OUT, 'maximized.png'));
+    console.log('     截图: ' + path.join(OUT, 'maximized.png'));
     ws.close();
   } catch (e) {
     check('验证过程本身', false, e.message);

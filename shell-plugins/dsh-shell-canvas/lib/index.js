@@ -20,8 +20,9 @@
  * 见 `lib/jobs.mjs` 头注：本地神经 TTS 是原生库，崩了会 abort 整个进程。
  */
 
-import { existsSync, mkdirSync, statSync, createReadStream, createWriteStream, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, statSync, createReadStream, createWriteStream, rmSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve, extname } from 'node:path';
+import { homedir } from 'node:os';
 import { spawn } from 'node:child_process';
 import { JobManager, resolveNode, probeElectron, electronCandidates } from './jobs.mjs';
 import {
@@ -226,6 +227,12 @@ export function apply(ctx) {
       const body = req.method === 'POST' ? await readJson(req) : {};
 
       if (p === `${ROUTE}/api/state` && req.method === 'GET') return send(res, 200, await apiState());
+      // ── 框架面（A）：把「生产者 / Provider / 批量」开给面板 ──────────────
+      if (p === `${ROUTE}/api/producers` && req.method === 'GET') return send(res, 200, await apiProducers());
+      if (p === `${ROUTE}/api/produce` && req.method === 'POST') return send(res, 200, await apiProduce(body));
+      if (p === `${ROUTE}/api/providers` && req.method === 'GET') return send(res, 200, await apiProviders());
+      if (p === `${ROUTE}/api/providers` && req.method === 'POST') return send(res, 200, await apiSaveProviders(body));
+      if (p === `${ROUTE}/api/batch` && req.method === 'POST') return send(res, 200, await apiBatch(body));
       if (p === `${ROUTE}/api/engine` && req.method === 'POST') return send(res, 200, await apiSetEngine(body));
       if (p === `${ROUTE}/api/validate` && req.method === 'POST') return send(res, 200, await apiValidate(body));
       if (p === `${ROUTE}/api/job` && req.method === 'POST') return send(res, 200, await apiStartJob(body));
@@ -247,6 +254,86 @@ export function apply(ctx) {
       });
     }
   };
+
+  /* ── 框架面实现（A）───────────────────────────────────────────────
+   * 面板从这里调「生产者 / Provider / 批量」，全部复用插件自带的引擎（engine/），
+   * 不再另起一套。任何一条失败都要**抛出去**（面板要看得见），不许静默。
+   */
+  const engineRootFor = () => {
+    const r = state.resolved;
+    if (!r || !r.ok) throw httpError(409, '引擎未就绪，先在面板里指定引擎目录');
+    return r.root;
+  };
+
+  async function apiProducers() {
+    const root = engineRootFor();
+    const { listProducers, loadBuiltins } = await import(pathToFileURL(join(root, 'src/producers/index.mjs')).href);
+    await loadBuiltins();
+    return { producers: listProducers() };
+  }
+
+  async function apiProduce(body) {
+    const root = engineRootFor();
+    const { runProducer, loadBuiltins, assertAssetAllowed } = await import(pathToFileURL(join(root, 'src/producers/index.mjs')).href);
+    const { providerAccessor, loadProvidersFromConfig } = await import(pathToFileURL(join(root, 'src/providers/index.mjs')).href);
+    await loadBuiltins();
+    try { loadProvidersFromConfig(); } catch (e) { /* 没配是正常情况 */ }
+    // 素材白名单：允许"引擎目录 + 产物目录 + 用户显式给的目录"
+    const allowRoots = [root, outputRoot(), ...(Array.isArray(body.allowRoots) ? body.allowRoots : [])];
+    const assetDir = join(outputRoot(), 'assets');
+    const doc = await runProducer(String(body.producer || ''), body.input || {}, {
+      allowRoots,
+      assertAsset: (f) => assertAssetAllowed(f, allowRoots),
+      readText: (f) => readFileSync(resolve(f), 'utf8'),
+      provider: providerAccessor(assetDir),
+      assetDir,
+      outDir: outputRoot(),
+    });
+    return { doc };
+  }
+
+  async function apiProviders() {
+    const root = engineRootFor();
+    const { listProviders, loadProvidersFromConfig } = await import(pathToFileURL(join(root, 'src/providers/index.mjs')).href);
+    let info = null;
+    try { info = loadProvidersFromConfig(); } catch (e) { info = { error: e.message }; }
+    // ⚠️ 只回"有没有配 key"，**绝不回 key 本身**
+    return { providers: listProviders(), config: info };
+  }
+
+  async function apiSaveProviders(body) {
+    const file = join(process.env.DSH_HOME || homedir(), 'canvas-providers.json');
+    const list = Array.isArray(body.providers) ? body.providers : [];
+    writeFileSync(file, JSON.stringify({ providers: list }, null, 2) + '\n');
+    return { ok: true, file, count: list.length };
+  }
+
+  async function apiBatch(body) {
+    const root = engineRootFor();
+    const { runBatch } = await import(pathToFileURL(join(root, 'src/batch.mjs')).href);
+    const { runProducer, loadBuiltins, assertAssetAllowed } = await import(pathToFileURL(join(root, 'src/producers/index.mjs')).href);
+    const { providerAccessor, loadProvidersFromConfig } = await import(pathToFileURL(join(root, 'src/providers/index.mjs')).href);
+    await loadBuiltins();
+    try { loadProvidersFromConfig(); } catch (e) { /* ignore */ }
+    const allowRoots = [root, outputRoot()];
+    const assetDir = join(outputRoot(), 'assets');
+    const res = await runBatch(
+      { producer: body.producer, quality: body.quality || 'final', jobs: body.jobs || [] },
+      {
+        outDir: body.outDir || join(outputRoot(), 'batch'),
+        runProducer: (id, input) => runProducer(id, input, {
+          allowRoots,
+          assertAsset: (f) => assertAssetAllowed(f, allowRoots),
+          readText: (f) => readFileSync(resolve(f), 'utf8'),
+          provider: providerAccessor(assetDir),
+          assetDir,
+          outDir: outputRoot(),
+        }),
+        log: (m) => console.log('[canvas-batch] ' + m),
+      },
+    );
+    return { manifest: { total: res.manifest.total, ok: res.manifest.ok, failed: res.manifest.failed }, manifestFile: res.manifestFile, items: res.manifest.items.map((x) => ({ id: x.id, ok: x.ok, out: x.out, error: x.error })) };
+  }
 
   async function apiState() {
     const r = state.resolved;

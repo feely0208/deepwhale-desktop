@@ -354,7 +354,13 @@ window.__ModuleLoader__.load({
           const f = input.files && input.files[0];
           cleanup();
           const real = f && (f.path || '');
-          if (!real) { setError('拿不到文件夹路径，可以直接把路径填进去'); return; }
+          if (!real) {
+            // ⚠️ 浏览器只能"选文件夹里的文件"来反推目录 —— 空文件夹（比如什么都没放的桌面）
+            //    不会触发 change。这不是 bug，是 web 平台的限制，所以**给明确出路**，
+            //    不许静默无反应（用户实测："选桌面还不行，一定要选一个文件夹吗，这个不可取"）。
+            setError('这个文件夹里没有文件，浏览器拿不到路径 —— 请直接把路径填进输入框，再点「确定」。');
+            return;
+          }
           onPicked(String(real).replace(/[\\/][^\\/]+$/, ''));
         });
         input.addEventListener('cancel', cleanup);
@@ -807,9 +813,10 @@ window.__ModuleLoader__.load({
                           key: 'i', className: 'dshcv-input', value: outDir || (state && state.runtime && state.runtime.outputRoot) || '',
                           placeholder: '成片保存到哪儿（可以改）',
                           onChange: (e) => setOutDir(e.target.value),
+                          onKeyDown: (e) => { if (e.key === 'Enter') saveOutDir(e.target.value); },
                         }),
                         h(Btn, { key: 'p2', size: 'sm', onClick: () => pickDir((d2) => { setOutDir(d2); saveOutDir(d2); }) }, '选择文件夹…'),
-                        h(Btn, { key: 's', size: 'sm', onClick: () => saveOutDir(outDir) }, '保存'),
+                        h(Btn, { key: 's', size: 'sm', primary: true, onClick: () => saveOutDir(outDir) }, '确定'),
                         h(Btn, { key: 'o2', size: 'sm', onClick: () => reveal(outDir || (state && state.runtime && state.runtime.outputRoot) || '') }, '打开位置'),
                       ]),
                       h('div', { key: 'h', className: 'dshcv-sub', style: { marginTop: 6 } },

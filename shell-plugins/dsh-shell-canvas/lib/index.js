@@ -297,6 +297,7 @@ export function apply(ctx) {
       if (p === `${ROUTE}/api/state` && req.method === 'GET') return send(res, 200, await apiState());
       // ── 框架面（A）：把「生产者 / Provider / 批量」开给面板 ──────────────
       if (p === `${ROUTE}/api/output-dir` && req.method === 'POST') return send(res, 200, apiSetOutputDir(body));
+      if (p === `${ROUTE}/api/pick-dir` && req.method === 'POST') return send(res, 200, apiPickDir());
       if (p === `${ROUTE}/api/producers` && req.method === 'GET') return send(res, 200, await apiProducers());
       if (p === `${ROUTE}/api/produce` && req.method === 'POST') return send(res, 200, await apiProduce(body));
       if (p === `${ROUTE}/api/providers` && req.method === 'GET') return send(res, 200, await apiProviders());
@@ -333,6 +334,40 @@ export function apply(ctx) {
     if (!r || !r.ok) throw httpError(409, '引擎未就绪，先在面板里指定引擎目录');
     return r.root;
   };
+
+  /**
+   * 弹**系统自己的**文件夹对话框（2026-10-09 用户要求）。
+   *
+   * 为什么不能用网页那套：`<input webkitdirectory>` 在嵌入式窗口里给的是个
+   * **残缺的 Finder 面板**（只有文件列表，没有确定按钮）—— 用户实测「我选择文件位置了，
+   * 但没有确定，这搞毛啊」。用户判断：**得按系统的步骤来**。
+   *
+   * 所以改成调各平台自带的选择器：macOS 用 osascript（choose folder）、
+   * Windows 用 PowerShell + FolderBrowserDialog、Linux 用 zenity。
+   * 系统对话框**自带"选取/取消"**，选完即生效 —— 插件不该再多一个"确定"。
+   * 取消返回 {cancelled:true}（不是错误，不能报成红字）。
+   */
+  function apiPickDir() {
+    const { spawnSync } = require('node:child_process');
+    if (process.platform === 'darwin') {
+      const r = spawnSync('osascript', ['-e',
+        'try\nPOSIX path of (choose folder with prompt "选择成片保存位置")\non error number -128\nreturn "CANCELLED"\nend try',
+      ], { encoding: 'utf8', timeout: 120000 });
+      const out = String(r.stdout || '').trim();
+      if (!out || out === 'CANCELLED') return { cancelled: true };
+      return { dir: out.replace(/\/+$/, '') };
+    }
+    if (process.platform === 'win32') {
+      const ps = "Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.FolderBrowserDialog; $d.Description = '选择成片保存位置'; if ($d.ShowDialog() -eq 'OK') { Write-Output $d.SelectedPath }";
+      const r = spawnSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', ps], { encoding: 'utf8', timeout: 120000 });
+      const out = String(r.stdout || '').trim();
+      return out ? { dir: out } : { cancelled: true };
+    }
+    const r = spawnSync('zenity', ['--file-selection', '--directory', '--title=选择成片保存位置'], { encoding: 'utf8', timeout: 120000 });
+    if (r.error) throw httpError(500, '这台机器没有 zenity，弹不出系统文件夹对话框 —— 可以直接把路径填进输入框');
+    const out = String(r.stdout || '').trim();
+    return out ? { dir: out } : { cancelled: true };
+  }
 
   /** 设/读成片保存位置。目录不存在就建；建不了就明确报错（不静默回退）。 */
   function apiSetOutputDir(body) {
@@ -496,7 +531,8 @@ export function apply(ctx) {
     }
 
     const { spec, entry, reuse } = buildSpec({ ...body, kind });   // body.doc 会被 buildSpec 用上
-    const title = `${entry.name}·${kind === 'preview' ? '预览' : '终版'}${spec.renderer === 'electron-osr' ? '（OSR）' : ''}`;
+    // 标题只用中文（用户：要用中文就都中文，别中英混用）—— 不再拼（OSR）这种技术缩写
+    const title = `${entry.name}·${kind === 'preview' ? '预览' : '终版'}`;
     return jobs.start(spec, { ...body, kind }, { title: reuse ? `${title}（续渲）` : title });
   }
 

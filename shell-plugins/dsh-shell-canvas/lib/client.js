@@ -341,44 +341,31 @@ window.__ModuleLoader__.load({
       // 成片保存位置（用户要求：不能是默认位置，尤其 Win 上不能塞 C 盘）
       const [outDir, setOutDir] = useState('');
       const [outDirMsg, setOutDirMsg] = useState('');
-      /** 选文件夹：用 webkitdirectory 让用户挑目录，从文件真实路径推出目录。
-       *  ⚠️ 不能走 upload() —— 它会把文件复制进临时上传目录，原目录就丢了。 */
-      const pickDir = (onPicked) => {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.webkitdirectory = true;
-        input.multiple = true;
-        input.style.display = 'none';
-        const cleanup = () => { if (input.parentNode) input.parentNode.removeChild(input); };
-        document.body.appendChild(input);
-        input.addEventListener('change', () => {
-          const f = input.files && input.files[0];
-          cleanup();
-          const real = f && (f.path || '');
-          if (!real) {
-            // ⚠️ 浏览器只能"选文件夹里的文件"来反推目录 —— 空文件夹（比如什么都没放的桌面）
-            //    不会触发 change。这不是 bug，是 web 平台的限制，所以**给明确出路**，
-            //    不许静默无反应（用户实测："选桌面还不行，一定要选一个文件夹吗，这个不可取"）。
-            setError('这个文件夹里没有文件，浏览器拿不到路径 —— 请直接把路径填进输入框，再点「确定」。');
-            return;
-          }
-          onPicked(String(real).replace(/[\\/][^\\/]+$/, ''));
-        });
-        input.addEventListener('cancel', cleanup);
-        input.click();
-      };
-      const saveOutDir = (dir) => run('保存位置', async () => {
-        // 空着就保存默认位置（用户点"保存"不该什么都不发生）
+      /** 应用保存位置并给回执（成功必须有回执 —— 否则按了"确定"什么都不变，就是"用不了"） */
+      const applyOutDir = async (dir) => {
         const use = (dir && String(dir).trim()) || (state && state.runtime && state.runtime.outputRoot) || '';
         const r = await api('/output-dir', { method: 'POST', body: { dir: use } });
         if (r && r.dir) {
           setOutDir(r.dir);
           setError(null);
-          // 成功必须有回执 —— 否则用户按了"确定"却什么都没变，就是"用不了"
           setOutDirMsg(`✅ 已保存：${r.dir}（之后的任务都存这儿）`);
         }
         return r;
+      };
+      const saveOutDir = (dir) => run('保存位置', () => applyOutDir(dir));
+      /**
+       * 选择文件夹：**调系统自己的对话框** ——
+       * macOS osascript(choose folder) / Windows FolderBrowserDialog / Linux zenity。
+       * 系统对话框自带"选取 / 取消"按钮，选完即生效，插件不再多要一次"确定"
+       * （用户定：得按系统的步骤来）。
+       */
+      const pickDirNative = () => run('选择文件夹', async () => {
+        const r = await api('/pick-dir', { method: 'POST', body: {} });
+        if (!r || r.cancelled || !r.dir) return null;      // 用户取消 —— 不是错误
+        setOutDir(r.dir);
+        return applyOutDir(r.dir);
       });
+
       const [bgmMode, setBgmMode] = useState('none');
       const [bgmFile, setBgmFile] = useState('');
       // 分镜表（2026-10-09 用户核心需求）：每句 → 配哪张素材、从第几秒、停多久
@@ -657,8 +644,8 @@ window.__ModuleLoader__.load({
           h('span', { className: 'dshcv-dot', key: 'dot', title: engineOk ? '引擎就绪' : '引擎未就绪' }),
           h('span', { className: 'dshcv-sub', key: 'e' },
             engineOk
-              ? `引擎 ${state.engine.version || '?'} · 领域包 ${state.engine.pack || '?'} · 界面 ${BUILD}`
-              : `引擎未就绪 · 界面 ${BUILD}`),
+              ? `引擎 ${state.engine.version || '?'} · 领域包 ${String(state.engine.pack || '?').split('@')[0]} · 版本 ${String(state.engine.pack || '?').split('@')[1] || '?'}`
+              : `引擎未就绪`),
           h('span', { className: 'dshcv-chip', key: 'r' }, renderer === 'electron-osr' ? '极速渲染' : '兼容渲染'),
           runningCount ? h('span', { className: 'dshcv-chip dshcv-chip-brand', key: 'j' }, `${runningCount} 个任务在跑`) : null,
           h('span', { className: 'dshcv-spacer', key: 'sp' }),
@@ -690,7 +677,7 @@ window.__ModuleLoader__.load({
                     h(Poster, { key: 'p', url: poster, wide, alt: `${t.name} 预览` }),
                     h('div', { key: 'i', className: 'dshcv-tpl-body' }, [
                       h('div', { key: 'n', className: 'dshcv-tpl-name' }, t.name),
-                      h('div', { key: 'c', className: 'dshcv-tpl-meta' }, `${o.canvas.w}×${o.canvas.h} · ${o.canvas.fps}fps`),
+                      h('div', { key: 'c', className: 'dshcv-tpl-meta' }, `${o.canvas.w}×${o.canvas.h} · 每秒 ${o.canvas.fps} 帧`),
                       h('div', { key: 'ch', className: 'dshcv-tpl-chips' }, [
                         Object.keys(t.orientations).length > 1
                           ? h('span', { key: 'o', className: 'dshcv-chip' }, '横 + 竖')
@@ -794,7 +781,7 @@ window.__ModuleLoader__.load({
                         h(Opt, {
                           key: 'b', checked: voiceMode === 'file', onChange: () => setVoiceMode('file'),
                           title: '我自己的配音文件',
-                          desc: '给一个 mp3 / wav / m4a，完全跳过我们的 TTS —— 你自己的录音、买的声音都能直接用。',
+                          desc: '给一个音频文件（mp3、wav、m4a 都行），完全跳过我们的配音 —— 你自己的录音、买的声音都能直接用。',
                         }),
                       ]),
                       voiceMode === 'file' ? h('div', { className: 'dshcv-slot', key: 'f', style: { marginTop: 10 } }, [
@@ -848,7 +835,7 @@ window.__ModuleLoader__.load({
                         h(Opt, {
                           key: 'f', checked: bgmMode === 'file', onChange: () => setBgmMode('file'),
                           title: '用我自己的音乐',
-                          desc: '给一个 mp3 / wav / m4a。配音说话时音乐会自动变轻。版权请自行确认。',
+                          desc: '给一个音频文件（mp3、wav、m4a 都行）。配音说话时音乐会自动变轻。版权请自行确认。',
                         }),
                       ]),
                       bgmMode === 'file' ? h('div', { className: 'dshcv-slot', key: 'f', style: { marginTop: 10 } }, [
@@ -951,7 +938,7 @@ window.__ModuleLoader__.load({
                   }, validation.ok ? '✅ 通过' : '⛔ 已拦下渲染'),
                 }, h('div', null, [
                   h('div', { key: 'meta', className: 'dshcv-sub' },
-                    `引擎 ${validation.engineVersion} · 领域包 ${validation.pack} · ${validation.ok ? '可以出片了' : '修完下面这些再出片'}`),
+                    `引擎 ${validation.engineVersion} · 领域包 ${String(validation.pack || '').split('@')[0]} ${String(validation.pack || '').split('@')[1] || ''} · ${validation.ok ? '可以出片了' : '修完下面这些再出片'}`),
                   ...validation.templates.flatMap((t) => (t.issues || []).filter((i) => i.level === 'error').map((i, k) => h('div', {
                     key: `${t.orientation}-${k}`, className: 'dshcv-issue',
                   }, [
@@ -1030,7 +1017,7 @@ window.__ModuleLoader__.load({
           ? (job.progress.text || '配音')
           : `${job.progress.orientation === 'vertical' ? '竖版' : job.progress.orientation === 'horizontal' ? '横版' : ''} ${job.progress.done || 0}/${job.progress.total || 0} 帧`) +
           (pct != null ? ` · ${pct}%` : '') +
-          (job.progress.msPerFrame ? ` · ${Math.round(job.progress.msPerFrame)} ms/帧` : '') +
+          (job.progress.msPerFrame ? ` · 每帧 ${Math.round(job.progress.msPerFrame)} 毫秒` : '') +
           (job.progress.etaMs ? ` · 剩余约 ${Math.round(job.progress.etaMs / 1000)}s` : '')
         : '启动中…';
 
@@ -1091,7 +1078,7 @@ window.__ModuleLoader__.load({
         open ? h('div', { key: 'd' }, [
           h('div', { className: 'dshcv-sub', key: 'p', style: { marginBottom: 6 } }, `产物目录：${job.outDir}`),
           job.result && job.result.renders ? h('div', { key: 'r', className: 'dshcv-sub', style: { marginBottom: 8 } },
-            job.result.renders.map((r) => `${r.orientation === 'vertical' ? '竖版' : '横版'} ${r.frames} 帧（新渲 ${r.rendered}、续用 ${r.resumed}）${r.msPerFrame} ms/帧 · ${r.adapter}`).join('　｜　')) : null,
+            job.result.renders.map((r) => `${r.orientation === 'vertical' ? '竖版' : '横版'} ${r.frames} 帧（新渲 ${r.rendered}、续用 ${r.resumed}）${r.msPerFrame} 毫秒/帧 · `).join('　｜　')) : null,
           h('pre', { key: 'log', className: 'dshcv-log' }, (job.logs || []).map((l) => l.msg).join('\n')),
         ]) : null,
       ]);

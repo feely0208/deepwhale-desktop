@@ -100,7 +100,27 @@ export function apply(ctx) {
     return state.electron && state.electron.systemBrowser ? 'electron-osr' : 'chromium';
   };
 
+  /**
+   * 常用保存位置（2026-10-09）。
+   * 为什么不用系统"选择文件夹"对话框：在这类嵌入式窗口里，macOS 给的是个
+   * **残缺的 Finder 窗口**（没有确定按钮），用户实测「我选择文件位置了，但没有确定，这搞毛啊」。
+   * 结论：**不依赖系统对话框** —— 直接把常用目录给成按钮，点一下填进去，再点「确定」。
+   * 这是按"插件自身实用性"走（用户定：不等宿主以后可能开放的能力）。
+   */
+  const commonDirs = () => {
+    const home = homedir();
+    const cands = [
+      { label: '桌面', dir: join(home, 'Desktop') },
+      { label: '影片', dir: join(home, 'Movies') },
+      { label: '文稿', dir: join(home, 'Documents') },
+      { label: '下载', dir: join(home, 'Downloads') },
+      { label: '主目录', dir: home },
+    ];
+    return cands.map((c) => ({ ...c, exists: existsSync(c.dir) }));
+  };
+
   const runtime = () => ({
+    commonDirs: commonDirs(),
     engineRoot: state.resolved?.root || null,
     outputRoot: outputRoot(),
     node: state.node || resolveNode(null),

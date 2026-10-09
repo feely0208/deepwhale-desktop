@@ -86,22 +86,40 @@ function register(registerProducer) {
         { nodeId: 'title', from: 0, to: 40, anim: { name: 'slide-up', params: { distance: 70 } } },
         { nodeId: 'bar', from: 20, to: 50, anim: { name: 'wipe-in', params: { direction: 'left' } } },
       ];
+      // 每镜的版位（用户反馈：「图片在视频中都是固定位置的，这个问题你要考虑下怎么解决」）。
+      // 同一个位置钉到底 = 看起来不像视频。所以按镜头序号轮换**尺寸/位置/入场方式**，
+      // 让每个镜头"换一个机位"。这是最朴素的编排，够用即停。
+      const LAYOUTS = [
+        { w: 0.78, h: 0.40, x: 0.11, y: 0.355, anim: 'scale-in' },
+        { w: 0.88, h: 0.34, x: 0.06, y: 0.40, anim: 'slide-up' },
+        { w: 0.66, h: 0.46, x: 0.17, y: 0.33, anim: 'wipe-in' },
+        { w: 0.92, h: 0.32, x: 0.04, y: 0.42, anim: 'fade-in' },
+      ];
       laid.forEach((it, i) => {
         const from = Math.round(it.start * DEFAULT_FPS);
         const to = Math.round((it.start + it.duration) * DEFAULT_FPS);
         const id = `shot${i + 1}`;
+        const lay = LAYOUTS[i % LAYOUTS.length];
         if (it.shot) {
           const slot = `shot${i + 1}`;
           assets[slot] = it.shot;
           nodes.push({
             id, type: 'image',
             // 每个镜头自己的槽位 → 素材与"哪一句"一一对应（不再平均摊）
-            props: { src: `user:${slot}`, fit: 'cover', width: w - 180, height: Math.round((h - 900) * 0.9), radius: 28 },
-            transform: { x: 90, y: 680 },
+            props: {
+              src: `user:${slot}`, fit: 'cover', radius: 28,
+              width: Math.round(w * lay.w),
+              height: Math.round(h * lay.h),
+            },
+            transform: { x: Math.round(w * lay.x), y: Math.round(h * lay.y) },
           });
         }
         if (to > from) {
-          timeline.push({ nodeId: id, from, to, anim: it.shot ? { name: 'scale-in', params: { fromScale: 1.04 } } : undefined, hold: true });
+          timeline.push({ nodeId: id, from, to, hold: true,
+            anim: it.shot ? (lay.anim === 'slide-up' ? { name: 'slide-up', params: { distance: 60 } }
+              : lay.anim === 'wipe-in' ? { name: 'wipe-in', params: { direction: 'left' } }
+              : lay.anim === 'fade-in' ? { name: 'fade-in', params: {} }
+              : { name: 'scale-in', params: { fromScale: 1.04 } }) : undefined });
         }
       });
       // 字幕节点：整片时长（时序由 SRT 决定，管线仍会按真实配音重新对齐）

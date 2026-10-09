@@ -338,6 +338,13 @@ window.__ModuleLoader__.load({
       const [voiceover, setVoiceover] = useState(null);
       // 背景音乐（2026-10-09 用户："我看不能上传 BGM 哦"）
       //   不加 / 用我自己的文件 —— 版权责任在用户，我们只做混音（引擎侧记一条日志）
+      // 成片保存位置（用户要求：不能是默认位置，尤其 Win 上不能塞 C 盘）
+      const [outDir, setOutDir] = useState('');
+      const saveOutDir = (dir) => run('保存位置', async () => {
+        const r = await api('/output-dir', { method: 'POST', body: { dir } });
+        if (r && r.dir) { setOutDir(r.dir); setError(null); }
+        return r;
+      });
       const [bgmMode, setBgmMode] = useState('none');
       const [bgmFile, setBgmFile] = useState('');
       // 分镜表（2026-10-09 用户核心需求）：每句 → 配哪张素材、从第几秒、停多久
@@ -768,6 +775,22 @@ window.__ModuleLoader__.load({
                           })),
                         }, voiceover ? '换一个' : '选择…'),
                       ]) : null,
+                    ]))),
+
+                h('div', { key: 'outdir', style: { marginTop: 22 } },
+                  h(Section, { title: '保存位置' },
+                    h('div', null, [
+                      h('div', { className: 'dshcv-slot', key: 'o' }, [
+                        h('input', {
+                          key: 'i', className: 'dshcv-input', value: outDir || (state && state.outputDir) || '',
+                          placeholder: '成片保存到哪儿（可以改）',
+                          onChange: (e) => setOutDir(e.target.value),
+                        }),
+                        h(Btn, { key: 's', size: 'sm', onClick: () => saveOutDir(outDir) }, '保存'),
+                        h(Btn, { key: 'o2', size: 'sm', onClick: () => reveal(outDir || (state && state.outputDir) || '') }, '打开位置'),
+                      ]),
+                      h('div', { key: 'h', className: 'dshcv-sub', style: { marginTop: 6 } },
+                        '默认放在你自己的影片目录下（不是插件目录、不是系统盘深处）。改完对之后的任务都生效。'),
                     ]))),
 
                 h('div', { key: 'bgm', style: { marginTop: 22 } },

@@ -60,11 +60,17 @@ export function apply(ctx) {
   };
   resolveNow();
 
-  const outputRoot = () => {
-    const root = state.resolved?.root;
-    if (!root) return join(process.env.DSH_HOME || process.cwd(), 'canvas-out');
-    return join(root, 'out', 'app');
-  };
+  /**
+   * 成片保存位置（2026-10-09 用户要求：「第一张图生成的视频位置不能选，是默认位置，
+   * 这个要修改下，尤其是后面我们做 win 版，如果都默认 c 盘就惨了，要求保存位置可以选择」）
+   *
+   * 原来默认塞在**插件目录**里（engine/out/app）—— 用户永远找不到，
+   * Windows 上更是 AppData 深处（C 盘）。现在：
+   *   · 默认 = 用户自己的影片目录下建一个「深鲸画布」
+   *   · 用户可以在面板里改（state.outputDir），改完所有任务都落在那儿
+   */
+  const defaultOutputRoot = () => join(homedir(), 'Movies', '深鲸画布');
+  const outputRoot = () => (state.outputDir ? resolve(state.outputDir) : defaultOutputRoot());
 
   const runtime = () => ({
     engineRoot: state.resolved?.root || null,
@@ -242,6 +248,7 @@ export function apply(ctx) {
 
       if (p === `${ROUTE}/api/state` && req.method === 'GET') return send(res, 200, await apiState());
       // ── 框架面（A）：把「生产者 / Provider / 批量」开给面板 ──────────────
+      if (p === `${ROUTE}/api/output-dir` && req.method === 'POST') return send(res, 200, apiSetOutputDir(body));
       if (p === `${ROUTE}/api/producers` && req.method === 'GET') return send(res, 200, await apiProducers());
       if (p === `${ROUTE}/api/produce` && req.method === 'POST') return send(res, 200, await apiProduce(body));
       if (p === `${ROUTE}/api/providers` && req.method === 'GET') return send(res, 200, await apiProviders());
@@ -278,6 +285,24 @@ export function apply(ctx) {
     if (!r || !r.ok) throw httpError(409, '引擎未就绪，先在面板里指定引擎目录');
     return r.root;
   };
+
+  /** 设/读成片保存位置。目录不存在就建；建不了就明确报错（不静默回退）。 */
+  function apiSetOutputDir(body) {
+    const dir = body && body.dir ? String(body.dir).trim() : '';
+    if (!dir) return { ok: false, error: '没给目录' };
+    const abs = resolve(dir);
+    try {
+      mkdirSync(abs, { recursive: true });
+      // 真写一次，确认可写（只 stat 不够：可能有目录但只读）
+      const probe = join(abs, '.dsh-canvas-write-test');
+      writeFileSync(probe, 'ok');
+      rmSync(probe, { force: true });
+    } catch (e) {
+      throw httpError(400, `这个位置不能写：${abs}（${e.message}）`);
+    }
+    state.outputDir = abs;
+    return { ok: true, dir: abs };
+  }
 
   async function apiProducers() {
     const root = engineRootFor();

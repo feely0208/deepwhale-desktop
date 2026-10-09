@@ -340,8 +340,30 @@ window.__ModuleLoader__.load({
       //   不加 / 用我自己的文件 —— 版权责任在用户，我们只做混音（引擎侧记一条日志）
       // 成片保存位置（用户要求：不能是默认位置，尤其 Win 上不能塞 C 盘）
       const [outDir, setOutDir] = useState('');
+      /** 选文件夹：用 webkitdirectory 让用户挑目录，从文件真实路径推出目录。
+       *  ⚠️ 不能走 upload() —— 它会把文件复制进临时上传目录，原目录就丢了。 */
+      const pickDir = (onPicked) => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.webkitdirectory = true;
+        input.multiple = true;
+        input.style.display = 'none';
+        const cleanup = () => { if (input.parentNode) input.parentNode.removeChild(input); };
+        document.body.appendChild(input);
+        input.addEventListener('change', () => {
+          const f = input.files && input.files[0];
+          cleanup();
+          const real = f && (f.path || '');
+          if (!real) { setError('拿不到文件夹路径，可以直接把路径填进去'); return; }
+          onPicked(String(real).replace(/[\\/][^\\/]+$/, ''));
+        });
+        input.addEventListener('cancel', cleanup);
+        input.click();
+      };
       const saveOutDir = (dir) => run('保存位置', async () => {
-        const r = await api('/output-dir', { method: 'POST', body: { dir } });
+        // 空着就保存默认位置（用户点"保存"不该什么都不发生）
+        const use = (dir && String(dir).trim()) || (state && state.runtime && state.runtime.outputRoot) || '';
+        const r = await api('/output-dir', { method: 'POST', body: { dir: use } });
         if (r && r.dir) { setOutDir(r.dir); setError(null); }
         return r;
       });
@@ -782,12 +804,13 @@ window.__ModuleLoader__.load({
                     h('div', null, [
                       h('div', { className: 'dshcv-slot', key: 'o' }, [
                         h('input', {
-                          key: 'i', className: 'dshcv-input', value: outDir || (state && state.outputDir) || '',
+                          key: 'i', className: 'dshcv-input', value: outDir || (state && state.runtime && state.runtime.outputRoot) || '',
                           placeholder: '成片保存到哪儿（可以改）',
                           onChange: (e) => setOutDir(e.target.value),
                         }),
+                        h(Btn, { key: 'p2', size: 'sm', onClick: () => pickDir((d2) => { setOutDir(d2); saveOutDir(d2); }) }, '选择文件夹…'),
                         h(Btn, { key: 's', size: 'sm', onClick: () => saveOutDir(outDir) }, '保存'),
-                        h(Btn, { key: 'o2', size: 'sm', onClick: () => reveal(outDir || (state && state.outputDir) || '') }, '打开位置'),
+                        h(Btn, { key: 'o2', size: 'sm', onClick: () => reveal(outDir || (state && state.runtime && state.runtime.outputRoot) || '') }, '打开位置'),
                       ]),
                       h('div', { key: 'h', className: 'dshcv-sub', style: { marginTop: 6 } },
                         '默认放在你自己的影片目录下（不是插件目录、不是系统盘深处）。改完对之后的任务都生效。'),

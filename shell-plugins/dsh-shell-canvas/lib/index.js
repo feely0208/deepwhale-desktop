@@ -72,6 +72,19 @@ export function apply(ctx) {
   const defaultOutputRoot = () => join(homedir(), 'Movies', '深鲸画布');
   const outputRoot = () => (state.outputDir ? resolve(state.outputDir) : defaultOutputRoot());
 
+  /**
+   * 默认渲染后端（2026-10-09 修）。
+   * 原来写死 'chromium' —— 真机上没有 playwright-core，
+   * 于是"重做模板预览图"直接报 `Cannot find package 'playwright-core'`（用户实测）。
+   * 现在：有系统浏览器就用它（零依赖）；显式要求才用别的。
+   * ⚠️ 对**所有**任务生效，不只是预览图。
+   */
+  const pickRenderer = (req) => {
+    if (req && req.renderer === 'chromium') return 'chromium';
+    if (req && req.renderer === 'electron-osr') return 'electron-osr';
+    return state.electron && state.electron.systemBrowser ? 'electron-osr' : 'chromium';
+  };
+
   const runtime = () => ({
     engineRoot: state.resolved?.root || null,
     outputRoot: outputRoot(),
@@ -192,7 +205,7 @@ export function apply(ctx) {
       })(),
       quality: request.quality || (request.kind === 'preview' ? 'preview' : 'final'),
       previewSeconds: Math.max(1, Math.min(30, Number(request.previewSeconds) || 4)),
-      renderer: request.renderer === 'electron-osr' ? 'electron-osr' : 'chromium',
+      renderer: pickRenderer(request),
       rendererExtra: state.electron && state.electron.systemBrowser ? { systemBrowser: state.electron.systemBrowser } : null,
       resume: !!request.resume,
       fps: entry.canvas?.fps || 30,
@@ -221,7 +234,7 @@ export function apply(ctx) {
       spec: {
         kind: 'posters', engineRoot: root, outputRoot: outputRoot(), outDir, pack: 'video',
         pair: { vertical: posters[0].doc }, vars: {}, assets: {}, script: '',
-        renderer: request.renderer === 'electron-osr' ? 'electron-osr' : 'chromium',
+        renderer: pickRenderer(request),
       rendererExtra: state.electron && state.electron.systemBrowser ? { systemBrowser: state.electron.systemBrowser } : null,
         quality: 'preview', resume: false, fps: 30, posters,
       },

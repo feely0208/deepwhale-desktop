@@ -87,6 +87,27 @@ export function apply(ctx) {
     //   它忽略脚本参数 → 探测必然失败 → 回落到 Playwright Chromium →
     //   真机上没有 playwright → 出片直接失败。
     //   进程内这条路把"找二进制"整个环节去掉了。
+    // ★ 次选：**系统自带的 Chromium 系浏览器**（2026-10-09 定为主力）
+    //   渲染只需要"一个有 Chromium 的东西"，而用户机器上本来就有：
+    //   Windows 自带 Edge、macOS 多数人装了 Chrome。
+    //   这条路**纯 Node、零 npm 依赖、不绑桌面端版本** —— 插件在 1.0.55 上也能用。
+    //   客户端只认 osr.ok 这个开关（ok → 走非 playwright 后端），所以这里把
+    //   "系统浏览器可用"也算作 ok，任务层再决定用哪个适配器。
+    try {
+      const { findSystemBrowser } = await import('./adapter-system-browser.mjs');
+      const bin = findSystemBrowser();
+      if (bin) {
+        state.electron = {
+          ok: true,
+          systemBrowser: bin,
+          path: bin,
+          tried: [],
+          reason: '',
+        };
+        return state.electron;
+      }
+    } catch { /* 探测失败就当没有，继续回落 */ }
+
     if (process.versions.electron && !process.env.ELECTRON_RUN_AS_NODE) {
       state.electron = {
         ok: true,
@@ -151,6 +172,7 @@ export function apply(ctx) {
       quality: request.quality || (request.kind === 'preview' ? 'preview' : 'final'),
       previewSeconds: Math.max(1, Math.min(30, Number(request.previewSeconds) || 4)),
       renderer: request.renderer === 'electron-osr' ? 'electron-osr' : 'chromium',
+      rendererExtra: state.electron && state.electron.systemBrowser ? { systemBrowser: state.electron.systemBrowser } : null,
       resume: !!request.resume,
       fps: entry.canvas?.fps || 30,
       framesPadding: 90,
@@ -179,6 +201,7 @@ export function apply(ctx) {
         kind: 'posters', engineRoot: root, outputRoot: outputRoot(), outDir, pack: 'video',
         pair: { vertical: posters[0].doc }, vars: {}, assets: {}, script: '',
         renderer: request.renderer === 'electron-osr' ? 'electron-osr' : 'chromium',
+      rendererExtra: state.electron && state.electron.systemBrowser ? { systemBrowser: state.electron.systemBrowser } : null,
         quality: 'preview', resume: false, fps: 30, posters,
       },
       catalog,

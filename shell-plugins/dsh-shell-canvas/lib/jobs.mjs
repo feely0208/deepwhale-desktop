@@ -195,14 +195,16 @@ export class JobManager {
 
     // ★ 进程内 OSR（2026-10-09）：插件本就在桌面端主进程里，BrowserWindow 现成 ——
     //   不必另起 Electron 进程，也就没有"找不到可执行 Electron"这一说。
-    if (isOsr && runtime.electron && runtime.electron.inProcess) {
+    if (isOsr && runtime.electron && runtime.electron.ok && (runtime.electron.inProcess || runtime.electron.systemBrowser)) {
       job.status = 'running';
       job.startedAt = Date.now();
       job.pid = 0;
       const ac = new AbortController();
       job.child = { kill: () => ac.abort() };   // 「取消」沿用既有逻辑
       this._log(job, '引擎：' + spec.engineRoot);
-      this._log(job, '后端：Electron OSR（进程内，宿主自带 Chromium）');
+      this._log(job, runtime.electron.systemBrowser
+        ? ('后端：系统浏览器（' + runtime.electron.systemBrowser + '）')
+        : '后端：Electron OSR（进程内，宿主自带 Chromium）');
       this._publish(job, { t: 'status' });
       void this._runInProcess(job, spec, ac.signal);
       return snapshot(job);
@@ -277,29 +279,39 @@ export class JobManager {
   async _runInProcess(job, spec, signal) {
     const windows = [];
     try {
-      const { BrowserWindow } = await import('electron');
-      const { pathToFileURL } = await import('node:url');
-      const { ElectronOsrAdapter } = await import(
-        pathToFileURL(join(spec.engineRoot, 'src/render/adapter-electron.mjs')).href
-      );
       const { runJob } = await import('./pipeline-run.mjs');
       const emit = (e) => this._onEvent(job, e);
-      const makeAdapter = ({ width, height }) => {
-        const win = new BrowserWindow({
-          show: false,
-          width,
-          height,
-          webPreferences: { offscreen: true, nodeIntegration: false, contextIsolation: true },
+      let makeAdapter;
+      if (spec.rendererExtra && spec.rendererExtra.systemBrowser) {
+        // 系统浏览器：纯 Node，不需要 Electron
+        const { SystemBrowserAdapter } = await import('./adapter-system-browser.mjs');
+        const bin = spec.rendererExtra.systemBrowser;
+        makeAdapter = ({ width, height }) => new SystemBrowserAdapter({
+          width, height, fps: spec.fps || 30, browserPath: bin,
         });
-        windows.push(win);
-        return new ElectronOsrAdapter({
-          window: win,
-          width,
-          height,
-          fps: spec.fps || 30,
-          session: win.webContents.session,
-        });
-      };
+      } else {
+        const { BrowserWindow } = await import('electron');
+        const { pathToFileURL } = await import('node:url');
+        const { ElectronOsrAdapter } = await import(
+          pathToFileURL(join(spec.engineRoot, 'src/render/adapter-electron.mjs')).href
+        );
+        makeAdapter = ({ width, height }) => {
+          const win = new BrowserWindow({
+            show: false,
+            width,
+            height,
+            webPreferences: { offscreen: true, nodeIntegration: false, contextIsolation: true },
+          });
+          windows.push(win);
+          return new ElectronOsrAdapter({
+            window: win,
+            width,
+            height,
+            fps: spec.fps || 30,
+            session: win.webContents.session,
+          });
+        };
+      }
       const value = await runJob(spec, { emit, makeAdapter, signal });
       emit({ t: 'result', value });
       this._onExit(job, 0, null);

@@ -149,7 +149,13 @@ export function apply(ctx) {
 
     const group = String(request.group || '');
     const catalog = readCatalog(root);
-    const entry = catalog.find((g) => g.id === group);
+    // 自定义文档（分镜表产出）：模板组可能根本不存在，这时**不查目录**，
+    // 直接把它当作 pair 里那个方向 —— 流程各处只认 spec.pair，所以不用改流程。
+    const customDoc = request.doc && typeof request.doc === 'object' ? request.doc : null;
+    const orient = request.orientation === 'horizontal' ? 'horizontal' : 'vertical';
+    const entry = customDoc
+      ? { id: group || 'storyboard', name: '分镜表', vars: (customDoc.vars || []), orientations: { [orient]: {} } }
+      : catalog.find((g) => g.id === group);
     if (!entry) throw httpError(404, `模板组不存在：${group}`);
 
     const reuse = request.resumeFrom && existsSync(request.resumeFrom) ? resolve(request.resumeFrom) : null;
@@ -164,7 +170,8 @@ export function apply(ctx) {
       outputRoot: outputRoot(),
       outDir,
       pack: 'video',
-      pair: loadPair(root, group),
+      pair: customDoc ? { [orient]: customDoc } : loadPair(root, group),
+      customDoc: !!customDoc,
       vars,
       assets: request.assets || {},
       script: request.script || '',
@@ -402,7 +409,11 @@ export function apply(ctx) {
     // 闸门放在**宿主这边**再走一遍，而不是只信界面的那次校验：
     // 界面可能被绕过（直接调接口、脚本、旧页面缓存），而"校验不通过不许进渲染"
     // 是规范层的事，不能只做成一个前端按钮。
-    const gate = await validateGroup(root, String(body.group || ''), body.vars || {});
+    // 自定义文档（分镜表）没有"模板组"可校验 —— 跳过这一层，
+    // 但**不跳过所有校验**：渲染时引擎仍会按文档 schema 校验。
+    const gate = body.doc
+      ? { ok: true, templates: [], skippedForCustomDoc: true }
+      : await validateGroup(root, String(body.group || ''), body.vars || {});
     if (!gate.ok) {
       const first = gate.templates.flatMap((t) => t.issues).find((i) => i.level === 'error');
       const err = httpError(422, first ? `校验不通过，已拦下渲染：[${first.code}] ${first.msg}` : '校验不通过，已拦下渲染');
@@ -410,7 +421,7 @@ export function apply(ctx) {
       throw err;
     }
 
-    const { spec, entry, reuse } = buildSpec({ ...body, kind });
+    const { spec, entry, reuse } = buildSpec({ ...body, kind });   // body.doc 会被 buildSpec 用上
     const title = `${entry.name}·${kind === 'preview' ? '预览' : '终版'}${spec.renderer === 'electron-osr' ? '（OSR）' : ''}`;
     return jobs.start(spec, { ...body, kind }, { title: reuse ? `${title}（续渲）` : title });
   }

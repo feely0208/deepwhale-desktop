@@ -340,6 +340,8 @@ window.__ModuleLoader__.load({
       //   不加 / 用我自己的文件 —— 版权责任在用户，我们只做混音（引擎侧记一条日志）
       const [bgmMode, setBgmMode] = useState('none');
       const [bgmFile, setBgmFile] = useState('');
+      // 分镜表（2026-10-09 用户核心需求）：每句 → 配哪张素材、从第几秒、停多久
+      const [board, setBoard] = useState(null);   // null=不用分镜表；数组=正在用
       // ⚠️ 以前这里写死 'chromium'，要用户**手动勾选**才走非 playwright 后端 ——
       //   于是默认任务全部走 Playwright Chromium，而真机上没有它 →
       //   任务失败「Cannot find package 'playwright-core'」，用户完全看不懂。
@@ -465,6 +467,42 @@ window.__ModuleLoader__.load({
         const job = await api('/job', { method: 'POST', body });
         setJobs((prev) => [job, ...prev.filter((j) => j.id !== job.id)]);
       }
+
+      /** 把旁白稿按标点拆句，生成分镜表（每句一行，素材/时间可改） */
+      const buildBoard = () => {
+        const textVar2 = current && current.vars ? (current.vars.find((x) => x.type === 'text' && x.key !== 'title') || {}).key : null;
+        const text = script || (textVar2 ? String(values[textVar2] || '') : '');
+        const sents = String(text).split(/(?<=[。！？!?；;])/).map((x) => x.trim()).filter(Boolean);
+        if (!sents.length) { setError('先填旁白稿，再点「分镜表」'); return; }
+        const shotsAll = Object.values(assets).flat().map((x) => (typeof x === 'string' ? x : x && x.path)).filter(Boolean);
+        let cur = 0;
+        setBoard(sents.map((t, i) => {
+          const dur = Math.max(1.5, Math.round((t.replace(/\s/g, '').length / 4) * 10) / 10);
+          const row = { text: t, shot: shotsAll[i] || '', start: cur, duration: dur };
+          cur = Math.round((cur + dur) * 10) / 10;
+          return row;
+        }));
+        setError(null);
+      };
+
+      /** 用分镜表出片：交给 story.board 产出完整文档，再按文档起任务 */
+      const doBoard = () => run('分镜表出片', async () => {
+        if (!board || !board.length) throw new Error('先点「分镜表」生成分镜行');
+        const items = board.map((r) => ({ text: r.text, shot: r.shot || null, start: Number(r.start) || 0, duration: Number(r.duration) || 0 }));
+        for (const it of items) if (!it.text) throw new Error('有分镜行是空的');
+        const r = await api('/produce', { method: 'POST', body: {
+          producer: 'story.board',
+          input: { title: values.title || '', items, orientation: 'vertical' },
+        } });
+        const out = r && r.doc ? r.doc : null;
+        if (!out || !out.doc) throw new Error('分镜没产出文档（引擎返回为空）');
+        const job = await api('/job', { method: 'POST', body: {
+          kind: 'preview', group: 'storyboard', orientation: 'vertical',
+          doc: out.doc, vars: out.vars, assets: out.assets || {},
+          renderer, previewSeconds, bgmFile: bgmMode === 'file' && bgmFile ? bgmFile : null,
+        } });
+        if (job) setJobs((prev) => [job, ...prev.filter((j) => j.id !== job.id)]);
+      });
 
       const doPreview = () => run('预览', () => startJob('preview', {}));
       /**
@@ -756,6 +794,49 @@ window.__ModuleLoader__.load({
                           })),
                         }, bgmFile ? '换一个' : '选择…'),
                         bgmFile ? h(Btn, { key: 'x', size: 'sm', onClick: () => setBgmFile('') }, '清除') : null,
+                      ]) : null,
+                    ]))),
+
+                h('div', { key: 'board', style: { marginTop: 22 } },
+                  h(Section, { title: '分镜表（可选 · 控制每句配哪张素材、停多久）' },
+                    h('div', null, [
+                      h('div', { className: 'dshcv-row', key: 'act' }, [
+                        h(Btn, { key: 'b', size: 'sm', onClick: buildBoard }, board ? '重新按旁白稿生成' : '按旁白稿生成分镜'),
+                        board ? h(Btn, { key: 'c', size: 'sm', onClick: () => setBoard(null) }, '不用分镜表') : null,
+                      ]),
+                      board ? h('div', { key: 'tbl', style: { marginTop: 10 } }, board.map((row, i) => h('div', {
+                        key: i, className: 'dshcv-row', style: { gap: '6px', marginBottom: '6px', alignItems: 'center' },
+                      }, [
+                        h('span', { key: 'n', className: 'dshcv-sub', style: { width: '20px', flex: 'none' } }, String(i + 1)),
+                        h('input', {
+                          key: 't', className: 'dshcv-input', value: row.text, readOnly: true,
+                          style: { flex: '1 1 auto', minWidth: '120px' },
+                        }),
+                        h('input', {
+                          key: 's', className: 'dshcv-input', type: 'text', value: row.shot || '', readOnly: true,
+                          placeholder: '不加图', style: { width: '150px', flex: 'none' },
+                        }),
+                        h(Btn, {
+                          key: 'p', size: 'sm',
+                          onClick: () => pickFile('image/*,video/*', (f) => run('上传', async () => {
+                            const up = await upload(f);
+                            setBoard((rows) => rows.map((r2, k) => (k === i ? { ...r2, shot: up.path } : r2)));
+                          })),
+                        }, '选图'),
+                        h('input', {
+                          key: 'st', className: 'dshcv-input', value: String(row.start), title: '开始秒数',
+                          onChange: (e) => { const v2 = e.target.value; setBoard((rows) => rows.map((r2, k) => (k === i ? { ...r2, start: v2 } : r2))); },
+                          style: { width: '58px', flex: 'none' },
+                        }),
+                        h('input', {
+                          key: 'du', className: 'dshcv-input', value: String(row.duration), title: '持续秒数',
+                          onChange: (e) => { const v2 = e.target.value; setBoard((rows) => rows.map((r2, k) => (k === i ? { ...r2, duration: v2 } : r2))); },
+                          style: { width: '58px', flex: 'none' },
+                        }),
+                      ]))) : null,
+                      board ? h('div', { key: 'go', className: 'dshcv-row', style: { marginTop: 8 } }, [
+                        h(Btn, { key: 'r', primary: true, size: 'sm', onClick: doBoard }, '按分镜表出片'),
+                        h('span', { key: 'h', className: 'dshcv-sub' }, `共 ${board.length} 句 · 总时长 ${(board.reduce((a, r2) => Math.max(a, (Number(r2.start) || 0) + (Number(r2.duration) || 0)), 0)).toFixed(1)}s`),
                       ]) : null,
                     ]))),
 

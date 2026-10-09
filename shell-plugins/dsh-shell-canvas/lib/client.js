@@ -501,7 +501,7 @@ window.__ModuleLoader__.load({
       }).then((j) => { if (j) setJobs((prev) => [j, ...prev]); });
       const reveal = (p) => run('打开', () => api('/reveal', { method: 'POST', body: { path: p } }));
 
-      const checkOsr = () => run('检测 OSR', async () => {
+      const checkOsr = () => run('检测渲染能力', async () => {
         const r = await api('/osr', { method: 'POST', body: { force: true } });
         setOsr(r);
         return r;
@@ -573,7 +573,7 @@ window.__ModuleLoader__.load({
             engineOk
               ? `引擎 ${state.engine.version || '?'} · 领域包 ${state.engine.pack || '?'} · 界面 ${BUILD}`
               : `引擎未就绪 · 界面 ${BUILD}`),
-          h('span', { className: 'dshcv-chip', key: 'r' }, renderer === 'electron-osr' ? 'OSR 后端' : 'Chromium 后端'),
+          h('span', { className: 'dshcv-chip', key: 'r' }, renderer === 'electron-osr' ? '极速渲染' : '兼容渲染'),
           runningCount ? h('span', { className: 'dshcv-chip dshcv-chip-brand', key: 'j' }, `${runningCount} 个任务在跑`) : null,
           h('span', { className: 'dshcv-spacer', key: 'sp' }),
           h(Btn, { key: 'ref', size: 'sm', onClick: refresh, disabled: !!busy }, '刷新'),
@@ -675,7 +675,14 @@ window.__ModuleLoader__.load({
                       h(Btn, {
                         key: 'b', size: 'sm',
                         onClick: () => pickFile('image/*,video/*', (files) => run('上传', async () => {
-                          const arr = Array.isArray(files) ? files : [files];
+                          // 插件不是大型软件：素材给个**明确上限**（12），
+                          // 选超了只取前 12 并当场告诉用户（不静默截断）。
+                          const MAX_SHOTS = 12;
+                          let arr = Array.isArray(files) ? files : [files];
+                          if (arr.length > MAX_SHOTS) {
+                            arr = arr.slice(0, MAX_SHOTS);
+                            setError(`一次最多 ${MAX_SHOTS} 张素材，已取前 ${MAX_SHOTS} 张`);
+                          }
                           const ups = [];
                           for (const f of arr) {
                             const up = await upload(f);
@@ -725,8 +732,8 @@ window.__ModuleLoader__.load({
                         h(Opt, {
                           key: 'osr', type: 'checkbox', checked: renderer === 'electron-osr',
                           onChange: (on) => { setRendererTouched(true); setRenderer(on ? 'electron-osr' : 'chromium'); },
-                          title: '用 Electron OSR 出帧',
-                          desc: '改用桌面端自带的 Chromium 出帧（S1 留的验收，实测与 Playwright 的 Chromium 逐字节一致）。默认走 Playwright Chromium，更快。',
+                          title: '用桌面自带渲染（推荐）',
+                          desc: '用桌面端自带的渲染能力出片（更快、更稳）。关掉也能出片，只是慢一点 —— 普通用户不用管这个开关。',
                         }),
                       ]),
                       h('div', { className: 'dshcv-row', key: 'sec', style: { marginTop: 12 } }, [
@@ -786,14 +793,14 @@ window.__ModuleLoader__.load({
                   title: `任务${jobs.length ? ` · ${jobs.length}` : ''}`,
                   right: h('div', { key: 'r', className: 'dshcv-row' }, [
                     h(Btn, { key: 'o', size: 'sm', onClick: checkOsr, disabled: !!busy },
-                      busy === '检测 OSR' ? '检测中…' : '检测 Electron OSR'),
+                      busy === '检测渲染能力' ? '检测中…' : '检测渲染能力'),
                   ]),
                 }, h('div', null, [
                   osr ? h('div', {
                     key: 'osr', className: `dshcv-banner ${osr.ok ? 'dshcv-ok' : 'dshcv-warn'}`, style: { marginBottom: 10 },
                   }, osr.ok
-                    ? `✅ Electron OSR 可用：Electron ${osr.electron}（Chromium ${osr.chrome}）`
-                    : `⚠️ Electron OSR 不可用：${osr.reason}。仍可用 Chromium 后端出片。`) : null,
+                    ? `✅ 渲染就绪（极速模式）`
+                    : `⚠️ 极速渲染不可用，已自动改用兼容渲染（也能出片，稍慢）。`) : null,
                   jobs.length === 0
                     ? h(Empty, { key: 'e' }, '还没有任务 —— 填好参数，点「预览」或「出终版」')
                     : h('div', { key: 'list' }, [
@@ -849,7 +856,7 @@ window.__ModuleLoader__.load({
         h('div', { className: 'dshcv-job-h', key: 'h' }, [
           h('span', { key: 't', className: 'dshcv-job-t' }, job.title || job.kind),
           h('span', { key: 's', className: `dshcv-chip ${tone}` }, statusText),
-          running && job.renderer === 'electron-osr' ? h('span', { key: 'osr', className: 'dshcv-chip' }, 'OSR') : null,
+          running && job.renderer === 'electron-osr' ? h('span', { key: 'osr', className: 'dshcv-chip' }, '极速') : null,
           h('span', { key: 'sp', className: 'dshcv-spacer' }),
           running ? h(Btn, { key: 'ck', size: 'sm', onClick: () => onCancel(job.id, false) }, '取消但留断点') : null,
           running ? h(Btn, { key: 'c', size: 'sm', danger: true, onClick: () => onCancel(job.id, true) }, '取消并清理') : null,

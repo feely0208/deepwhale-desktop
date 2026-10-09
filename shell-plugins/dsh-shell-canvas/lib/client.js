@@ -802,25 +802,25 @@ window.__ModuleLoader__.load({
                   h(Section, { title: '保存位置' },
                     h('div', null, [
                       h('div', { className: 'dshcv-slot', key: 'o' }, [
+                        // 只读显示当前生效的目录 —— **不在插件上放"确定/取消"**：
+                        // 确认由系统对话框负责（用户定：得按系统的步骤来）。
                         h('input', {
-                          key: 'i', className: 'dshcv-input', value: outDir || (state && state.runtime && state.runtime.outputRoot) || '',
-                          placeholder: '成片保存到哪儿（可以改）',
-                          onChange: (e) => setOutDir(e.target.value),
-                          onKeyDown: (e) => { if (e.key === 'Enter') saveOutDir(e.target.value); },
+                          key: 'i', className: 'dshcv-input', readOnly: true,
+                          value: (state && state.runtime && state.runtime.outputRoot) || '',
+                          placeholder: '成片保存到哪儿',
                         }),
-                        // 常用位置：一键填进去（不依赖系统对话框 —— 那个在嵌入式窗口里是残缺的）
                         ...(((state && state.runtime && state.runtime.commonDirs) || [])
                           .filter((d2) => d2.exists)
                           .map((d2) => h(Btn, {
                             key: 'q-' + d2.label, size: 'sm',
-                            onClick: () => setOutDir(d2.dir),
+                            // 点一下即生效（这些是明确的一步操作，不需要再确认一次）
+                            onClick: () => run('保存位置', () => applyOutDir(d2.dir)),
                           }, d2.label))),
-                        h(Btn, { key: 's', size: 'sm', primary: true, onClick: () => saveOutDir(outDir) }, '确定'),
-                        h(Btn, { key: 'x', size: 'sm', onClick: () => { setOutDir(''); setError(null); } }, '取消'),
-                        h(Btn, { key: 'o2', size: 'sm', onClick: () => reveal(outDir || (state && state.runtime && state.runtime.outputRoot) || '') }, '打开位置'),
+                        h(Btn, { key: 'p2', size: 'sm', primary: true, onClick: pickDirNative }, '选择文件夹…'),
+                        h(Btn, { key: 'o2', size: 'sm', onClick: () => reveal((state && state.runtime && state.runtime.outputRoot) || '') }, '打开位置'),
                       ]),
                       h('div', { key: 'h', className: 'dshcv-sub', style: { marginTop: 6 } },
-                        '默认放在你自己的影片目录下（不是插件目录、不是系统盘深处）。改完对之后的任务都生效。'),
+                        '成片存放在这里（不是插件目录、不是系统盘深处）。点常用位置或「选择文件夹…」即生效。'),
                       outDirMsg ? h('div', { key: 'm', className: 'dshcv-sub', style: { marginTop: 6, color: '#3FD0E0' } }, outDirMsg) : null,
                     ]))),
 

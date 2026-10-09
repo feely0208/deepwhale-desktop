@@ -297,7 +297,7 @@ export function apply(ctx) {
       if (p === `${ROUTE}/api/state` && req.method === 'GET') return send(res, 200, await apiState());
       // ── 框架面（A）：把「生产者 / Provider / 批量」开给面板 ──────────────
       if (p === `${ROUTE}/api/output-dir` && req.method === 'POST') return send(res, 200, apiSetOutputDir(body));
-      if (p === `${ROUTE}/api/pick-dir` && req.method === 'POST') return send(res, 200, apiPickDir());
+      if (p === `${ROUTE}/api/pick-dir` && req.method === 'POST') return send(res, 200, await apiPickDir());
       if (p === `${ROUTE}/api/producers` && req.method === 'GET') return send(res, 200, await apiProducers());
       if (p === `${ROUTE}/api/produce` && req.method === 'POST') return send(res, 200, await apiProduce(body));
       if (p === `${ROUTE}/api/providers` && req.method === 'GET') return send(res, 200, await apiProviders());
@@ -347,26 +347,53 @@ export function apply(ctx) {
    * 系统对话框**自带"选取/取消"**，选完即生效 —— 插件不该再多一个"确定"。
    * 取消返回 {cancelled:true}（不是错误，不能报成红字）。
    */
-  function apiPickDir() {
-    const { spawnSync } = require('node:child_process');
-    if (process.platform === 'darwin') {
-      const r = spawnSync('osascript', ['-e',
+  async function apiPickDir() {
+    // ⚠️ 2026-10-09 用户实测：「选择文件夹点了没反应」。
+    //    最可能是原来用 **spawnSync 同步**调 osascript —— 对话框弹出来之前，
+    //    整个插件服务（单线程）被卡住，那个 POST 一直挂着，界面看着就是"没反应"。
+    //    改成**异步 spawn**：服务照常响应，弹窗照常出现，失败也能带出原因。
+    const { spawn } = require('node:child_process');
+    const runAsync = (cmd, args, label) => new Promise((res) => {
+      let out = '';
+      let err = '';
+      let done = false;
+      const finish = (r) => { if (!done) { done = true; res(r); } };
+      let child;
+      try {
+        child = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+      } catch (e) {
+        console.error(`[canvas] ${label} 起不来：${e.message}`);
+        return finish({ ok: false, err: e.message });
+      }
+      child.stdout.on('data', (d) => { out += d; });
+      child.stderr.on('data', (d) => { err += d; });
+      child.on('error', (e) => {
+        console.error(`[canvas] ${label} 错误：${e.message}`);
+        finish({ ok: false, err: e.message });
+      });
+      child.on('close', (code) => finish({ ok: true, code, out: out.trim(), err: err.trim() }));
+      setTimeout(() => { try { child.kill(); } catch { /* ignore */ } finish({ ok: false, err: '超时（3 分钟没操作）' }); }, 180000);
+    });
+
+    const plat = process.platform;
+    console.log('[canvas] 弹系统文件夹对话框：' + plat);
+    if (plat === 'darwin') {
+      const r = await runAsync('osascript', ['-e',
         'try\nPOSIX path of (choose folder with prompt "选择成片保存位置")\non error number -128\nreturn "CANCELLED"\nend try',
-      ], { encoding: 'utf8', timeout: 120000 });
-      const out = String(r.stdout || '').trim();
-      if (!out || out === 'CANCELLED') return { cancelled: true };
-      return { dir: out.replace(/\/+$/, '') };
+      ], 'osascript');
+      if (!r.ok) throw httpError(500, `弹系统对话框失败：${r.err}（可以直接点上面的常用位置按钮）`);
+      if (r.out === 'CANCELLED' || !r.out) return { cancelled: true };
+      return { dir: r.out.replace(/\/+$/, '') };
     }
-    if (process.platform === 'win32') {
+    if (plat === 'win32') {
       const ps = "Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.FolderBrowserDialog; $d.Description = '选择成片保存位置'; if ($d.ShowDialog() -eq 'OK') { Write-Output $d.SelectedPath }";
-      const r = spawnSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', ps], { encoding: 'utf8', timeout: 120000 });
-      const out = String(r.stdout || '').trim();
-      return out ? { dir: out } : { cancelled: true };
+      const r = await runAsync('powershell', ['-NoProfile', '-NonInteractive', '-Command', ps], 'powershell');
+      if (!r.ok) throw httpError(500, `弹系统对话框失败：${r.err}（可以直接点上面的常用位置按钮）`);
+      return r.out ? { dir: r.out } : { cancelled: true };
     }
-    const r = spawnSync('zenity', ['--file-selection', '--directory', '--title=选择成片保存位置'], { encoding: 'utf8', timeout: 120000 });
-    if (r.error) throw httpError(500, '这台机器没有 zenity，弹不出系统文件夹对话框 —— 可以直接把路径填进输入框');
-    const out = String(r.stdout || '').trim();
-    return out ? { dir: out } : { cancelled: true };
+    const r = await runAsync('zenity', ['--file-selection', '--directory', '--title=选择成片保存位置'], 'zenity');
+    if (!r.ok) throw httpError(500, `弹不出来（这台机器可能没装 zenity）：${r.err}。可以直接点上面的常用位置按钮`);
+    return r.out ? { dir: r.out } : { cancelled: true };
   }
 
   /** 设/读成片保存位置。目录不存在就建；建不了就明确报错（不静默回退）。 */

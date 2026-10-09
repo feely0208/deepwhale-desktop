@@ -1491,8 +1491,29 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
           // 用户开了「桌面地址文件」的话，token 一变就刷新它 ——
           // 否则 DSH 重启换了 token，桌面那份就是过期的，用户照着输还是进不去。
           refreshMobileAddressFile();
-          // 服务就绪后窗口可能已按裸地址加载（拿到 401 鉴权页），拿到 token 立即补载
-          if (mainWin && !mainWin.isDestroyed() && !mainWin.webContents.getURL().includes('token=')) {
+          // 服务就绪后窗口可能已按裸地址加载（拿到 401 鉴权页），拿到 token 立即补载。
+          //
+          // ⚠️ 修（2026-10-09）：这里原本判断的是「URL 里**有没有** token=」，
+          //   而不是「**是不是当前这个** token」。后果：
+          //     启动时 restorePersistedTokenUrl() 会先加载**持久化的旧令牌**地址 → 401；
+          //     DSH 换了令牌后走到这里，旧 URL 里"已经有 token=" → 条件为假 → **补载被跳过**
+          //     → 界面永远停在「dsh web authentication required」，且没有任何提示，
+          //       用户只能重启应用碰运气。
+          //   正常使用碰不到（DSH 令牌一般稳定），但只要令牌变过（home 被清、服务重启换令牌、
+          //   改端口）就会中招。改成比**令牌值**：旧令牌 != 新令牌 → 照样补载。
+          const freshToken = (() => {
+            try {
+              return new URL(dshTokenUrl).searchParams.get('token') || '';
+            } catch {
+              return '';
+            }
+          })();
+          const alreadyFresh =
+            freshToken !== '' &&
+            mainWin !== null &&
+            !mainWin.isDestroyed() &&
+            mainWin.webContents.getURL().includes('token=' + encodeURIComponent(freshToken));
+          if (mainWin && !mainWin.isDestroyed() && !alreadyFresh) {
             void mainWin.loadURL(dshTokenUrl).catch(() => {});
           }
         }

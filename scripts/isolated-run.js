@@ -275,12 +275,15 @@ const listTargets = () => new Promise((res) => {
         if (title) setVal(title, '本机出片实测');
         await new Promise((r) => setTimeout(r, 800));
         // 点「预览」（比出终版快，同样走完 配音→渲染→合成 全链路）
-        const btn = [...document.querySelectorAll('.dshcv-btn')].find((b) => /^预览/.test((b.textContent || '').trim()));
+        // CANVAS_FINAL=1 → 点「出终版（横竖双版）」；否则点「预览」（快，先验版式）
+        const want = args.final ? /^出终版/ : /^预览/;
+        const btn = [...document.querySelectorAll('.dshcv-btn')].find((b) => want.test((b.textContent || '').trim()));
         if (!btn) return { clicked: false, btns: [...document.querySelectorAll('.dshcv-btn')].map((b) => b.textContent.trim()) };
         btn.click();
         return { clicked: true, label: btn.textContent.trim(), tpls: tpls.length, hasArea: !!area, hasTitle: !!title };
-      }, { setter: setReactValue });
+      }, { setter: setReactValue, final: process.env.CANVAS_FINAL === '1' });
       console.log('[iso] 已提交任务:', JSON.stringify(started));
+      const t0 = Date.now();
       // 等任务完成：出现 <video>（成片预览）或文本含"打开位置"
       let done = false;
       for (let i = 0; i < 90 && !done; i++) {          // 最多 6 分钟
@@ -293,7 +296,7 @@ const listTargets = () => new Promise((res) => {
         }, {});
         // 每次都把面板真实文本打出来 —— 任务卡在哪儿只能从这里看
         console.log('[iso] 等出片… ' + (i * 4) + 's  videos=' + st.videos + '  | ' + String(st.tail).slice(-260));
-        if (st.videos > 0) { done = true; console.log('[iso] ✅ 出片完成，成片预览 ' + st.videos + ' 个'); }
+        if (st.videos > 0) { done = true; console.log('[iso] ✅ 出片完成，成片预览 ' + st.videos + ' 个 · 总耗时 ' + ((Date.now() - t0) / 1000).toFixed(0) + 's'); }
         if (st.err) { console.log('[iso] ⚠️ 面板报错: ' + st.err); break; }
       }
       const final = await ev(() => {

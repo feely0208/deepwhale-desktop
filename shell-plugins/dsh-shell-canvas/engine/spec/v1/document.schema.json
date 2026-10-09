@@ -1,0 +1,377 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.deepwhale.org.cn/canvas/v1/document.schema.json",
+  "title": "DeepWhale Canvas Document (spec v1)",
+  "description": "深鲸画布模板：声明式数据，不含任何可执行内容。",
+  "type": "object",
+  "required": [
+    "spec",
+    "domain",
+    "domainVersion",
+    "canvas",
+    "nodes",
+    "meta"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "spec": {
+      "const": 1,
+      "description": "规范版本，必须是 1"
+    },
+    "domain": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,31}$"
+    },
+    "domainVersion": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "canvas": {
+      "$ref": "#/$defs/canvas"
+    },
+    "vars": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/variable"
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/node"
+      }
+    },
+    "timeline": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/timelineItem"
+      }
+    },
+    "resources": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/resource"
+      }
+    },
+    "meta": {
+      "$ref": "#/$defs/meta"
+    }
+  },
+  "$defs": {
+    "canvas": {
+      "type": "object",
+      "required": [
+        "units",
+        "w",
+        "h"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "units": {
+          "enum": [
+            "px",
+            "mm",
+            "pt"
+          ]
+        },
+        "w": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "h": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "dpi": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "fps": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 240
+        },
+        "frames": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "preset": {
+          "type": "string"
+        },
+        "safeArea": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "top": {
+              "type": "number",
+              "minimum": 0
+            },
+            "right": {
+              "type": "number",
+              "minimum": 0
+            },
+            "bottom": {
+              "type": "number",
+              "minimum": 0
+            },
+            "left": {
+              "type": "number",
+              "minimum": 0
+            }
+          }
+        },
+        "background": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "description": "画布底色，默认 #000000"
+        },
+        "space": {
+          "enum": [
+            "2d",
+            "3d"
+          ]
+        }
+      }
+    },
+    "variable": {
+      "type": "object",
+      "required": [
+        "key",
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "type": "string",
+          "pattern": "^[a-zA-Z_][a-zA-Z0-9_-]{0,63}$"
+        },
+        "type": {
+          "enum": [
+            "text",
+            "number",
+            "image",
+            "video",
+            "audio",
+            "list",
+            "bool"
+          ]
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "max": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "default": {},
+        "label": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "constraints": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "maxLength": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "pattern": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "node": {
+      "type": "object",
+      "required": [
+        "id",
+        "type",
+        "props"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-zA-Z_][a-zA-Z0-9_.-]{0,127}$"
+        },
+        "type": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{1,31}$"
+        },
+        "props": {
+          "type": "object"
+        },
+        "children": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/node"
+          }
+        },
+        "transform": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "z": {
+              "type": "number"
+            },
+            "scale": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "rotate": {
+              "type": "number"
+            }
+          }
+        },
+        "style": {
+          "type": "object"
+        },
+        "visible": {
+          "type": "boolean"
+        },
+        "locked": {
+          "type": "boolean"
+        }
+      }
+    },
+    "timelineItem": {
+      "type": "object",
+      "required": [
+        "nodeId",
+        "from",
+        "to"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "nodeId": {
+          "type": "string"
+        },
+        "from": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "to": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "vars": {
+          "type": "string"
+        },
+        "anim": {
+          "type": "object",
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]{1,31}$"
+            },
+            "params": {
+              "type": "object"
+            }
+          }
+        },
+        "hold": {
+          "type": "boolean",
+          "description": "动画结束后是否保持终态（默认 true：入场后留在场上）"
+        }
+      }
+    },
+    "resource": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "pack",
+            "user"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "slot": {
+          "type": "string",
+          "pattern": "^[a-zA-Z_][a-zA-Z0-9_-]{0,63}$"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "mime": {
+          "type": "string"
+        }
+      }
+    },
+    "meta": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "author",
+        "license"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{1,31}/[a-z0-9][a-z0-9-]{1,63}$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "author": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "license": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$"
+        },
+        "aiGenerated": {
+          "type": "boolean",
+          "description": "是否含 AI 生成内容（需按国家规定标识）"
+        },
+        "tags": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "string",
+            "maxLength": 16
+          }
+        }
+      }
+    }
+  }
+}

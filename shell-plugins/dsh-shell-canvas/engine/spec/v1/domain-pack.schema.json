@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.deepwhale.org.cn/canvas/v1/domain-pack.schema.json",
+  "title": "DeepWhale Canvas Domain Pack (spec v1)",
+  "description": "领域包：声明一个领域允许的节点、动效、字体、音频台账与各种上限。加领域 = 加这个文件，不改内核。",
+  "type": "object",
+  "required": ["domain", "version", "engineRange", "canvas", "nodes", "animations", "fonts", "constraints", "adapters"],
+  "additionalProperties": false,
+  "properties": {
+    "domain": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,31}$" },
+    "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "engineRange": { "type": "string", "minLength": 3, "description": "语义化范围，如 >=1.0.0 <2" },
+    "canvas": {
+      "type": "object",
+      "required": ["units", "presets"],
+      "additionalProperties": false,
+      "properties": {
+        "units": { "enum": ["px", "mm", "pt"] },
+        "presets": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string" },
+              "w": { "type": "number" },
+              "h": { "type": "number" },
+              "dpi": { "type": "number" },
+              "fps": { "type": "number" },
+              "maxFrames": { "type": "integer" },
+              "maxW": { "type": "number" },
+              "maxH": { "type": "number" },
+              "maxFps": { "type": "number" }
+            }
+          }
+        }
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["type"],
+        "additionalProperties": false,
+        "properties": {
+          "type": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,31}$" },
+          "propsSchema": { "type": "string" },
+          "description": { "type": "string" }
+        }
+      }
+    },
+    "animations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,31}$" },
+          "paramsSchema": { "type": "string" },
+          "appliesTo": { "type": "array", "items": { "type": "string" } },
+          "description": { "type": "string" }
+        }
+      }
+    },
+    "fonts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "license"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,31}$" },
+          "name": { "type": "string" },
+          "license": { "type": "string", "description": "必须是可以商用的开源许可，如 OFL-1.1" },
+          "licenseUrl": { "type": "string" },
+          "bundled": { "type": "boolean" }
+        }
+      }
+    },
+    "constraints": {
+      "type": "object",
+      "required": ["maxNodes", "maxDepth", "maxResourceMB", "allowExternalUrl"],
+      "additionalProperties": false,
+      "properties": {
+        "maxNodes": { "type": "integer", "minimum": 1 },
+        "maxDepth": { "type": "integer", "minimum": 1 },
+        "maxResourceMB": { "type": "number", "minimum": 0 },
+        "allowExternalUrl": { "const": false, "description": "v1 恒为 false：不允许外链" },
+        "requireAiLabel": { "type": "boolean" }
+      }
+    },
+    "validators": { "type": "array", "items": { "type": "string" } },
+    "adapters": { "type": "array", "minItems": 1, "items": { "enum": ["html", "raster", "vector", "3d"] } },
+    "bgmRegistry": { "type": "string" },
+    "tools": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string" },
+          "inputSchema": { "type": "string" },
+          "description": { "type": "string" }
+        }
+      }
+    }
+  }
+}

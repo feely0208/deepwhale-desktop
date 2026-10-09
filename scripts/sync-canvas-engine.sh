@@ -18,7 +18,11 @@ echo "[sync] 源 : $CANVAS_SRC"
 echo "[sync] 目标: $DST"
 rm -rf "$DST"
 mkdir -p "$DST"
-for d in src packs templates; do cp -R "$CANVAS_SRC/$d" "$DST/"; done
+# ⚠️ spec/ **必须带上**（2026-10-09 真机上现形）：
+#   校验文档要读 spec/v1/document.schema.json，缺了它面板会直接画
+#   「ENOENT: no such file or directory, open '.../engine/spec/v1/document.schema.json'」，
+#   任务永远出不了片。只拷 src/packs/templates 是不够的。
+for d in src packs templates spec; do cp -R "$CANVAS_SRC/$d" "$DST/"; done
 
 # 记下来源版本，便于排查"插件里这份引擎是哪来的"
 VER="$(git -C "$CANVAS_SRC" describe --tags --always --dirty 2>/dev/null || echo unknown)"

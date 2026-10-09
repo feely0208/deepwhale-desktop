@@ -173,6 +173,51 @@ const listTargets = () => new Promise((res) => {
     shot = async (f) => { const r = await send2('Page.captureScreenshot', { format: 'png' }); fs.writeFileSync(f, Buffer.from(r.data, 'base64')); };
   }
 
+  // ⚠️ **等 DSH 服务真的能应答**（2026-10-09 找到的关键）
+  //   页面出现 ≠ 服务就绪：应用会先把窗口指向端口，DSH 服务要**几十秒**才起来。
+  //   之前我在 +6~16 秒就探测 → 页面里 fetch 全失败、显示「重新连接中」，
+  //   看起来像"插件坏了"，其实只是服务还没起来。
+  //   这里用应用自己的判据：HTTP GET 端口能应答才算就绪（最多等 3 分钟）。
+  const serviceUp = () => new Promise((res) => {
+    const req = http.get({ host: '127.0.0.1', port: APP_PORT, path: '/', timeout: 2000 }, (r) => { r.resume(); res(true); });
+    req.on('timeout', () => { req.destroy(); res(false); });
+    req.on('error', () => res(false));
+  });
+  let up = false;
+  for (let i = 0; i < 90 && !up; i++) {
+    up = await serviceUp();
+    if (!up) { if (i % 10 === 0) console.log('[iso] 等 DSH 服务应答… ' + (i * 2) + 's'); await sleep(2000); }
+  }
+  console.log(up ? '[iso] ✅ DSH 服务已应答' : '[iso] ❌ 3 分钟内服务没应答');
+  await sleep(4000);   // 再给它一点时间把插件挂上
+
+  // ── 诊断：页面在哪个 origin、插件接口各种取法分别什么结果、重连是不是一直 ──
+  const diag = await ev(async () => {
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const out = { href: location.href.replace(/token=[^&]+/, 'token=***'), origin: location.origin };
+    // ① 相对路径（同源）
+    try { const r = await fetch('/dsh-canvas/api/state'); out.rel = r.status + ' ' + (await r.text()).slice(0, 120); }
+    catch (e) { out.rel = 'ERR ' + String(e); }
+    // ② 绝对路径（显式带 origin）
+    try { const r = await fetch(location.origin + '/dsh-canvas/api/state'); out.abs = r.status + ' ' + (await r.text()).slice(0, 120); }
+    catch (e) { out.abs = 'ERR ' + String(e); }
+    // ③ 一个已知的 DSH 自带接口，判断"是不是整个服务都连不上"
+    try { const r = await fetch('/api/health'); out.health = r.status; } catch (e) { out.health = 'ERR'; }
+    // ④ 重连是不是一直（采三次，间隔 5 秒）
+    out.samples = [];
+    for (let i = 0; i < 3; i++) {
+      const t = document.body.innerText.replace(/\s+/g, ' ');
+      out.samples.push(/重新连接中/.test(t) ? '重连中' : (/authentication required/.test(t) ? '认证页' : '正常'));
+      await sleep(5000);
+    }
+    return out;
+  }, {});
+  console.log('[iso] 诊断:', JSON.stringify(diag));
+  console.log('[iso] 服务存活(3311):', (() => {
+    try { return require('child_process').execFileSync('lsof', ['-t', '-nP', '-iTCP:' + APP_PORT, '-sTCP:LISTEN'], { encoding: 'utf8' }).trim() ? '在' : '不在'; }
+    catch { return '不在'; }
+  })());
+
   const found = await ev(async () => {
     const all = [...document.querySelectorAll('button,a,[role="button"],li,div,span')];
     const btn = all.find((n) => (n.textContent || '').trim() === '深鲸画布');
@@ -209,6 +254,60 @@ const listTargets = () => new Promise((res) => {
     console.log('[iso] 画布面板:', JSON.stringify(r2).slice(0, 500));
     await shot(path.join(OUT, 'panel.png'));
     console.log('[iso] 截图：' + path.join(OUT, 'panel.png'));
+
+    // ── A 方案核心：真机上驱动「选模板 → 填文案 → 出片 → 断言产物」──
+    if (process.env.CANVAS_PRODUCE === '1') {
+      console.log('[iso] 开始驱动出片…');
+      const setReactValue = `(el, v) => {
+        const proto = el.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+        const setter = Object.getOwnPropertyDescriptor(proto, 'value').set;
+        setter.call(el, v);
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+      }`;
+      const started = await ev(async (args) => {
+        const setVal = eval(args.setter);
+        const tpls = [...document.querySelectorAll('.dshcv-tpl')];
+        if (tpls.length) tpls[0].click();                       // 选第一个模板
+        await new Promise((r) => setTimeout(r, 800));
+        const area = document.querySelector('.dshcv-area');
+        const title = document.querySelector('.dshcv-input');
+        if (area) setVal(area, '很多人第一次用 AI，是被它会不会胡说劝退的。深鲸画布把稿子变成片子，全程在本机完成。');
+        if (title) setVal(title, '本机出片实测');
+        await new Promise((r) => setTimeout(r, 800));
+        // 点「预览」（比出终版快，同样走完 配音→渲染→合成 全链路）
+        const btn = [...document.querySelectorAll('.dshcv-btn')].find((b) => /^预览/.test((b.textContent || '').trim()));
+        if (!btn) return { clicked: false, btns: [...document.querySelectorAll('.dshcv-btn')].map((b) => b.textContent.trim()) };
+        btn.click();
+        return { clicked: true, label: btn.textContent.trim(), tpls: tpls.length, hasArea: !!area, hasTitle: !!title };
+      }, { setter: setReactValue });
+      console.log('[iso] 已提交任务:', JSON.stringify(started));
+      // 等任务完成：出现 <video>（成片预览）或文本含"打开位置"
+      let done = false;
+      for (let i = 0; i < 90 && !done; i++) {          // 最多 6 分钟
+        await sleep(4000);
+        const st = await ev(() => {
+          const vids = document.querySelectorAll('.dshcv-video video');
+          const text = (document.querySelector('.dshcv-root') || document.body).innerText.replace(/\s+/g, ' ');
+          const err = (text.match(/\[E_[A-Z_]+\][^。]{0,60}/) || [])[0] || '';
+          return { videos: vids.length, err: err, tail: text.slice(-400) };
+        }, {});
+        // 每次都把面板真实文本打出来 —— 任务卡在哪儿只能从这里看
+        console.log('[iso] 等出片… ' + (i * 4) + 's  videos=' + st.videos + '  | ' + String(st.tail).slice(-260));
+        if (st.videos > 0) { done = true; console.log('[iso] ✅ 出片完成，成片预览 ' + st.videos + ' 个'); }
+        if (st.err) { console.log('[iso] ⚠️ 面板报错: ' + st.err); break; }
+      }
+      const final = await ev(() => {
+        const vids = [...document.querySelectorAll('.dshcv-video video')];
+        return {
+          videos: vids.length,
+          srcs: vids.map((v) => String(v.getAttribute('src') || '').slice(0, 60)),
+          meta: vids.map((v) => ({ w: v.videoWidth, h: v.videoHeight, dur: Number((v.duration || 0).toFixed(2)) })),
+        };
+      }, {});
+      console.log('[iso] 成片:', JSON.stringify(final));
+      await shot(path.join(OUT, 'produced.png'));
+      console.log('[iso] 成片截图：' + path.join(OUT, 'produced.png'));
+    }
   }
   ws.close();
   console.log('[iso] 完成（保留 home，下次秒开）');

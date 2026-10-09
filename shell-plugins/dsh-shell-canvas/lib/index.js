@@ -352,7 +352,6 @@ export function apply(ctx) {
     //    最可能是原来用 **spawnSync 同步**调 osascript —— 对话框弹出来之前，
     //    整个插件服务（单线程）被卡住，那个 POST 一直挂着，界面看着就是"没反应"。
     //    改成**异步 spawn**：服务照常响应，弹窗照常出现，失败也能带出原因。
-    const { spawn } = require('node:child_process');
     const runAsync = (cmd, args, label) => new Promise((res) => {
       let out = '';
       let err = '';

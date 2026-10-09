@@ -30,4 +30,17 @@ rm -rf "$TARGET"
 cp -R "$SRC" "$TARGET"
 echo "[装] 完成 · 插件版本 $(python3 -c "import json;print(json.load(open('$TARGET/package.json'))['version'])" 2>/dev/null || echo '?')"
 echo "[装] 自检: 可多选=$(grep -c '可多选' "$TARGET/lib/client.js" || true) · 三形态=$(grep -c '一次出三形态' "$TARGET/lib/client.js" || true) · 自动选后端=$(grep -c '自动选' "$TARGET/lib/client.js" || true)"
+# ⚠️ 2026-10-09 加：这些文件是 ESM（用 import），**出现 require( 就是 bug**。
+#    用户实测踩过一次：宿主里写 require('node:child_process') → 报 "require is not defined"，
+#    表现是"点了没反应"（错误很小，肉眼容易漏）。所以装完自动扫一遍。
+# 只看**宿主侧 ESM 文件**（index.js 与 lib/*.mjs）；
+# client.js 是浏览器侧打包产物，那里 require 本来就可用，不算。
+# 也排除注释行（说明性文字里提到 require 是正常的）。
+REQ="$(grep -n 'require(' "$TARGET/lib/index.js" "$TARGET"/lib/*.mjs 2>/dev/null | grep -vE ':[0-9]+: *(//|\*|/\*)' || true)"
+if [ -n "$REQ" ]; then
+  echo "[装] ❌ 宿主 ESM 文件里出现 require(（运行时必报 require is not defined，表现为"点了没反应"）："
+  echo "$REQ" | sed 's/^/       /'
+  exit 1
+fi
+echo "[装] ✓ 宿主 ESM 无 require( 误用"
 echo "[装] ⚠️ 现在**完全退出应用再打开**（光刷新不够，插件是启动时加载的）"

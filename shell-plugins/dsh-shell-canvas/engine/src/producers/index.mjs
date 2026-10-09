@@ -66,8 +66,20 @@ export async function runProducer(id, input, ctx = {}) {
   if (!p) throw new Error(`没有这个生产者：${id}（可用：${[...registry.keys()].join(', ') || '无'}）`);
   const out = await p.produce(input || {}, ctx);
   if (!out || typeof out !== 'object') throw new Error(`生产者 ${id} 没返回结果`);
-  if (!out.template) throw new Error(`生产者 ${id} 没给 template`);
-  if (!out.vars || typeof out.vars !== 'object') throw new Error(`生产者 ${id} 没给 vars`);
+  // 两种返回都合法：
+  //   ① { template, vars, assets }          —— 单形态
+  //   ② { variants: [{ template, vars, assets }, ...] } —— 一次多形态
+  //      （用户要求：「一次预览就生成三种形态，这才是用户实际想要的」）
+  const hasOne = !!out.template;
+  const hasMany = Array.isArray(out.variants) && out.variants.length > 0;
+  if (!hasOne && !hasMany) throw new Error(`生产者 ${id} 既没给 template，也没给 variants`);
+  if (hasOne && (!out.vars || typeof out.vars !== 'object')) throw new Error(`生产者 ${id} 没给 vars`);
+  if (hasMany) {
+    for (const [i, v] of out.variants.entries()) {
+      if (!v || !v.template) throw new Error(`生产者 ${id} 的 variants[${i}] 缺 template`);
+      if (!v.vars || typeof v.vars !== 'object') throw new Error(`生产者 ${id} 的 variants[${i}]（${v.template}）缺 vars`);
+    }
+  }
   return { ...out, producer: id };
 }
 

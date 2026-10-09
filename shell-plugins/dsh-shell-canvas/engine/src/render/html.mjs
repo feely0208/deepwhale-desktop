@@ -81,7 +81,20 @@ function renderImage(node, slots) {
   const dataUrl = slotName ? slots[slotName] : null;
 
   if (dataUrl) {
-    return `<div id="layer-${esc(node.id)}" data-node="${esc(node.id)}" style="${style}"><img src="${dataUrl}" style="width:100%;height:100%;object-fit:${p.fit || 'cover'};display:block"></div>`;
+    const arr = Array.isArray(dataUrl) ? dataUrl : [dataUrl];
+    const first = arr[0];
+    const isVideo = /^data:video\//.test(String(first));
+    // 多素材（2026-10-09）：一个槽位可以给多张图、或一个视频素材
+    //   · 多张图 → 全部铺上，按时间轮播（切 display，在 setFrame 里做）
+    //   · 视频   → <video muted>，逐帧 seek（画面才是"动"的）
+    //   单图仍走最简单那条，不引入多余节点。
+    if (arr.length > 1 || isVideo) {
+      const inner = isVideo
+        ? `<video src="${first}" muted playsinline style="width:100%;height:100%;object-fit:${p.fit || 'cover'};display:block"></video>`
+        : arr.map((u, k) => `<img src="${u}" style="width:100%;height:100%;object-fit:${p.fit || 'cover'};display:${k === 0 ? 'block' : 'none'}">`).join('');
+      return `<div id="layer-${esc(node.id)}" data-node="${esc(node.id)}" data-shots="1" style="${style}">${inner}</div>`;
+    }
+    return `<div id="layer-${esc(node.id)}" data-node="${esc(node.id)}" style="${style}"><img src="${first}" style="width:100%;height:100%;object-fit:${p.fit || 'cover'};display:block"></div>`;
   }
   // 没有素材时给一个确定性占位（而不是空白，避免"看起来渲成功了其实没内容"）
   return `<div id="layer-${esc(node.id)}" data-node="${esc(node.id)}" style="${style};display:flex;align-items:center;justify-content:center;color:#3E6B85;font-size:28px;font-family:${fontStack('source-han-sans')}">素材槽位：${esc(slotName || p.src)}</div>`;
@@ -264,7 +277,40 @@ function setFrame(f) {
     }
     if (el.__html !== html) { el.innerHTML = html; el.__html = html; }
   }
+  // ── 多素材：同槽位多张图轮播 / 视频素材逐帧 seek（2026-10-09）──────────
+  //   用户原话：「素材上传只能传一张？那就没得搞了」「视频最好能是动态的，图片静态是对的」
+  //   轮播用节点自己的时间线区间切分；视频用 seek 把画面停在对应时刻。
+  //   ⚠️ seek 是异步的：这里返回 Promise，适配器会 await 它 ——
+  //      否则截到的是上一帧（那种"每帧慢一拍"的错最难查）。
+  const __doc = window.__canvasDoc || {};
+  const __fps = (__doc.canvas && __doc.canvas.fps) || 30;
+  const __span = new Map((__doc.timeline || []).map((t) => [t.nodeId, t]));
+  let __seeking = null;
+  document.querySelectorAll('[data-shots]').forEach((el) => {
+    const t = __span.get(el.dataset.node) || { from: 0, to: (__doc.canvas && __doc.canvas.frames) || 300 };
+    const total = Math.max(1, t.to - t.from);
+    const pr = Math.min(1, Math.max(0, (f - t.from) / total));
+    const imgs = el.querySelectorAll('img');
+    if (imgs.length > 1) {
+      const want = Math.min(imgs.length - 1, Math.floor(pr * imgs.length));
+      imgs.forEach((im, k) => { im.style.display = k === want ? 'block' : 'none'; });
+    }
+    const v = el.querySelector('video');
+    if (v) {
+      const dur = v.duration || 0;
+      const target = dur ? Math.min(Math.max(0, dur - 0.001), (f - t.from) / __fps) : 0;
+      if (Math.abs((v.currentTime || 0) - target) > 0.02) {
+        __seeking = new Promise((res) => {
+          const done = () => { try { v.removeEventListener('seeked', done); } catch (e) {} res(true); };
+          try { v.addEventListener('seeked', done); } catch (e) { res(true); }
+          setTimeout(done, 300);          // 兜底：解码慢/极短素材时别挂死
+          try { v.currentTime = target; } catch (e) { done(); }
+        });
+      }
+    }
+  });
   window.__canvasFrame = f;
+  return __seeking;
 }
 window.__canvas = {
   setFrame,

@@ -51,6 +51,39 @@ function register(registerProducer) {
       const sentences = splitSentences(input.text);
       if (sentences.length === 0) throw new Error('文案是空的（text 必填）');
 
+      // ★ 一次产出多形态（2026-10-09 用户要求）：
+      //   「一次预览就生成三种形态，这才是用户实际想要的」——
+      //   点了出片却只给一个版式、还要返回去再点一次，那是设计失误。
+      //   同一个内容按各模板的需要分别填变量，一次全渲出来让用户挑。
+      if (input.variants) {
+        const orientation = input.orientation === 'horizontal' ? 'horizontal' : 'vertical';
+        const shots = Array.isArray(input.shots) ? input.shots.filter(Boolean) : [];
+        for (const sh of shots) if (ctx.assertAsset) ctx.assertAsset(sh);
+        const title = String(input.title || sentences[0]).slice(0, 40);
+        const srt = toSrt(sentences);
+        const list = [];
+        // ① 旁白口播：标题 + 图 + 字幕
+        list.push({
+          template: `01-narration/${orientation}`,
+          vars: { title, subtitle: srt },
+          assets: shots.length ? { shots } : {},
+        });
+        // ② 金句引用：无图，挑一句最像"金句"的（取最长的一句）当大字
+        const best = sentences.slice().sort((a, b) => b.length - a.length)[0] || title;
+        list.push({
+          template: `02-quote/${orientation}`,
+          vars: { title, subtitle: srt, quote: best.slice(0, 60) },
+          assets: {},
+        });
+        // ③ 步骤清单：把前几句变成 step1..step3（够 3 步才出这个形态）
+        if (sentences.length >= 2) {
+          const vars = { title, subtitle: srt };
+          sentences.slice(0, 3).forEach((t, i) => { vars[`step${i + 1}`] = t.slice(0, 40); });
+          list.push({ template: `03-steps/${orientation}`, vars, assets: {} });
+        }
+        return { variants: list, notes: [`一次出 ${list.length} 种形态（用户挑一个用）`] };
+      }
+
       const orientation = input.orientation === 'horizontal' ? 'horizontal' : 'vertical';
       const shots = Array.isArray(input.shots) ? input.shots.filter(Boolean) : [];
       // 素材白名单：第三方 producer 不许把任意文件塞进成片

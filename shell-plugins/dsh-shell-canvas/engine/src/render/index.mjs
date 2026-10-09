@@ -56,7 +56,13 @@ export async function renderTemplate({
 
   // ③ 素材槽位：读本地文件 → data URL（本地渲染，文件不出本机）
   const slots = {};
-  for (const [slot, p] of Object.entries(userSlots)) slots[slot] = fileToDataUrl(p);
+  // 2026-10-09：槽位支持**多个素材**（数组或逗号分隔）。
+  //   用户原话：「素材上传只能传一张？视频如果只能导入一张素材，那就没得搞了」
+  //   —— 多素材是刚需：多张图轮播、或一个视频素材。
+  for (const [slot, val] of Object.entries(userSlots)) {
+    const list = Array.isArray(val) ? val : String(val).split(',').map((x) => x.trim()).filter(Boolean);
+    slots[slot] = list.length > 1 ? list.map(fileToDataUrl) : (list[0] ? fileToDataUrl(list[0]) : null);
+  }
   doc.__slots = slots;
 
   const plan = planFrames({ doc, pack, quality, framesOverride });

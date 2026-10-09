@@ -170,6 +170,13 @@ export function apply(ctx) {
       script: request.script || '',
       voiceoverFile: request.voiceoverFile || null,
       bgmId: request.bgmId || null,
+      // 用户自己的背景音乐文件（绕过版权台账，责任在用户）
+      bgmFile: (() => {
+        const f = request.bgmFile || null;
+        if (!f) return null;
+        if (!existsSync(f)) throw httpError(400, `背景音乐文件不存在：${f}`);
+        return f;
+      })(),
       quality: request.quality || (request.kind === 'preview' ? 'preview' : 'final'),
       previewSeconds: Math.max(1, Math.min(30, Number(request.previewSeconds) || 4)),
       renderer: request.renderer === 'electron-osr' ? 'electron-osr' : 'chromium',

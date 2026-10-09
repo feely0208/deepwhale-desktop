@@ -357,7 +357,16 @@ async function runFinal(ctx) {
   // ④ BGM + 闪避混音 + 合流
   if (ctx.signal?.aborted) throw cancelled();
   let bgm = null;
-  if (spec.bgmId) bgm = resolveBgm(ctx.pack, spec.bgmId);
+  if (spec.bgmFile) {
+    // 用户自己的背景音乐（2026-10-09 加）。
+    // ⚠️ 这里**故意绕过** BGM 入库台账 —— 台账是给"我们提供的曲子"用的（版权审核过）；
+    //    用户自己的曲子，版权责任在用户，我们只做混音。
+    //    **必须记一条日志**，不许静默绕过合规设计。
+    bgm = { id: 'user', file: spec.bgmFile, source: 'user' };
+    emit({ t: 'log', msg: '背景音乐：用户提供的文件（版权责任由使用者承担）' });
+  } else if (spec.bgmId) {
+    bgm = resolveBgm(ctx.pack, spec.bgmId);
+  }
   const mixed = await mixVoiceAndBgm({
     voiceWav: voice.voiceWav,
     bgmFile: bgm ? bgm.file : null,

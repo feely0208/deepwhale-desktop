@@ -336,6 +336,10 @@ window.__ModuleLoader__.load({
       const [script, setScript] = useState('');
       const [voiceMode, setVoiceMode] = useState('builtin');
       const [voiceover, setVoiceover] = useState(null);
+      // 背景音乐（2026-10-09 用户："我看不能上传 BGM 哦"）
+      //   不加 / 用我自己的文件 —— 版权责任在用户，我们只做混音（引擎侧记一条日志）
+      const [bgmMode, setBgmMode] = useState('none');
+      const [bgmFile, setBgmFile] = useState('');
       // ⚠️ 以前这里写死 'chromium'，要用户**手动勾选**才走非 playwright 后端 ——
       //   于是默认任务全部走 Playwright Chromium，而真机上没有它 →
       //   任务失败「Cannot find package 'playwright-core'」，用户完全看不懂。
@@ -455,6 +459,7 @@ window.__ModuleLoader__.load({
           renderer,
           previewSeconds,
           voiceoverFile: voiceMode === 'file' ? voiceover : null,
+          bgmFile: bgmMode === 'file' && bgmFile ? bgmFile : null,
           ...extra,
         };
         const job = await api('/job', { method: 'POST', body });
@@ -487,6 +492,8 @@ window.__ModuleLoader__.load({
             vars: v.vars, assets: v.assets || {},
             script, renderer, previewSeconds,
             voiceoverFile: voiceMode === 'file' ? voiceover : null,
+            bgmFile: bgmMode === 'file' && bgmFile ? bgmFile : null,
+          bgmFile: bgmMode === 'file' && bgmFile ? bgmFile : null,
           } });
           if (job) setJobs((prev) => [job, ...prev.filter((j) => j.id !== job.id)]);
         }
@@ -722,6 +729,33 @@ window.__ModuleLoader__.load({
                             setVoiceover(up.path);
                           })),
                         }, voiceover ? '换一个' : '选择…'),
+                      ]) : null,
+                    ]))),
+
+                h('div', { key: 'bgm', style: { marginTop: 22 } },
+                  h(Section, { title: '背景音乐' },
+                    h('div', null, [
+                      h('div', { className: 'dshcv-opts', key: 'o' }, [
+                        h(Opt, {
+                          key: 'n', checked: bgmMode === 'none', onChange: () => setBgmMode('none'),
+                          title: '不加背景音乐', desc: '只有配音。',
+                        }),
+                        h(Opt, {
+                          key: 'f', checked: bgmMode === 'file', onChange: () => setBgmMode('file'),
+                          title: '用我自己的音乐',
+                          desc: '给一个 mp3 / wav / m4a。配音说话时音乐会自动变轻。版权请自行确认。',
+                        }),
+                      ]),
+                      bgmMode === 'file' ? h('div', { className: 'dshcv-slot', key: 'f', style: { marginTop: 10 } }, [
+                        h('input', { key: 'i', className: 'dshcv-input', value: bgmFile || '', readOnly: true, placeholder: '还没选音乐' }),
+                        h(Btn, {
+                          key: 'b', size: 'sm',
+                          onClick: () => pickFile('audio/*', (f) => run('上传', async () => {
+                            const up = await upload(f);
+                            setBgmFile(up.path);
+                          })),
+                        }, bgmFile ? '换一个' : '选择…'),
+                        bgmFile ? h(Btn, { key: 'x', size: 'sm', onClick: () => setBgmFile('') }, '清除') : null,
                       ]) : null,
                     ]))),
 

@@ -23,27 +23,32 @@
     {
       "key": "title",
       "type": "text",
-      "required": true
+      "required": true,
+      "label": "标题"
     },
     {
       "key": "step1",
       "type": "text",
-      "required": true
+      "required": true,
+      "label": "第一步"
     },
     {
       "key": "step2",
       "type": "text",
-      "required": true
+      "required": true,
+      "label": "第二步"
     },
     {
       "key": "step3",
       "type": "text",
-      "required": true
+      "required": true,
+      "label": "第三步"
     },
     {
       "key": "subtitle",
       "type": "text",
-      "required": true
+      "required": true,
+      "label": "字幕"
     }
   ],
   "nodes": [

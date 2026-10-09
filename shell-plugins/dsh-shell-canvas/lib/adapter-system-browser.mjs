@@ -18,7 +18,7 @@
  */
 
 import { spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -158,8 +158,14 @@ export class SystemBrowserAdapter {
     await this._send('Runtime.enable', {}, this.sessionId);
     await this._send('Emulation.setDeviceMetricsOverride',
       { width: this.width, height: this.height, deviceScaleFactor: 1, mobile: false }, this.sessionId);
-    await this._send('Page.navigate',
-      { url: 'data:text/html;charset=utf-8,' + encodeURIComponent(html) }, this.sessionId);
+    // ⚠️ 2026-10-09 修：原来把整页 HTML 用 data URL 交给浏览器 ——
+    //   素材（图片/视频）是**内联 base64** 的，3 张图就能让页面到 MB 级，
+    //   于是 Chromium 直接 ERR_INVALID_URL (-300)，任务失败（用户实测）。
+    //   改成**写临时文件 + file:// 加载**：没有 URL 长度限制，
+    //   页面本身仍自包含（素材是内联 data URL），断网规则也照旧生效。
+    const htmlFile = join(this.profile, 'frame.html');
+    writeFileSync(htmlFile, html, 'utf-8');
+    await this._send('Page.navigate', { url: 'file://' + htmlFile }, this.sessionId);
 
     // 等页面自报就绪（字体/图片/setFrame(0) 都跑完）
     for (let i = 0; i < 100; i++) {

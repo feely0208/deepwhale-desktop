@@ -18,7 +18,8 @@
     {
       "key": "title",
       "type": "text",
-      "required": true
+      "required": true,
+      "label": "标题"
     },
     {
       "key": "subtitle",
@@ -29,7 +30,8 @@
     {
       "key": "shots",
       "type": "image",
-      "max": 12
+      "max": 12,
+      "label": "素材图"
     }
   ],
   "nodes": [

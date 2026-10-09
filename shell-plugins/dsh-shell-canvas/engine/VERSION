@@ -1,4 +1,4 @@
 source: deepwhale-canvas-cn
-version: cd64b6e-dirty
-commit: cd64b6e 2026-10-09 feat(框架): 素材槽位支持多张图轮播 + 视频素材（用户：「只能传一张就没得搞了」）
-synced_at: 2026-10-09 17:30:04
+version: e539a03
+commit: e539a03 2026-10-09 fix(渲染): 内联 base64 素材让页面过大 → data URL 被浏览器拒（ERR_INVALID_URL -300）
+synced_at: 2026-10-09 18:24:35

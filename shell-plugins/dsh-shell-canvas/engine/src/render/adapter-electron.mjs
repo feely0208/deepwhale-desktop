@@ -14,6 +14,9 @@
  */
 
 import { RenderAdapter, frameFingerprint } from './adapter.mjs';
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 export class ElectronOsrAdapter extends RenderAdapter {
   constructor({ window, width, height, fps = 30, session, frameTimeoutMs = 15000, warmupPaints = 1, confirmAttempts = 3 } = {}) {
@@ -93,7 +96,11 @@ export class ElectronOsrAdapter extends RenderAdapter {
       }
     });
     wc.setFrameRate?.(this.fps);
-    await wc.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
+    // ⚠️ 2026-10-09 修：同上 —— 内联 base64 素材会让 data URL 过大，
+    //   浏览器直接 ERR_INVALID_URL。改成写临时文件 + file:// 加载。
+    const tmpHtml = join(this.session?.getStoragePath?.() || tmpdir(), `canvas-frame-${Date.now()}.html`);
+    writeFileSync(tmpHtml, html, 'utf-8');
+    await wc.loadURL('file://' + tmpHtml);
     // 等页面**自报就绪**：字体加载完、<img> 解码完、`setFrame(0)` 跑过第一遍。
     await wc.executeJavaScript('window.__canvas && window.__canvas.ready');
     // 预热：加载期那一次 paint 是 `setFrame(0)` **之前**的合成结果 ——

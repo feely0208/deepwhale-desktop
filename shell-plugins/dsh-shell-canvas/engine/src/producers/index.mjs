@@ -72,7 +72,10 @@ export async function runProducer(id, input, ctx = {}) {
   //      （用户要求：「一次预览就生成三种形态，这才是用户实际想要的」）
   const hasOne = !!out.template;
   const hasMany = Array.isArray(out.variants) && out.variants.length > 0;
-  if (!hasOne && !hasMany) throw new Error(`生产者 ${id} 既没给 template，也没给 variants`);
+  // 第三种：直接给**完整文档**（story.board 这种"每句一个镜头"的事，
+  // 模板变量表达不了 —— 只有文档能表达。框架因此多一条能力。）
+  const hasDoc = !!out.doc && typeof out.doc === 'object';
+  if (!hasOne && !hasMany && !hasDoc) throw new Error(`生产者 ${id} 既没给 template、variants，也没给 doc`);
   if (hasOne && (!out.vars || typeof out.vars !== 'object')) throw new Error(`生产者 ${id} 没给 vars`);
   if (hasMany) {
     for (const [i, v] of out.variants.entries()) {
@@ -98,7 +101,7 @@ export function assertAssetAllowed(file, allowRoots) {
  * 刻意**不在模块顶层 import 实现**：这样第三方想只带自己的 producer、
  * 不带内置的，也不会因为缺依赖而加载失败。
  */
-const BUILTIN = ['./text-to-storyboard.mjs', './doc-to-storyboard.mjs', './ai-shots.mjs'];
+const BUILTIN = ['./text-to-storyboard.mjs', './doc-to-storyboard.mjs', './ai-shots.mjs', './storyboard.mjs'];
 
 let loaded = false;
 /** 加载内置生产者（幂等）。 */

@@ -18,7 +18,8 @@
     {
       "key": "title",
       "type": "text",
-      "required": true
+      "required": true,
+      "label": "标题"
     },
     {
       "key": "subtitle",

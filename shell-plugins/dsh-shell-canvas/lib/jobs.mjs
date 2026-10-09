@@ -192,6 +192,22 @@ export class JobManager {
     writeFileSync(jobFile, JSON.stringify(spec, null, 2) + '\n');
 
     const isOsr = spec.renderer === 'electron-osr';
+
+    // ★ 进程内 OSR（2026-10-09）：插件本就在桌面端主进程里，BrowserWindow 现成 ——
+    //   不必另起 Electron 进程，也就没有"找不到可执行 Electron"这一说。
+    if (isOsr && runtime.electron && runtime.electron.inProcess) {
+      job.status = 'running';
+      job.startedAt = Date.now();
+      job.pid = 0;
+      const ac = new AbortController();
+      job.child = { kill: () => ac.abort() };   // 「取消」沿用既有逻辑
+      this._log(job, '引擎：' + spec.engineRoot);
+      this._log(job, '后端：Electron OSR（进程内，宿主自带 Chromium）');
+      this._publish(job, { t: 'status' });
+      void this._runInProcess(job, spec, ac.signal);
+      return snapshot(job);
+    }
+
     let bin;
     let args;
     let env = { ...process.env, DSH_CANVAS_ROOT: spec.engineRoot };
@@ -252,6 +268,49 @@ export class JobManager {
     });
     child.on('exit', (code, signal) => this._onExit(job, code, signal));
     return snapshot(job);
+  }
+
+  /**
+   * 进程内跑任务（OSR）：与 osr-main.cjs 完全同构，只是不跨进程。
+   * 事件走同一条 _onEvent；结束走同一条 _onExit（code=0 且 result 才算成功）。
+   */
+  async _runInProcess(job, spec, signal) {
+    const windows = [];
+    try {
+      const { BrowserWindow } = await import('electron');
+      const { pathToFileURL } = await import('node:url');
+      const { ElectronOsrAdapter } = await import(
+        pathToFileURL(join(spec.engineRoot, 'src/render/adapter-electron.mjs')).href
+      );
+      const { runJob } = await import('./pipeline-run.mjs');
+      const emit = (e) => this._onEvent(job, e);
+      const makeAdapter = ({ width, height }) => {
+        const win = new BrowserWindow({
+          show: false,
+          width,
+          height,
+          webPreferences: { offscreen: true, nodeIntegration: false, contextIsolation: true },
+        });
+        windows.push(win);
+        return new ElectronOsrAdapter({
+          window: win,
+          width,
+          height,
+          fps: spec.fps || 30,
+          session: win.webContents.session,
+        });
+      };
+      const value = await runJob(spec, { emit, makeAdapter, signal });
+      emit({ t: 'result', value });
+      this._onExit(job, 0, null);
+    } catch (error) {
+      this._onEvent(job, { t: 'error', message: error && error.message ? error.message : String(error) });
+      this._onExit(job, 1, null);
+    } finally {
+      for (const w of windows) {
+        try { if (!w.isDestroyed()) w.destroy(); } catch { /* 退出中，忽略 */ }
+      }
+    }
   }
 
   _onStdout(job, chunk) {

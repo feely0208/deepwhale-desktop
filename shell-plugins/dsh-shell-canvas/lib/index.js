@@ -78,6 +78,27 @@ export function apply(ctx) {
   async function ensureElectron(force = false) {
     if (state.electronChecked && !force) return state.electron;
     state.electronChecked = true;
+
+    // ★ 首选：**进程内 OSR**（2026-10-09）
+    //   本插件跑在桌面端**主进程**里 —— `BrowserWindow` 现成可用，
+    //   直接用宿主自带的 Chromium 离屏渲染即可。
+    //   之前的设计是"另起一个 Electron 进程跑 osr-main.cjs"，于是要先找一个
+    //   **能接受脚本参数的 Electron 二进制**；而安装版是打包过的 .app，
+    //   它忽略脚本参数 → 探测必然失败 → 回落到 Playwright Chromium →
+    //   真机上没有 playwright → 出片直接失败。
+    //   进程内这条路把"找二进制"整个环节去掉了。
+    if (process.versions.electron && !process.env.ELECTRON_RUN_AS_NODE) {
+      state.electron = {
+        ok: true,
+        inProcess: true,
+        path: null,
+        electron: process.versions.electron,
+        chrome: process.versions.chrome,
+        tried: [],
+        reason: '',
+      };
+      return state.electron;
+    }
     const candidates = electronCandidates(null);
     const tried = [];
     for (const c of candidates) {

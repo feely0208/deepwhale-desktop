@@ -70,6 +70,21 @@ export function apply(ctx) {
    *   · 用户可以在面板里改（state.outputDir），改完所有任务都落在那儿
    */
   const defaultOutputRoot = () => join(homedir(), 'Movies', '深鲸画布');
+
+  // 保存位置要**记得住**（用户选过一次，重启不该忘）。
+  // 存成 DSH home 下的小文件；读失败/写失败都不影响主流程（只是回到默认位置），
+  // 但要打日志，不许完全无声。
+  const prefsFile = () => join(process.env.DSH_HOME || homedir(), '.dsh-canvas-prefs.json');
+  const readPrefs = () => {
+    try { return JSON.parse(readFileSync(prefsFile(), 'utf8')); } catch { return {}; }
+  };
+  const writePrefs = (obj) => {
+    try { writeFileSync(prefsFile(), JSON.stringify(obj, null, 2)); } catch (e) { console.warn('[canvas] 偏好写不进去：' + e.message); }
+  };
+  if (!state.outputDir) {
+    const p0 = readPrefs().outputDir;
+    if (p0 && typeof p0 === 'string') state.outputDir = p0;
+  }
   const outputRoot = () => (state.outputDir ? resolve(state.outputDir) : defaultOutputRoot());
 
   /**
@@ -314,6 +329,7 @@ export function apply(ctx) {
       throw httpError(400, `这个位置不能写：${abs}（${e.message}）`);
     }
     state.outputDir = abs;
+    writePrefs({ ...readPrefs(), outputDir: abs });   // 记住，重启不丢
     return { ok: true, dir: abs };
   }
 

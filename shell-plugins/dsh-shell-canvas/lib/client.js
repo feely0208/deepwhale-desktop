@@ -815,8 +815,11 @@ window.__ModuleLoader__.load({
                           onChange: (e) => setOutDir(e.target.value),
                           onKeyDown: (e) => { if (e.key === 'Enter') saveOutDir(e.target.value); },
                         }),
-                        h(Btn, { key: 'p2', size: 'sm', onClick: () => pickDir((d2) => { setOutDir(d2); saveOutDir(d2); }) }, '选择文件夹…'),
+                        h(Btn, { key: 'p2', size: 'sm', onClick: () => pickDir((d2) => setOutDir(d2)) }, '选择文件夹…'),
+                        // 确定 / 取消 必须成对出现（用户要求：有确定就得有取消，
+                        // 不然改错了退不回去）。取消 = 丢掉这次编辑，回到当前生效的目录。
                         h(Btn, { key: 's', size: 'sm', primary: true, onClick: () => saveOutDir(outDir) }, '确定'),
+                        h(Btn, { key: 'x', size: 'sm', onClick: () => { setOutDir(''); setError(null); } }, '取消'),
                         h(Btn, { key: 'o2', size: 'sm', onClick: () => reveal(outDir || (state && state.runtime && state.runtime.outputRoot) || '') }, '打开位置'),
                       ]),
                       h('div', { key: 'h', className: 'dshcv-sub', style: { marginTop: 6 } },

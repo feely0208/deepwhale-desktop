@@ -56,6 +56,21 @@
       }
     },
     {
+      "id": "glow2",
+      "type": "shape",
+      "props": {
+        "shape": "circle",
+        "fill": "#123A55",
+        "width": 760,
+        "height": 760,
+        "opacity": 0.35
+      },
+      "transform": {
+        "x": 560,
+        "y": 1180
+      }
+    },
+    {
       "id": "title",
       "type": "text",
       "props": {
@@ -122,21 +137,6 @@
         "anchor": "bottom",
         "safeBottom": 300,
         "maxCharsPerLine": 15
-      }
-    },
-    {
-      "id": "glow2",
-      "type": "shape",
-      "props": {
-        "shape": "circle",
-        "fill": "#123A55",
-        "width": 760,
-        "height": 760,
-        "opacity": 0.55
-      },
-      "transform": {
-        "x": 420,
-        "y": 1120
       }
     },
     {

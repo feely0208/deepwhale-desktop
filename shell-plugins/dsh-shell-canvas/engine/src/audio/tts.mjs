@@ -12,9 +12,10 @@
  * 无论用哪个后端，产物都是 44.1kHz 单声道 wav，后续混流一条链路。
  */
 
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn, spawnSync, execFileSync } from 'node:child_process';
 import { existsSync, rmSync, writeFileSync, renameSync, mkdirSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
+import { tmpdir } from 'node:os';
 import { run } from '../encode.mjs';
 import { findFfmpeg, findFfprobe } from '../paths.mjs';
 import { splitByScript, needsCodeSwitch } from './codeswitch.mjs';
@@ -35,13 +36,47 @@ export class SystemTts extends TtsBackend {
 
   get id() { return 'system'; }
 
-  async synthesize({ text, outWav, tmpDir = '/tmp' }) {
-    if (process.platform !== 'darwin') throw new Error('system TTS 只在 macOS 上可用');
-    const aiff = join(tmpDir, `tts-${Date.now()}.aiff`);
-    await run('say', ['-v', this.voice, '-r', String(this.rate), '-o', aiff, text]);
+  async synthesize({ text, outWav, tmpDir = tmpdir() }) {
+    // ⚠️ 2026-10-09 改：原来这里**硬编码 macOS**（非 darwin 直接 throw），
+    //    于是 Windows/Linux 用户「点出片 → 报一句看不懂的错」。
+    //    三平台各接一条系统语音通路，都不需要装任何东西：
+    //      macOS  → say（自带）
+    //      Windows→ PowerShell + System.Speech（自带）
+    //      Linux  → espeak-ng / espeak（多数发行版可装；装了就能用）
+    const plat = process.platform;
     const ffmpeg = findFfmpeg();
-    await run(ffmpeg, ['-y', '-hide_banner', '-loglevel', 'error', '-i', aiff, '-ar', '44100', '-ac', '1', outWav]);
-    if (existsSync(aiff)) rmSync(aiff);
+    if (plat === 'darwin') {
+      const aiff = join(tmpDir, `tts-${Date.now()}.aiff`);
+      await run('say', ['-v', this.voice, '-r', String(this.rate), '-o', aiff, text]);
+      await run(ffmpeg, ['-y', '-hide_banner', '-loglevel', 'error', '-i', aiff, '-ar', '44100', '-ac', '1', outWav]);
+      if (existsSync(aiff)) rmSync(aiff);
+    } else if (plat === 'win32') {
+      // PowerShell 里单引号字符串的转义：把 ' 变成 ''
+      const safe = String(text).replace(/'/g, "''");
+      const ps = [
+        'Add-Type -AssemblyName System.Speech;',
+        '$s = New-Object System.Speech.Synthesis.SpeechSynthesizer;',
+        `$s.SetOutputToWaveFile('${outWav.replace(/'/g, "''")}');`,
+        `$s.Speak('${safe}');`,
+        '$s.Dispose();',
+      ].join(' ');
+      await run('powershell', ['-NoProfile', '-NonInteractive', '-Command', ps]);
+      // 统一成 44.1k 单声道（与 macOS/Linux 通路一致，后面混音才可预期）
+      const norm = outWav.replace(/\.wav$/, '.norm.wav');
+      await run(ffmpeg, ['-y', '-hide_banner', '-loglevel', 'error', '-i', outWav, '-ar', '44100', '-ac', '1', norm]);
+      renameSync(norm, outWav);
+    } else {
+      // Linux：优先 espeak-ng（发音更自然），退回 espeak
+      const bin = ['espeak-ng', 'espeak'].find((b) => {
+        try { execFileSync('which', [b], { stdio: 'ignore' }); return true; } catch { return false; }
+      });
+      if (!bin) {
+        throw new Error('系统配音不可用：Linux 上请安装 espeak-ng（apt install espeak-ng），'
+          + '或在面板里改用「我自己的配音文件」。');
+      }
+      const lang = /^[\u4e00-\u9fff]/.test(String(text).trim()) ? 'zh' : 'en';
+      await run(bin, ['-v', lang, '-s', String(Math.min(400, Math.round(this.rate * 1.6))), '-w', outWav, text]);
+    }
     return { outWav, durationMs: await audioDurationMs(outWav), voice: this.voice, backend: this.id };
   }
 }

@@ -329,7 +329,12 @@ window.__ModuleLoader__.load({
       const [script, setScript] = useState('');
       const [voiceMode, setVoiceMode] = useState('builtin');
       const [voiceover, setVoiceover] = useState(null);
+      // ⚠️ 以前这里写死 'chromium'，要用户**手动勾选**才走非 playwright 后端 ——
+      //   于是默认任务全部走 Playwright Chromium，而真机上没有它 →
+      //   任务失败「Cannot find package 'playwright-core'」，用户完全看不懂。
+      //   改成**自动选可用的后端**：宿主报告 ok 就用它，否则才回落 playwright。
       const [renderer, setRenderer] = useState('chromium');
+      const [rendererTouched, setRendererTouched] = useState(false);   // 用户手动改过就不再自动覆盖
       const [previewSeconds, setPreviewSeconds] = useState(4);
       const [validation, setValidation] = useState(null);
       const [engineEdit, setEngineEdit] = useState('');
@@ -345,6 +350,11 @@ window.__ModuleLoader__.load({
           setError(null);
           if (!s.engine.ok) setEngineEdit(s.engine.tried?.[0]?.root || '');
           if (!selected && s.templates && s.templates.length) setSelected(s.templates[0].id);
+          // 自动选渲染后端：宿主报告有可用后端（系统浏览器 / 进程内 OSR）就用它。
+          // 以前默认写死 'chromium' → 真机上必然走 Playwright → 报
+          // 「Cannot find package 'playwright-core'」，用户完全看不懂。
+          // 用户手动勾过复选框之后不再自动覆盖（rendererTouched 由勾选处置位）。
+          if (s.runtime && s.runtime.electron && s.runtime.electron.ok) setRenderer('electron-osr');
         } catch (e) {
           setError(e.message);
         }
@@ -456,6 +466,7 @@ window.__ModuleLoader__.load({
         setOsr(r);
         return r;
       });
+
 
       // ── 引擎未就绪：给一条"试过哪些路径"的清单，而不是一句"找不到"──
       if (state && !state.engine.ok) {
@@ -656,7 +667,7 @@ window.__ModuleLoader__.load({
                       h('div', { className: 'dshcv-opts', key: 'o' }, [
                         h(Opt, {
                           key: 'osr', type: 'checkbox', checked: renderer === 'electron-osr',
-                          onChange: (on) => setRenderer(on ? 'electron-osr' : 'chromium'),
+                          onChange: (on) => { setRendererTouched(true); setRenderer(on ? 'electron-osr' : 'chromium'); },
                           title: '用 Electron OSR 出帧',
                           desc: '改用桌面端自带的 Chromium 出帧（S1 留的验收，实测与 Playwright 的 Chromium 逐字节一致）。默认走 Playwright Chromium，更快。',
                         }),

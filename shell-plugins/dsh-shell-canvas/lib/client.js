@@ -284,7 +284,6 @@ window.__ModuleLoader__.load({
     /** 模板缩略图：图挂了就退回占位，而不是留一个空框（"图片裂了"比"没有图"更廉价）。 */
     function Poster({ url, wide, alt }) {
       const [broken, setBroken] = useState(false);
-      const [big, setBig] = useState(null);   // 全屏看片：存视频 URL
       const cls = `dshcv-poster${wide ? ' dshcv-poster-wide' : ''}`;
       if (!url || broken) {
         return h('div', { className: `${cls} dshcv-poster-ph` }, [
@@ -762,6 +761,11 @@ window.__ModuleLoader__.load({
     // ── 任务卡片 ──────────────────────────────────────────────────────
     function JobCard({ job, onCancel, onResume, onReveal }) {
       const [open, setOpen] = useState(false);
+      // ⚠️ 必须声明在 **JobCard 自己** 里面（2026-10-09 栽了两次）：
+      //   第一次声明在 Panel 根组件、用在 JobCard → 渲染成片时
+      //   `big is not defined` 直接崩 → 用户出完片看不到成片，只看到一句报错。
+      //   教训：**先看清组件边界再放状态**，别凭"附近有 useState"就塞。
+      const [big, setBig] = useState(null);   // 全屏看片：存视频 URL
       const pct = job.progress && typeof job.progress.pct === 'number' ? Math.round(job.progress.pct * 100) : null;
       const running = job.status === 'running' || job.status === 'queued';
       const finals = (job.result && job.result.finals) || [];

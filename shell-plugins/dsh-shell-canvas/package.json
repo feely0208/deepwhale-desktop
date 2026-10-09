@@ -1,6 +1,6 @@
 {
   "name": "@deepwhale-cn/dsh-shell-canvas",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "深鲸桌面：把深鲸画布（鲸幕）引擎做成侧边栏面板 —— 选模板、填参数、校验、预览、出横竖双版成片。渲染跑在独立子进程里（Chromium 或桌面端自带的 Electron OSR），界面不卡。",
   "private": true,
   "type": "module",
@@ -21,7 +21,9 @@
       "patch": "./cordis.patch.yml"
     },
     "client": {
-      "inject": ["@deepseek-ai/dsh-client-runtime"],
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime"
+      ],
       "platform": "web",
       "immediately": true
     }

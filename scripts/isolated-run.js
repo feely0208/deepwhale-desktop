@@ -50,6 +50,28 @@ fs.mkdirSync(UD, { recursive: true });
 const APP_PORT = Number(process.env.ISO_APP_PORT || 3311);
 fs.writeFileSync(path.join(UD, 'settings.json'), JSON.stringify({ port: APP_PORT }));
 console.log('[iso] 应用服务端口=' + APP_PORT + '（与用户实例隔离）');
+
+// ⚠️ **启动前清掉隔离端口上的残留服务**（2026-10-09 找到的真正原因）
+//   DSH 的鉴权是「启动令牌 → 换持久化 Cookie」：
+//     URL 带 token → 换成 dsh-auth-<hash> Cookie → 之后裸地址靠 Cookie 就能进。
+//   应用只有在**自己拉起服务**时才拿得到那个启动令牌（从服务 stdout 解析）。
+//   而应用退出时默认 keepDshRunning=true（下次秒开）——**复用已在跑的服务**时，
+//   令牌日志行是上一次打的，本次拿不到；若此时 Cookie 又被清掉（--reset），
+//   就成了"没有令牌可换 → 没有 Cookie → 认证页"。
+//   这个组合**真实用户不会遇到**（正常使用 Cookie 一直在 userData 里）。
+//   所以修的是测试环境：隔离端口上不许有残留服务，应用必须自己拉起来。
+try {
+  const { execFileSync } = require('child_process');
+  const pids = execFileSync('lsof', ['-t', '-nP', '-iTCP:' + APP_PORT, '-sTCP:LISTEN'], { encoding: 'utf8' })
+    .split('\n').map((x) => x.trim()).filter(Boolean)
+    .filter((pid) => String(pid) !== String(process.pid));
+  for (const pid of pids) {
+    try { process.kill(Number(pid), 'SIGTERM'); console.log('[iso] 清掉隔离端口上的残留服务 pid=' + pid); } catch { /* 已退出 */ }
+  }
+  if (pids.length) require('child_process').execSync('sleep 2');
+} catch {
+  /* lsof 没找到就是不占，正常 */
+}
 fs.mkdirSync(OUT, { recursive: true });
 
 const env = Object.assign({}, process.env);
@@ -105,8 +127,8 @@ const listTargets = () => new Promise((res) => {
   let seq = 0; const pend = new Map();
   ws.addEventListener('message', (ev) => { let m; try { m = JSON.parse(ev.data); } catch { return; } if (m.id && pend.has(m.id)) { pend.get(m.id)(m); pend.delete(m.id); } });
   const send = (method, params) => new Promise((res, rej) => { const id = ++seq; pend.set(id, (m) => (m.error ? rej(new Error(method + ': ' + m.error.message)) : res(m.result))); ws.send(JSON.stringify({ id, method, params })); });
-  const ev = async (fn, args) => { const r = await send('Runtime.evaluate', { expression: '(' + fn + ')(' + JSON.stringify(args || {}) + ')', awaitPromise: true, returnByValue: true }); if (r.exceptionDetails) throw new Error(r.exceptionDetails.text); return r.result.value; };
-  const shot = async (f) => { const r = await send('Page.captureScreenshot', { format: 'png' }); fs.writeFileSync(f, Buffer.from(r.data, 'base64')); };
+  let ev = async (fn, args) => { const r = await send('Runtime.evaluate', { expression: '(' + fn + ')(' + JSON.stringify(args || {}) + ')', awaitPromise: true, returnByValue: true }); if (r.exceptionDetails) throw new Error(r.exceptionDetails.text); return r.result.value; };
+  let shot = async (f) => { const r = await send('Page.captureScreenshot', { format: 'png' }); fs.writeFileSync(f, Buffer.from(r.data, 'base64')); };
 
   // ⚠️ 关键：页面出现 != 应用就绪（2026-10-08 踩到）。
   //   应用先导航到 http://127.0.0.1:<port>/，此时可能还是
@@ -116,12 +138,41 @@ const listTargets = () => new Promise((res) => {
   let ready = false;
   for (let i = 0; i < 60 && !ready; i++) {
     const t = await ev(() => document.body.innerText.replace(/\s+/g, ' ').slice(0, 300), {});
-    const bad = /authentication required|正在启动|启动中/i.test(t || '');
-    if (!bad && (t || '').length > 40) { ready = true; console.log('[iso] ✅ 应用界面就绪（等 ' + (i * 2) + 's）'); break; }
+    // 判据要**只认「是不是应用界面」**：早先我拿「重新连接中」当未就绪，
+    // 但那是页面里**常驻**的一个状态元素 → 永远等不到，白等 110 秒。
+    const isAuthPage = /authentication required/i.test(t || '');
+    const isAppUi = /新会话|工作区|插件/.test(t || '');
+    if (!isAuthPage && isAppUi) { ready = true; console.log('[iso] ✅ 应用界面就绪（等 ' + (i * 2) + 's）'); break; }
     if (i % 5 === 0) console.log('[iso] 等应用就绪… ' + (i * 2) + 's  当前: ' + String(t).slice(0, 60));
     await sleep(2000);
   }
   if (!ready) console.log('[iso] ⚠️ 页面始终不是应用界面，仍继续（结果可能不可信）');
+
+  // ⚠️ 应用在起来后可能**还会补载一次**（令牌到位才 loadURL(dshTokenUrl)），
+  //   那一下会把当前 CDP 执行上下文销毁 → "Inspected target navigated or closed"。
+  //   所以：等它稳定，然后**重新取一次 target 并重连**再往下走。
+  await sleep(6000);
+  let t2 = null;
+  for (let i = 0; i < 20 && !t2; i++) {
+    const list = await listTargets();
+    t2 = list.find((t) => t.type === 'page' && /^http:\/\/127\.0\.0\.1:\d+\//.test(t.url || ''));
+    if (!t2) await sleep(1000);
+  }
+  if (t2 && t2.webSocketDebuggerUrl !== target.webSocketDebuggerUrl) {
+    console.log('[iso] 页面导航过 —— 重新连接 CDP');
+    try { ws.close(); } catch { /* 已断 */ }
+    target = t2;
+    // eslint-disable-next-line no-global-assign
+    const ws2 = new WebSocket(target.webSocketDebuggerUrl);
+    await new Promise((res, rej) => { ws2.addEventListener('open', res, { once: true }); ws2.addEventListener('error', () => rej(new Error('CDP 重连失败')), { once: true }); });
+    seq = 0;
+    pend.clear();
+    ws2.addEventListener('message', (ev2) => { let m; try { m = JSON.parse(ev2.data); } catch { return; } if (m.id && pend.has(m.id)) { pend.get(m.id)(m); pend.delete(m.id); } });
+    const send2 = (method, params) => new Promise((res, rej) => { const id = ++seq; pend.set(id, (m) => (m.error ? rej(new Error(method + ': ' + m.error.message)) : res(m.result))); ws2.send(JSON.stringify({ id, method, params })); });
+    ev = async (fn, args) => { const r = await send2('Runtime.evaluate', { expression: '(' + fn + ')(' + JSON.stringify(args || {}) + ')', awaitPromise: true, returnByValue: true }); if (r.exceptionDetails) throw new Error(r.exceptionDetails.text); return r.result.value; };
+    shot = async (f) => { const r = await send2('Page.captureScreenshot', { format: 'png' }); fs.writeFileSync(f, Buffer.from(r.data, 'base64')); };
+  }
+
   const found = await ev(async () => {
     const all = [...document.querySelectorAll('button,a,[role="button"],li,div,span')];
     const btn = all.find((n) => (n.textContent || '').trim() === '深鲸画布');
@@ -136,11 +187,23 @@ const listTargets = () => new Promise((res) => {
       if (btn) btn.click();
       await new Promise((r) => setTimeout(r, 5000));
       const root = document.querySelector('.dshcv-root');
+      // 等引擎状态：面板要先 fetch /api/state，慢的话多等一会
+      for (let i = 0; i < 12; i++) {
+        if (document.querySelectorAll('.dshcv-tpl').length > 0) break;
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+      // 直接看插件接口返回什么 —— 引擎没起来的话这里能看到原因
+      let apiState = null;
+      try {
+        const r = await fetch('http://127.0.0.1:' + location.port + '/dsh-canvas/api/state');
+        apiState = { status: r.status, body: (await r.text()).slice(0, 400) };
+      } catch (e) { apiState = { error: String(e) }; }
       return {
         root: document.querySelectorAll('.dshcv-root').length,
         tpls: document.querySelectorAll('.dshcv-tpl').length,
         posters: document.querySelectorAll('.dshcv-poster').length,
         text: (root || document.body).innerText.replace(/\s+/g, ' ').slice(0, 400),
+        apiState: apiState,
       };
     }, {});
     console.log('[iso] 画布面板:', JSON.stringify(r2).slice(0, 500));

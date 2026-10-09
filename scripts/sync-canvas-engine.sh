@@ -30,4 +30,28 @@ DESC="$(git -C "$CANVAS_SRC" log -1 --format='%h %ad %s' --date=short 2>/dev/nul
   echo "synced_at: $(date '+%Y-%m-%d %H:%M:%S')"
 } > "$DST/VERSION"
 echo "[sync] 已写入 $DST/VERSION"; sed 's/^/        /' "$DST/VERSION"
+# ── 带上引擎的运行时依赖（2026-10-09 真机上现形的问题）─────────────
+#   引擎 src/validate.mjs 静态 import 'ajv/dist/2020.js'。
+#   开发机能在仓库根 node_modules 找到它；但插件被安装到 $DSH_HOME/plugins/ 后，
+#   那里**没有 node_modules** → 真机上报「Cannot find package 'ajv'」，
+#   面板显示「引擎 ? · 模板库 正在读取…」，插件等于不可用。
+#   做法：把 ajv 及其运行时依赖一起放进 engine/node_modules/（Node 会从
+#   engine/src/ 往上找到 engine/node_modules/ ✓），插件保持**自包含**。
+#   体积：约 1.3 MB，插件总量仍在 5 MB 红线内。
+DEPS="ajv fast-deep-equal json-schema-traverse require-from-string fast-uri"
+NM="$DST/node_modules"
+mkdir -p "$NM"
+for dep in $DEPS; do
+  if [ -d "$CANVAS_SRC/node_modules/$dep" ]; then
+    # **整包拷**：不能只挑 dist/lib —— 有些包的入口就在包根
+    #（fast-deep-equal 的 main 是 index.js，只拷子目录会报
+    # "Please verify that the package.json has a valid main entry"）。
+    cp -R "$CANVAS_SRC/node_modules/$dep" "$NM/$dep"
+    echo "[sync]   + 依赖 $dep"
+  else
+    echo "[sync]   ⚠️ 找不到依赖 $dep（引擎的 ajv 校验会失败）" >&2
+  fi
+done
+
 echo "[sync] 引擎大小: $(du -sh "$DST" | cut -f1)（应 ≤ 5 MB）"
+echo "[sync] 插件总大小: $(du -sh "$(dirname "$DST")" | cut -f1)（红线 5 MB）"

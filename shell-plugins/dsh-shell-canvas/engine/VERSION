@@ -1,4 +1,4 @@
 source: deepwhale-canvas-cn
-version: 394a915
-commit: 394a915 2026-10-09 feat(框架F4): 批量 + 台账（收费点）—— 千条一致、可复现、可追溯、失败隔离
-synced_at: 2026-10-09 15:42:45
+version: 5f3ae92
+commit: 5f3ae92 2026-10-09 feat(框架F5/B): MCP 服务（stdio）—— 让任何 AI 助手能直接调框架
+synced_at: 2026-10-09 15:48:55

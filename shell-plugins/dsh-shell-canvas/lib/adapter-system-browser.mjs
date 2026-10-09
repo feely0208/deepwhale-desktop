@@ -178,9 +178,10 @@ export class SystemBrowserAdapter {
   async _settle(frameIndex) {
     await this._send('Runtime.evaluate', {
       expression: `new Promise((resolve) => {
- window.__canvas.setFrame(${frameIndex});
- void document.documentElement.offsetHeight;
- requestAnimationFrame(() => requestAnimationFrame(() => resolve(true)));
+ Promise.resolve(window.__canvas.setFrame(${frameIndex})).then(() => {
+  void document.documentElement.offsetHeight;
+  requestAnimationFrame(() => requestAnimationFrame(() => resolve(true)));
+ });
 })`,
       awaitPromise: true,
       returnByValue: true,

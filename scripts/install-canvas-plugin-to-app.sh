@@ -11,7 +11,10 @@
 set -euo pipefail
 HOME_DIR="${DSH_HOME:-$HOME/Library/Application Support/DeepWhale Desktop/dsh-home}"
 TARGET="$HOME_DIR/plugins/dsh-shell-canvas"
-SRC="$(cd "$(dirname "$0")/.." && pwd)/bundled-plugins/dsh-shell-canvas"
+# ⚠️ 直接用手写源码目录，不用 bundled-plugins/ ——
+#   build-bundled-plugins.js 是**从 npm registry 拉已发布包**的，网络不通就失败，
+#   而它失败时会保留旧载荷 → 用 bundled-plugins/ 会装进**旧版本**（踩过）。
+SRC="$(cd "$(dirname "$0")/.." && pwd)/shell-plugins/dsh-shell-canvas"
 
 [ -d "$SRC" ] || { echo "找不到构建产物：$SRC（先跑 npm run build / node scripts/build-bundled-plugins.js）" >&2; exit 1; }
 [ -d "$HOME_DIR/plugins" ] || { echo "找不到应用的插件目录：$HOME_DIR/plugins" >&2; exit 1; }

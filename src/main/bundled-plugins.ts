@@ -63,7 +63,7 @@ const BUNDLED_PLUGINS: BundledPlugin[] = [
   // 把对应的拷贝步骤也取消注释 —— **两处必须同进同出**，否则就掉进 §十四 那个
   // "声明了但载荷里没有"的坑（`ensureBundledPlugins` 会静默跳过）。
   // 本机不受影响：开发机是手动装进 profile 的，不经过这张清单。
-  // { name: '@deepwhale-cn/dsh-shell-canvas', dir: 'dsh-shell-canvas' },
+  // { name: '@deepwhale-cn/dsh-shell-canvas', dir: 'dsh-shell-canvas' },   // 插件的分发不走随包清单（见 install-canvas-plugin-to-app.sh）
 
   // ⌘R「重新加载界面」（2026-10-07）：应用菜单里没有 reload 角色 → Cmd+R 从来没绑上，
   // 「改完插件让用户刷新一下」变成一句空话。本插件用 DSH 的快捷键服务把这一键补回来。

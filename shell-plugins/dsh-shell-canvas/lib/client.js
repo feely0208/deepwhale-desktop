@@ -183,6 +183,14 @@ window.__ModuleLoader__.load({
 .dshcv-slot{display:flex;gap:8px;align-items:center}
 .dshcv-slot .dshcv-input{flex:1;color:var(--dsw-alias-label-secondary)}
 .dshcv-slot-preview{width:34px;height:34px;flex:none;border-radius:8px;object-fit:cover;border:.5px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-layer-2)}
+/* ⚠️ 2026-10-09：多素材缩略图必须是**有约束的容器**。
+   原来只有 .dshcv-slot-preview（给单个 <img> 用的 34×34）；
+   我改成 <div> 包 <img> 后，内层图片没有任何尺寸约束 →
+   按原始尺寸铺开，把下面的按钮全盖住了（用户截图：素材"溢出"遮挡）。
+   容器固定尺寸 + overflow:hidden，内层 img 填满，角标绝对定位。 */
+.dshcv-slot-thumb{position:relative;width:36px;height:36px;flex:none;border-radius:8px;overflow:hidden;border:.5px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-layer-2);display:flex;align-items:center;justify-content:center}
+.dshcv-slot-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.dshcv-slot-thumb .n{position:absolute;right:0;bottom:0;font-size:9px;line-height:1;padding:2px 3px;border-top-left-radius:4px;background:rgba(0,0,0,.6);color:#fff}
 
 /* ── 状态标记 ───────────────────────────────────────────────────── */
 .dshcv-chip{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;font-size:10.5px;line-height:1.6;border:.5px solid var(--dsw-alias-border-l1);color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-bg-base)}
@@ -643,7 +651,7 @@ window.__ModuleLoader__.load({
                   h(Section, { title: '素材' },
                     h('div', null, assetVars.map((v) => h(Field, {
                       key: v.key, label: v.label || v.key,
-                      hint: `最多 ${v.max || 1} 张。素材不出本机：只把本机绝对路径交给渲染子进程。`,
+                      hint: `${v.max ? `建议 ${v.max} 张以内（多了按时间轮播）` : '可多张图 / 一个视频'}。素材不出本机：只把本机绝对路径交给渲染子进程。`,
                     }, h('div', { className: 'dshcv-slot' }, [
                       // 多素材（2026-10-09）：可以是多张图，也可以是一个视频。
                       // 显示：第一个的缩略图 + "共 N 个"，不再只当一个路径。
@@ -652,11 +660,11 @@ window.__ModuleLoader__.load({
                         const list = Array.isArray(cur) ? cur : (cur ? [cur] : []);
                         if (!list.length) return null;
                         const isVid = /\.(mp4|mov|webm|m4v|ogv)$/i.test(String(list[0]));
-                        return h('div', { key: 'th', className: 'dshcv-slot-preview', title: list.join('\n') },
+                        return h('div', { key: 'th', className: 'dshcv-slot-thumb', title: list.join('\n') },
                           isVid
-                            ? h('span', { style: { fontSize: '11px' } }, '🎬')
+                            ? h('span', { style: { fontSize: '14px' } }, '🎬')
                             : h('img', { src: fileUrl(list[0]), alt: '' }),
-                          list.length > 1 ? h('span', { style: { fontSize: '10px', opacity: .8 } }, String(list.length)) : null);
+                          list.length > 1 ? h('span', { className: 'n', key: 'n' }, String(list.length)) : null);
                       })(),
                       h('input', {
                         key: 'i', className: 'dshcv-input',

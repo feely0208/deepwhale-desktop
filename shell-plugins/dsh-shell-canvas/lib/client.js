@@ -340,6 +340,7 @@ window.__ModuleLoader__.load({
       //   不加 / 用我自己的文件 —— 版权责任在用户，我们只做混音（引擎侧记一条日志）
       // 成片保存位置（用户要求：不能是默认位置，尤其 Win 上不能塞 C 盘）
       const [outDir, setOutDir] = useState('');
+      const [outDirMsg, setOutDirMsg] = useState('');
       /** 选文件夹：用 webkitdirectory 让用户挑目录，从文件真实路径推出目录。
        *  ⚠️ 不能走 upload() —— 它会把文件复制进临时上传目录，原目录就丢了。 */
       const pickDir = (onPicked) => {
@@ -370,7 +371,12 @@ window.__ModuleLoader__.load({
         // 空着就保存默认位置（用户点"保存"不该什么都不发生）
         const use = (dir && String(dir).trim()) || (state && state.runtime && state.runtime.outputRoot) || '';
         const r = await api('/output-dir', { method: 'POST', body: { dir: use } });
-        if (r && r.dir) { setOutDir(r.dir); setError(null); }
+        if (r && r.dir) {
+          setOutDir(r.dir);
+          setError(null);
+          // 成功必须有回执 —— 否则用户按了"确定"却什么都没变，就是"用不了"
+          setOutDirMsg(`✅ 已保存：${r.dir}（之后的任务都存这儿）`);
+        }
         return r;
       });
       const [bgmMode, setBgmMode] = useState('none');
@@ -828,6 +834,7 @@ window.__ModuleLoader__.load({
                       ]),
                       h('div', { key: 'h', className: 'dshcv-sub', style: { marginTop: 6 } },
                         '默认放在你自己的影片目录下（不是插件目录、不是系统盘深处）。改完对之后的任务都生效。'),
+                      outDirMsg ? h('div', { key: 'm', className: 'dshcv-sub', style: { marginTop: 6, color: '#3FD0E0' } }, outDirMsg) : null,
                     ]))),
 
                 h('div', { key: 'bgm', style: { marginTop: 22 } },

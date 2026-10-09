@@ -403,17 +403,20 @@ window.__ModuleLoader__.load({
         try { return await fn(); } catch (e) { setError(e.message); return null; } finally { setBusy(null); }
       }
 
-      const pickFile = (accept, onPicked) => {
+      // multiple=true → 一次选多个（素材要能多张图/一个视频；用户原话：
+      // 「素材上传只能传一张？那就没得搞了」）
+      const pickFile = (accept, onPicked, multiple) => {
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = accept || '';
+        if (multiple) input.multiple = true;
         input.style.display = 'none';
         const cleanup = () => { if (input.parentNode) input.parentNode.removeChild(input); };
         document.body.appendChild(input);
         input.addEventListener('change', () => {
-          const file = input.files && input.files[0];
+          const files = input.files ? [...input.files] : [];
           cleanup();
-          if (file) onPicked(file);
+          if (files.length) onPicked(multiple ? files : files[0]);
         });
         // 用户按 Esc 取消时不会有 change 事件，不清理就会往 body 里堆隐藏 input。
         input.addEventListener('cancel', cleanup);
@@ -451,6 +454,36 @@ window.__ModuleLoader__.load({
       }
 
       const doPreview = () => run('预览', () => startJob('preview', {}));
+      /**
+       * 一次出多形态（用户要求：「一次预览就生成三种形态，这个才是用户实际想要的」）。
+       * 做法：把内容交给**引擎的生产者**去映射各模板需要的变量（映射逻辑不抄到前端，
+       * 否则两边会漂），拿到多份 {template, vars, assets} 后**逐个起任务** ——
+       * 于是三个形态各自出现在任务列表里，各自有可播放的预览。
+       */
+      const doVariants = () => run('三形态', async () => {
+        const shotList = Object.values(assets).flat().map((x) => (typeof x === 'string' ? x : x && x.path)).filter(Boolean);
+        // 旁白稿：优先用"文案"那个变量（各模板第一个文本必填项）
+        const textVar = current && current.vars ? (current.vars.find((x) => x.type === 'text' && x.key !== 'title') || {}).key : null;
+        const text = script || (textVar ? String(values[textVar] || '') : '');
+        if (!text) throw new Error('先填文案（旁白稿）再点三形态');
+        const r = await api('/produce', { method: 'POST', body: {
+          producer: 'text.storyboard',
+          input: { text, title: values.title || '', shots: shotList, variants: true },
+        } });
+        const list = (r && r.doc && r.doc.variants) || [];
+        if (!list.length) throw new Error('没拿到多形态（引擎返回为空）');
+        for (const v of list) {
+          const [group, orientation] = String(v.template).split('/');
+          const job = await api('/job', { method: 'POST', body: {
+            kind: 'preview', group, orientation: orientation || 'vertical',
+            vars: v.vars, assets: v.assets || {},
+            script, renderer, previewSeconds,
+            voiceoverFile: voiceMode === 'file' ? voiceover : null,
+          } });
+          if (job) setJobs((prev) => [job, ...prev.filter((j) => j.id !== job.id)]);
+        }
+        return list.length;
+      });
       const doFinal = () => run('出终版', () => startJob('final', {}));
 
       const cancelJob = (id, cleanup) => run('取消', () => api('/cancel', { method: 'POST', body: { id, cleanup } }));
@@ -612,22 +645,39 @@ window.__ModuleLoader__.load({
                       key: v.key, label: v.label || v.key,
                       hint: `最多 ${v.max || 1} 张。素材不出本机：只把本机绝对路径交给渲染子进程。`,
                     }, h('div', { className: 'dshcv-slot' }, [
-                      assets[v.key]
-                        ? h('img', { key: 'th', className: 'dshcv-slot-preview', src: fileUrl(assets[v.key]), alt: '' })
-                        : null,
+                      // 多素材（2026-10-09）：可以是多张图，也可以是一个视频。
+                      // 显示：第一个的缩略图 + "共 N 个"，不再只当一个路径。
+                      (() => {
+                        const cur = assets[v.key];
+                        const list = Array.isArray(cur) ? cur : (cur ? [cur] : []);
+                        if (!list.length) return null;
+                        const isVid = /\.(mp4|mov|webm|m4v|ogv)$/i.test(String(list[0]));
+                        return h('div', { key: 'th', className: 'dshcv-slot-preview', title: list.join('\n') },
+                          isVid
+                            ? h('span', { style: { fontSize: '11px' } }, '🎬')
+                            : h('img', { src: fileUrl(list[0]), alt: '' }),
+                          list.length > 1 ? h('span', { style: { fontSize: '10px', opacity: .8 } }, String(list.length)) : null);
+                      })(),
                       h('input', {
-                        key: 'i', className: 'dshcv-input', value: assets[v.key] || '', readOnly: true,
-                        placeholder: '还没选图片',
+                        key: 'i', className: 'dshcv-input',
+                        value: (() => { const cur = assets[v.key]; return Array.isArray(cur) ? cur.join('、') : (cur || ''); })(),
+                        readOnly: true,
+                        placeholder: '还没选素材（可多选图片，或选一个视频）',
                       }),
                       h(Btn, {
                         key: 'b', size: 'sm',
-                        onClick: () => pickFile('image/*', (f) => run('上传', async () => {
-                          const up = await upload(f);
-                          setAssets((s) => ({ ...s, [v.key]: up.path }));
-                        })),
-                      }, assets[v.key] ? '换一张' : '选择…'),
+                        onClick: () => pickFile('image/*,video/*', (files) => run('上传', async () => {
+                          const arr = Array.isArray(files) ? files : [files];
+                          const ups = [];
+                          for (const f of arr) {
+                            const up = await upload(f);
+                            ups.push(up.path);
+                          }
+                          setAssets((st) => ({ ...st, [v.key]: ups }));
+                        }), true),
+                      }, assets[v.key] ? '换一批' : '选择…（可多选）'),
                       assets[v.key] ? h(Btn, {
-                        key: 'x', size: 'sm', onClick: () => setAssets((s) => ({ ...s, [v.key]: '' })),
+                        key: 'x', size: 'sm', onClick: () => setAssets((st) => ({ ...st, [v.key]: '' })),
                       }, '清除') : null,
                     ])))))) : null,
 
@@ -689,6 +739,8 @@ window.__ModuleLoader__.load({
                   h(Btn, { key: 'p', onClick: doPreview, disabled: !!busy }, busy === '预览' ? '起任务…' : '预览'),
                   h(Btn, { key: 'f', primary: true, main: true, onClick: doFinal, disabled: !!busy },
                     busy === '出终版' ? '起任务…' : '出终版（横竖双版）'),
+                  h(Btn, { key: 't', onClick: doVariants, disabled: !!busy },
+                    busy === '三形态' ? '起任务…' : '一次出三形态'),
                 ]),
               ]) : h('div', { className: 'dshcv-card', key: 'noform' },
                 h(Empty, null, '左边选一个模板开始')),

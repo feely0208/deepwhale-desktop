@@ -1517,6 +1517,11 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
       // 让壳拉起的 DSH 使用应用专属 home：会话与设置不落到用户自己的 ~/.dsh
       env: { DSH_HOME: legalHome },
       onLogLine: (line) => {
+        // 冒烟：把随包运行时的**每一行**输出都打出来。
+        // 为什么必须这样（2026-10-10 CI 事故）：子进程启动即退出时，日志里只有
+        // `[service] DSH 进程退出（code 1）`，而它到底报了什么错全被吞掉 —— 因为
+        // 这里原本只在 SMOKE 下打印带 token 的那一行。冒烟的价值就是"红了要能看出为什么"。
+        if (SMOKE) console.log(`[service-out] ${line}`);
         usage.consumeLogLine(line);
         // DSH 开启鉴权时会把带 token 的访问地址打到日志（dsh web: http://127.0.0.1:<port>/?token=…），
         // 解析出来供加载使用；解析不到则回落裸端口地址（无鉴权部署）。
@@ -1781,6 +1786,9 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
       console.error('[main] DSH 启动失败:', e);
       if (SMOKE) {
         console.error('[smoke] service failed');
+        // 把运行时的最后输出一起打出来：失败原因必须留在日志里（见 onLogLine 的说明）
+        const tail = service?.lastOutput?.();
+        if (tail) console.error('[smoke] 随包运行时最后输出：\n' + tail);
         app.exit(1);
         return;
       }

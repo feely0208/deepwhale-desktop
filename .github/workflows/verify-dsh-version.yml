@@ -1,0 +1,122 @@
+# 跟版验证：手动指定一个 DSH 运行时版本，验证「我们能不能跟到它」。
+#
+# 为什么要有这个工作流（2026-10-10）：
+#   上游 @deepseek-ai/dsh 经常发新版本（含 alpha / rc）。我们随包一个固定运行时，
+#   每次上游动到我们依赖的机制（0.1.7 废弃 .agent-presets → 法律模式预设从没进过花名册）
+#   都会直接砸到用户。过去只能"在开发者本机折腾"来验证 —— 而本机跑打包冒烟会踩
+#   沙箱 / 符号链接 / 复用用户实例等一堆环境坑（2026-10-10 亲历：应用放 /tmp 被沙箱拒、
+#   符号链接替换 dsh-runtime/node_modules 导致没打进包），结论不可信。
+#   → 把这件事放到 CI：环境干净、可重复、不占用任何人电脑。
+#
+# 触发：手动（Actions → Verify DSH version → Run workflow），填版本号即可。
+# 产出：结论写进 Step Summary；完整日志作为 artifact。
+name: Verify DSH version
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '要验证的 @deepseek-ai/dsh 版本（如 0.2.1-alpha.2）'
+        required: true
+      registry:
+        description: 'npm 镜像源'
+        required: false
+        default: 'https://registry.npmmirror.com'
+      run_packaged_smoke:
+        description: '打包后是否跑打包态冒烟（更慢但更接近真实）'
+        required: false
+        default: 'true'
+
+jobs:
+  verify:
+    runs-on: macos-14
+    env:
+      DSH_NPM_REGISTRY: ${{ inputs.registry }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: 钉住要验证的运行时版本
+        run: |
+          set -e
+          echo "${{ inputs.version }}" > dsh-runtime.version
+          node scripts/dsh-runtime-version.js --generate
+          echo "将验证 DSH 运行时：$(node scripts/dsh-runtime-version.js)"
+
+      - name: Build (tsc + assets)
+        run: npm run build
+
+      - name: Prepare bundled DSH runtime（照 release.yml，用镜像装指定版本）
+        run: |
+          set -e
+          DSH_VERSION=$(node scripts/dsh-runtime-version.js)
+          REGISTRY_ARGS=""
+          if [ -n "${DSH_NPM_REGISTRY:-}" ]; then REGISTRY_ARGS="--registry=$DSH_NPM_REGISTRY"; fi
+          npm install "@deepseek-ai/dsh@$DSH_VERSION" --prefix dsh-runtime --no-audit --no-fund --loglevel=error $REGISTRY_ARGS
+          test -f dsh-runtime/node_modules/@deepseek-ai/dsh/lib/bin.js
+          node scripts/dsh-runtime-version.js --check
+
+      - name: Prepare bundled plugins
+        run: node scripts/build-bundled-plugins.js
+
+      - name: 离线守卫（跟版最关键的四项）
+        run: |
+          set -e
+          echo "---- ① 注入竞态 ----"; node scripts/test-inject-race.js
+          echo "---- ② 菜单中文 ----"; node scripts/check-menu-i18n.js
+          echo "---- ③ 法律模式花名册（上游最容易砸到我们的一处）----"; node scripts/check-legal-preset-roster.js
+          echo "---- ④ patch 自愈 ----"; node scripts/test-patch-heal.js
+
+      - name: Package (不发布)
+        if: ${{ inputs.run_packaged_smoke == 'true' }}
+        run: npm run dist -- --publish never --mac --arm64
+
+      - name: 打包态冒烟（优先用项目自带的 smoke-local.sh，它已处理"复用用户实例"这个坑）
+        if: ${{ inputs.run_packaged_smoke == 'true' }}
+        run: |
+          set -e
+          if [ -f scripts/smoke-local.sh ]; then
+            bash scripts/smoke-local.sh 2>&1 | tee /tmp/verify-smoke.log
+          else
+            APP=$(find release -maxdepth 4 -type f -name 'DeepWhale Desktop' -path '*Contents/MacOS*' | head -1)
+            echo "应用：$APP"; test -n "$APP"
+            mkdir -p /tmp/dsh-verify && echo '{ "port": 3399 }' > /tmp/dsh-verify/settings.json
+            env -u ELECTRON_RUN_AS_NODE DSH_DESKTOP_SMOKE=1 "$APP" --user-data-dir=/tmp/dsh-verify 2>&1 | tee /tmp/verify-smoke.log
+          fi
+          # 关键断言（历史上出过假绿的两处）
+          grep -q "ui-legal-mode" /tmp/verify-smoke.log || { echo "::error::客户端插件 ui-legal-mode 未出现 —— 注入链路可疑"; exit 1; }
+          ! grep -qE "DSH 启动失败|service failed" /tmp/verify-smoke.log || { echo "::error::DSH 服务启动失败"; exit 1; }
+          grep -qE "\[smoke\] ok" /tmp/verify-smoke.log || { echo "::warning::未看到 [smoke] ok，请人工核对日志"; }
+
+      - name: 结论写入 Summary
+        if: always()
+        run: |
+          {
+            echo "## 跟版验证结果"
+            echo ""
+            echo "- 目标版本：\`${{ inputs.version }}\`"
+            echo "- 是否跑打包冒烟：\`${{ inputs.run_packaged_smoke }}\`"
+            echo ""
+            echo "### 关键结论（看上面各步是否全绿）"
+            echo "1. 运行时能否安装并起服务（离线守卫 ①-④ + 冒烟）"
+            echo "2. 客户端插件注入：冒烟日志需含 \`ui-legal-mode\`"
+            echo "3. **法律模式是否进花名册**：第 3 项守卫（历史上被上游砸过）"
+            echo ""
+            echo "> 全绿即可评估把 \`dsh-runtime.version\` 跟到该版本；"
+            echo "> 若有红：把失败步骤的原样行贴给负责人，不要只报\"失败\"。"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 上传日志
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-dsh-${{ inputs.version }}-logs
+          path: |
+            /tmp/verify-smoke.log
+          if-no-files-found: ignore

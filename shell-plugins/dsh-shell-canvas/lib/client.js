@@ -300,6 +300,121 @@ textarea.dshcv-input{height:auto;min-height:96px;padding:10px 12px;line-height:1
 /* ⑦ 结果区：成片预览有"作品"的样子 */
 .dshcv-big{border-radius:14px;overflow:hidden;border:1px solid var(--dsw-alias-border-l1)}
 .dshcv-log{border-radius:12px;padding:12px 14px;line-height:1.7}
+
+
+/* ────────────────────────────────────────────────────────────────
+ * 视觉升级 · 第二版（2026-10-10）
+ * 用户反馈：「这样的视觉效果好像变化也不大，你把层次感弄强些，
+ *           不要整个界面都是暗色的一片」
+ *
+ * 上一版的问题：**只在暗色里加了一圈边界** —— 那当然看不出变化。
+ * 这一版的做法：
+ *   ① 分层表面：页面底 → 卡片 → 卡片内嵌行，三层明度拉开（不再一片黑）
+ *   ② 品牌色：深鲸的青（#14A5B8 / #3FD0E0）用在关键处 ——
+ *      分区标题左侧的色条、主按钮的渐变、选中态、数字角标
+ *   ③ 渐变：顶栏与主按钮用青→蓝的渐变，一眼有"纵深"
+ *   ④ 亮面：说明条 / 徽标用半透明的青色底，而不是灰底
+ *   全部基于 --dsw-alias-* 变量 + 固定品牌色，深浅主题都不崩。
+ * ──────────────────────────────────────────────────────────────── */
+
+.dshcv-root{
+  background:
+    radial-gradient(1200px 380px at 82% -12%, rgba(20,165,184,.16), transparent 62%),
+    radial-gradient(760px 300px at 8% 108%, rgba(20,165,184,.10), transparent 60%),
+    var(--dsw-alias-bg-layer-2, #17181b);
+  padding:24px 26px;
+}
+
+/* ① 顶栏：品牌渐变 + 更实的层级 */
+.dshcv-bar{
+  background:linear-gradient(100deg, #0a2532 0%, #0d3140 46%, #0b2030 100%);
+  border:1px solid rgba(63,208,224,.22);
+  border-radius:16px;padding:14px 18px;
+  box-shadow:0 18px 40px -28px rgba(0,0,0,.9), inset 0 1px 0 rgba(255,255,255,.05);
+}
+.dshcv-dot{width:9px;height:9px;border-radius:50%;box-shadow:0 0 0 4px rgba(63,208,224,.16)}
+.dshcv-chip{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.10);border-radius:999px;padding:3px 10px;font-size:12px}
+.dshcv-chip-brand{background:linear-gradient(96deg, rgba(20,165,184,.26), rgba(63,208,224,.16));border:1px solid rgba(63,208,224,.36);color:#9fe8f2}
+
+/* ② 卡片：明度分层 + 更重的立体感 */
+.dshcv-card{
+  background:linear-gradient(180deg, var(--dsw-alias-bg-layer-1, #1d1e22) 0%, var(--dsw-alias-bg-layer-1, #1a1b1f) 100%);
+  border:1px solid var(--dsw-alias-border-l1, #303237);
+  border-radius:18px;padding:22px 24px;
+  box-shadow:0 1px 0 rgba(255,255,255,.03) inset, 0 24px 48px -34px rgba(0,0,0,.95);
+}
+/* 卡片里再嵌一层"行"，把三层明度拉开 */
+.dshcv-slot{
+  background:var(--dsw-alias-bg-layer-2, #232428);
+  border:1px solid var(--dsw-alias-border-l1, #303237);
+  border-radius:12px;padding:9px 10px;
+}
+
+/* ③ 分区标题：左侧品牌色条（最显眼的"层次"信号） */
+.dshcv-head{
+  display:flex;align-items:center;gap:10px;
+  padding:0 0 14px 0;margin-bottom:18px;
+  border-bottom:1px solid var(--dsw-alias-border-l1, #303237);
+}
+.dshcv-head::before{
+  content:"";width:4px;height:17px;border-radius:2px;
+  background:linear-gradient(180deg,#3FD0E0,#14A5B8);
+  box-shadow:0 0 12px rgba(63,208,224,.55);flex:none;
+}
+.dshcv-head h2,.dshcv-head h3{
+  font-size:15px;font-weight:680;letter-spacing:.3px;margin:0;
+  background:linear-gradient(90deg,#FFFFFF,#CFEFF5);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+
+/* ④ 主按钮：品牌渐变（一眼是"主要动作"） */
+.dshcv-btn-primary,.dshcv-btn-main{
+  background:linear-gradient(96deg,#14A5B8 0%, #2AB8CC 100%) !important;
+  color:#04222b !important;border:none !important;font-weight:700 !important;
+  box-shadow:0 10px 24px -14px rgba(42,184,204,.95), inset 0 1px 0 rgba(255,255,255,.35) !important;
+}
+.dshcv-btn-primary:hover,.dshcv-btn-main:hover{filter:brightness(1.06)}
+.dshcv-btn:not(.dshcv-btn-primary):not(.dshcv-btn-main):hover{
+  border-color:rgba(63,208,224,.5);background:rgba(63,208,224,.08);
+}
+
+/* ⑤ 模板卡：选中=品牌色描边 + 青色晕 + 轻抬 */
+.dshcv-tpl{
+  background:var(--dsw-alias-bg-layer-1, #1d1e22);
+  border:1px solid var(--dsw-alias-border-l1, #303237);
+  border-radius:16px;overflow:hidden;
+  box-shadow:0 16px 34px -30px rgba(0,0,0,.95);
+  transition:transform .14s ease, box-shadow .18s ease, border-color .18s ease;
+}
+.dshcv-tpl:hover{transform:translateY(-2px);box-shadow:0 22px 44px -30px rgba(0,0,0,1)}
+.dshcv-tpl-on,.dshcv-tpl[aria-selected="true"]{
+  border-color:rgba(63,208,224,.85);
+  box-shadow:0 0 0 3px rgba(63,208,224,.16), 0 22px 44px -30px rgba(0,0,0,1);
+}
+.dshcv-poster{position:relative}
+.dshcv-poster::after{
+  content:"";position:absolute;inset:0;
+  background:linear-gradient(180deg,transparent 42%, rgba(4,20,28,.72) 100%);
+}
+
+/* ⑥ 徽标/数字：品牌色实底，代替灰底 */
+.dshcv-slot-thumb .n{background:linear-gradient(96deg,#14A5B8,#2AB8CC);color:#04222b;font-weight:700}
+.dshcv-issue{border-left:3px solid #e0645a;background:rgba(224,100,90,.10);border-radius:0 10px 10px 0;padding:10px 12px}
+.dshcv-err{border-left:3px solid #e0645a;background:rgba(224,100,90,.12);border-radius:0 10px 10px 0}
+.dshcv-ok{border-left:3px solid #2ab8cc;background:rgba(42,184,204,.10);border-radius:0 10px 10px 0}
+
+/* ⑦ 空态与说明条：给点光，别是一片灰 */
+.dshcv-banner{
+  background:linear-gradient(96deg, rgba(20,165,184,.12), rgba(20,165,184,.04));
+  border:1px solid rgba(63,208,224,.20);border-radius:12px;padding:12px 14px;
+}
+.dshcv-empty{padding:34px 20px}
+.dshcv-empty-mark{
+  width:52px;height:52px;border-radius:14px;
+  background:linear-gradient(140deg, rgba(63,208,224,.22), rgba(20,165,184,.06));
+  border:1px solid rgba(63,208,224,.28);
+}
+.dshcv-log{background:var(--dsw-alias-bg-layer-2,#232428);border:1px solid var(--dsw-alias-border-l1,#303237);border-radius:12px}
 `;
 
     function StyleTag() {

@@ -319,13 +319,29 @@ textarea.dshcv-input{height:auto;min-height:96px;padding:10px 12px;line-height:1
  * ──────────────────────────────────────────────────────────────── */
 
 .dshcv-root{
-  /* 主题变量（basalt-dark） */
-  --cv-canvas:#1B1B1B; --cv-base:#1F1F1F; --cv-surface:#252525; --cv-raised:#2E2E2E;
-  --cv-overlay:#333333; --cv-sunken:#161616; --cv-hover:#3A3A3A; --cv-active:#454545;
-  --cv-border-subtle:#2B2B2B; --cv-border:#3C3C3C; --cv-border-control:#787878;
-  --cv-fg:#E6E6E6; --cv-fg-2:#CCCCCC; --cv-fg-muted:#9D9D9D; --cv-fg-disabled:#6E6E6E;
-  --cv-accent:#4772B3; --cv-accent-line:#6699DD; --cv-accent-hover:#5580C4;
-  --cv-accent-select:#2F4A73; --cv-danger-fg:#E8737F; --cv-success-fg:#5FBF87; --cv-warn-fg:#D9A441;
+  /* 配色**跟随应用主题**（用户："只有深色没有随系统变色这道吗"）——
+     所以这里一律用应用自己的语义变量，只把 basalt-dark 的值当兜底。
+     骨架（几何/密度/字体/动效）用 design-spec，皮肤用应用的 —— 这样切浅色也自动跟着走。 */
+  --cv-canvas:var(--dsw-alias-bg-base, #1B1B1B);
+  --cv-base:var(--dsw-alias-bg-base, #1F1F1F);
+  --cv-surface:var(--dsw-alias-bg-layer-1, #252525);
+  --cv-raised:var(--dsw-alias-bg-layer-2, #2E2E2E);
+  --cv-sunken:var(--dsw-alias-bg-base, #161616);
+  --cv-hover:var(--dsw-alias-interactive-bg-hover, #3A3A3A);
+  --cv-active:var(--dsw-alias-interactive-bg-hover, #454545);
+  --cv-border-subtle:var(--dsw-alias-border-l1, #2B2B2B);
+  --cv-border:var(--dsw-alias-border-l1, #3C3C3C);
+  --cv-border-control:var(--dsw-alias-border-l2, #787878);
+  --cv-fg:var(--dsw-alias-label-primary, #E6E6E6);
+  --cv-fg-2:var(--dsw-alias-label-primary, #CCCCCC);
+  --cv-fg-muted:var(--dsw-alias-label-secondary, #9D9D9D);
+  --cv-accent:var(--dsw-alias-brand-primary, #4772B3);
+  --cv-accent-line:var(--dsw-alias-brand-primary, #6699DD);
+  --cv-accent-hover:var(--dsw-alias-brand-primary, #5580C4);
+  --cv-accent-select:var(--dsw-alias-brand-primary, #2F4A73);
+  --cv-danger-fg:var(--dsw-alias-label-secondary, #E8737F);
+  --cv-success-fg:var(--dsw-alias-brand-primary, #5FBF87);
+  --cv-warn-fg:var(--dsw-alias-label-secondary, #D9A441);
   /* 间距（core.space）与动效（core.motion） */
   --cv-s1:2px; --cv-s2:4px; --cv-s3:6px; --cv-s4:8px; --cv-s5:12px; --cv-s6:16px; --cv-s7:24px; --cv-s8:32px;
   --cv-fast:80ms; --cv-base:120ms; --cv-slow:160ms; --cv-ease:cubic-bezier(0.2,0,0,1);
@@ -359,7 +375,7 @@ textarea.dshcv-input{height:auto;min-height:96px;padding:10px 12px;line-height:1
 /* 控件：26px 高（comfortable），方角，聚焦用钢蓝细线（不做光晕） */
 .dshcv-btn{
   height:26px; padding:0 var(--cv-s5); border-radius:0;
-  border:1px solid var(--cv-border-control); background:var(--cv-surface); color:var(--cv-fg);
+  border:1px solid var(--cv-border-subtle); background:transparent; color:var(--cv-fg);
   font-size:13px; font-weight:500; font-family:var(--cv-font);
   transition:background var(--cv-base) var(--cv-ease), border-color var(--cv-base) var(--cv-ease);
 }
@@ -373,7 +389,9 @@ textarea.dshcv-input{height:auto;min-height:96px;padding:10px 12px;line-height:1
 .dshcv-btn-primary:hover,.dshcv-btn-main:hover{background:var(--cv-accent-hover) !important}
 .dshcv-input{
   height:26px; border-radius:0; padding:0 var(--cv-s4);
-  border:1px solid var(--cv-border-control); background:var(--cv-sunken); color:var(--cv-fg);
+  /* 原来这里是 background:var(--cv-sunken) 纯黑 → 刺眼；改成半透明叠加 */
+  border:1px solid var(--cv-border-subtle);
+  background:color-mix(in srgb, var(--cv-fg) 5%, transparent); color:var(--cv-fg);
   font-size:13px; font-family:var(--cv-font);
   transition:border-color var(--cv-base) var(--cv-ease);
 }
@@ -397,6 +415,29 @@ textarea.dshcv-input{height:auto; min-height:88px; padding:var(--cv-s5); line-he
 .dshcv-issue-warn{border-left:2px solid var(--cv-warn-fg)}
 .dshcv-code{font-family:var(--cv-mono); font-size:12px}
 .dshcv-empty{padding:var(--cv-s8) var(--cv-s6)}
+
+/* ── 降刺眼（2026-10-10，用户："感觉有点刺眼，对比度太高了"）──────────
+   刺眼来源不是深色本身，是**三处高对比硬块**：
+     ① 输入框纯黑底 ② 选中项的实心亮底 ③ 模板预览图的占位斜纹
+   统一改成"低对比叠加"：半透明 + 细边，不再用实心色块。 */
+.dshcv-opt[data-on="true"]{
+  border-color:color-mix(in srgb, var(--cv-accent-line) 55%, transparent) !important;
+  background:color-mix(in srgb, var(--cv-accent-line) 12%, transparent) !important;
+}
+.dshcv-opt{border-color:var(--cv-border-subtle); background:transparent}
+.dshcv-opt:hover{background:color-mix(in srgb, var(--cv-fg) 6%, transparent)}
+/* 预览图占位：原来用 bg-layer-2 画斜纹，在浅色主题下变成黑白硬条纹 → 降下来 */
+.dshcv-poster-ph{
+  background:color-mix(in srgb, var(--cv-fg) 5%, transparent) !important;
+  color:var(--cv-fg-muted) !important;
+}
+.dshcv-poster{background:color-mix(in srgb, var(--cv-fg) 5%, transparent)}
+.dshcv-tpl-on,.dshcv-tpl[aria-selected="true"]{
+  border-color:color-mix(in srgb, var(--cv-accent-line) 60%, transparent);
+  background:color-mix(in srgb, var(--cv-accent-line) 10%, transparent);
+}
+.dshcv-tpl:hover{border-color:var(--cv-border-control); background:color-mix(in srgb, var(--cv-fg) 4%, transparent)}
+.dshcv-bar{background:transparent; border:1px solid var(--cv-border-subtle)}
 `;
 
     function StyleTag() {

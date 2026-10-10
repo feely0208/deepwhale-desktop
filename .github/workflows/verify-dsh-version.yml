@@ -104,8 +104,12 @@ jobs:
           echo "---- ③ 法律模式花名册（上游最容易砸到我们的一处）----"; node scripts/check-legal-preset-roster.js
           echo "---- ④ patch 自愈 ----"; node scripts/test-patch-heal.js
 
+      # 🔎 条件是 `!= 'false'` 而不是 `== 'true'`：
+      #    定时触发（schedule）时 inputs 是空的，`== 'true'` 会**静默跳过**这两步 ——
+      #    于是每天两次的自动跟版其实从来没测过打包产物。默认就该跑，只有手动显式
+      #    填 false 才跳过。
       - name: Package (不发布)
-        if: ${{ inputs.run_packaged_smoke == 'true' }}
+        if: ${{ inputs.run_packaged_smoke != 'false' }}
         run: |
           set -e
           echo "---- 打包前诊断 ----"
@@ -114,23 +118,51 @@ jobs:
           echo "---- 打包（用项目自己的 dist-local.sh：团队惯用入口，已处理输出目录等细节）----"
           bash scripts/dist-local.sh --mac --arm64 --config.directories.output=release-verify --publish never
           echo "---- 产物 ----"
-          find release-verify -maxdepth 3 -name '*.app' -o -maxdepth 2 -name '*.dmg' 2>/dev/null | head -5 || true
-      - name: 打包态冒烟（优先用项目自带的 smoke-local.sh，它已处理"复用用户实例"这个坑）
-        if: ${{ inputs.run_packaged_smoke == 'true' }}
+          # ⚠️ find 的 -o 要加括号，否则 -maxdepth 只作用于前半段
+          find release-verify -maxdepth 4 \( -name '*.app' -o -name '*.dmg' -o -name '*.zip' \) 2>/dev/null | head -10 || true
+
+      - name: 打包态冒烟（直接跑 release-verify 里刚打出来的 .app）
+        if: ${{ inputs.run_packaged_smoke != 'false' }}
+        timeout-minutes: 15
         run: |
-          set -e
-          if [ -f scripts/smoke-local.sh ] && [ -z "${VERIFY_APP:-}" ]; then
-            bash scripts/smoke-local.sh 2>&1 | tee /tmp/verify-smoke.log
-          else
-            APP=$(find release-verify release -maxdepth 5 -type f -name 'DeepWhale Desktop' -path '*Contents/MacOS*' 2>/dev/null | head -1)
-            echo "应用：$APP"; test -n "$APP"
-            mkdir -p /tmp/dsh-verify && echo '{ "port": 3399 }' > /tmp/dsh-verify/settings.json
-            env -u ELECTRON_RUN_AS_NODE DSH_DESKTOP_SMOKE=1 "$APP" --user-data-dir=/tmp/dsh-verify 2>&1 | tee /tmp/verify-smoke.log
+          # ⚠️ 这一步必须跑**刚打出来的包**。
+          #    2026-10-10 的首版只调了 smoke-local.sh 的默认（开发态）分支 —— 它会重新
+          #    build 并跑 dist/main/index.js，根本没碰 release-verify 的产物，断言
+          #    ui-legal-mode 因此对不上（一次"测错对象"的假红）。
+          #    现在显式传 --app，走脚本的打包态分支：跳过 build、直接跑打包产物，并由
+          #    脚本负责 userData / DSH_HOME / 端口 的隔离与回收（含"复用用户实例"这个坑）。
+          set -uo pipefail
+          APP=$(find release-verify -maxdepth 4 -type d -name 'DeepWhale Desktop.app' 2>/dev/null | head -1)
+          if [ -z "$APP" ]; then
+            # 兜底：productName 若被改过，仍按任意 .app 找（总比"找不到就跳过"强）
+            APP=$(find release-verify -maxdepth 4 -type d -name '*.app' 2>/dev/null | head -1)
           fi
-          # 关键断言（历史上出过假绿的两处）
-          grep -q "ui-legal-mode" /tmp/verify-smoke.log || { echo "::error::客户端插件 ui-legal-mode 未出现 —— 注入链路可疑"; exit 1; }
-          ! grep -qE "DSH 启动失败|service failed" /tmp/verify-smoke.log || { echo "::error::DSH 服务启动失败"; exit 1; }
-          grep -qE "\[smoke\] ok" /tmp/verify-smoke.log || { echo "::warning::未看到 [smoke] ok，请人工核对日志"; }
+          if [ -z "$APP" ]; then
+            echo "::error::release-verify 里没有找到 DeepWhale Desktop.app —— 打包步骤没有产出"
+            ls -la release-verify 2>/dev/null || true
+            exit 1
+          fi
+          echo "待冒烟的应用：$APP"
+          ls -la "$APP/Contents/MacOS/" 2>/dev/null || true
+
+          set +e
+          SMOKE_LOG=/tmp/verify-app.log bash scripts/smoke-local.sh --app "$APP" 2>&1 | tee /tmp/verify-smoke.log
+          SMOKE_RC=${PIPESTATUS[0]}
+          set -e
+          echo "smoke-local.sh exit=$SMOKE_RC"
+
+          # 关键断言（历史上出过假绿的两处）—— 与脚本内部的断言互为交叉验证
+          fail=0
+          grep -q "@deepseek-ai/dsh-client-ui-legal-mode" /tmp/verify-smoke.log \
+            || { echo "::error::客户端插件 ui-legal-mode 未出现 —— 注入链路可疑"; fail=1; }
+          # ⚠️ `[smoke] ok` 要在**完整应用日志**里查：smoke-local.sh 的结果区是
+          #    `head -20` 裁过的摘要，轮不到最后才打印的 [smoke] ok（0.1 版就踩了）。
+          grep -q "\[smoke\] ok" /tmp/verify-app.log \
+            || { echo "::error::没有看到 [smoke] ok —— 检查链没跑完，结果不可信"; fail=1; }
+          ! grep -qE "DSH 启动失败|service failed" /tmp/verify-app.log /tmp/verify-smoke.log \
+            || { echo "::error::DSH 服务启动失败"; fail=1; }
+          [ "$SMOKE_RC" = "0" ] || { echo "::error::smoke-local.sh 以 exit=$SMOKE_RC 结束（看上面的输出与日志）"; fail=1; }
+          exit $fail
 
       - name: 抓上游 release notes（CI 能访问 GitHub，本机被墙）
         if: always()
@@ -171,4 +203,5 @@ jobs:
           name: verify-dsh-${{ inputs.version }}-logs
           path: |
             /tmp/verify-smoke.log
+            /tmp/verify-app.log
           if-no-files-found: ignore

@@ -470,6 +470,29 @@ body[data-ds-dark-theme] .dshcv-root{
     radial-gradient(70% 60% at 50% 118%, rgba(74,138,196,.28), transparent 70%),
     var(--cv-canvas);
 }
+
+/* ── 柔化（2026-10-10，用户："这些格子可以相对美化一下吗，好家伙都是直来直往，
+ *            视觉效果不佳"）─────────────────────────────────────────────
+ * 我把 design-spec 的 "radius = 0" 当成铁律照搬了 —— 但那条是**桌面工具**的取向，
+ * 而这是给普通用户用的**消费级插件**：全是直角确实"直来直往"。
+ * 规范自己也写着 radius.max = 2 是"有理由的例外上限"，所以我们按用户审美放宽。
+ * 只放松外观（圆角 + 极轻阴影），密度与辉光配色不动。 */
+.dshcv-card{border-radius:14px; box-shadow:0 1px 2px rgba(16,32,56,.04), 0 10px 28px -22px rgba(16,32,56,.45)}
+.dshcv-bar{border-radius:12px}
+.dshcv-slot,.dshcv-log,.dshcv-banner{border-radius:10px}
+.dshcv-input,.dshcv-btn{border-radius:8px}
+.dshcv-tpl{border-radius:14px}
+.dshcv-poster{border-radius:0}                 /* 外层 overflow:hidden 已经剪好 */
+.dshcv-slot-thumb{border-radius:8px; overflow:hidden}
+.dshcv-slot-thumb .n{border-radius:6px 0 8px 0}
+.dshcv-opt{border-radius:10px}
+.dshcv-chip{border-radius:999px}
+.dshcv-issue,.dshcv-err,.dshcv-ok{border-radius:0 10px 10px 0}
+.dshcv-actions{border-radius:0}
+.dshcv-empty-mark{border-radius:12px}
+.dshcv-head{padding-bottom:var(--cv-s4)}
+/* 深色下阴影要更明显一点，否则浮不起来 */
+body[data-ds-dark-theme] .dshcv-card{box-shadow:0 1px 2px rgba(0,0,0,.35), 0 14px 34px -24px rgba(0,0,0,.85)}
 `;
 
     function StyleTag() {

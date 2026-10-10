@@ -1,4 +1,4 @@
 source: deepwhale-canvas-cn
-version: e539a03-dirty
-commit: e539a03 2026-10-09 fix(渲染): 内联 base64 素材让页面过大 → data URL 被浏览器拒（ERR_INVALID_URL -300）
-synced_at: 2026-10-09 18:40:54
+version: 5185f7e
+commit: 5185f7e 2026-10-10 feat(形态): 三种形态真正"编排不同"，不只是换版式
+synced_at: 2026-10-10 09:41:17

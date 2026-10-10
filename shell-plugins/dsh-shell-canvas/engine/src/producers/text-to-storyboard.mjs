@@ -68,18 +68,29 @@ function register(registerProducer) {
           vars: { title, subtitle: srt },
           assets: shots.length ? { shots } : {},
         });
-        // ② 金句引用：无图，挑一句最像"金句"的（取最长的一句）当大字
+        // ② 金句引用：**只取一句**。
+        //    用户抱怨"看不出三种形态的区别"——根因是三个形态吃同一份时长、
+        //    同一套字幕，只是外观换了个排法。金句版式的本质是**短片**：
+        //    一句话、几秒钟、大字。所以这里只把最有分量的一句做成字幕。
         const best = sentences.slice().sort((a, b) => b.length - a.length)[0] || title;
         list.push({
           template: `02-quote/${orientation}`,
-          vars: { title, subtitle: srt, quote: best.slice(0, 60) },
+          vars: { title, subtitle: toSrt([best]), quote: best.slice(0, 60) },
           assets: {},
+          notes: [`金句形态：只取一句（${best.length} 字，约 4 秒）`],
         });
-        // ③ 步骤清单：把前几句变成 step1..step3（够 3 步才出这个形态）
+        // ③ 步骤清单：**按步分段**（每步一句、各自停顿），而不是把整段塞进去。
+        //    同样是"编排不同"，不只是版式不同。
         if (sentences.length >= 2) {
-          const vars = { title, subtitle: srt };
-          sentences.slice(0, 3).forEach((t, i) => { vars[`step${i + 1}`] = t.slice(0, 40); });
-          list.push({ template: `03-steps/${orientation}`, vars, assets: {} });
+          const steps = sentences.slice(0, 3);
+          const v3 = { title, subtitle: toSrt(steps) };
+          steps.forEach((t, i) => { v3[`step${i + 1}`] = t.slice(0, 40); });
+          list.push({
+            template: `03-steps/${orientation}`,
+            vars: v3,
+            assets: {},
+            notes: [`步骤形态：拆成 ${steps.length} 步，每步一个停顿`],
+          });
         }
         return { variants: list, notes: [`一次出 ${list.length} 种形态（用户挑一个用）`] };
       }

@@ -704,6 +704,19 @@ body:not([data-ds-dark-theme]) .dshcv-root{
       });
 
       const [env, setEnv] = useState(null);
+      // 授权（试用 14 天免费、¥199/年去水印）
+      const [lic, setLic] = useState(null);
+      const [licCode, setLicCode] = useState('');
+      const [licMsg, setLicMsg] = useState('');
+      const checkLic = async () => {
+        try { setLic(await api('/license', { method: 'GET' })); } catch (e) { setLic(null); }
+      };
+      const doActivate = () => run('激活', async () => {
+        const r = await api('/license', { method: 'POST', body: { code: licCode.trim() } });
+        if (r && r.ok) { setLic(r.state); setLicMsg('✅ 已激活，之后出片不带水印'); setLicCode(''); }
+        else { setLicMsg((r && r.error) || '授权码无效'); }
+        return r;
+      });
       const checkEnv = async () => {
         // 环境自检是**锦上添花**，不是出片的前置条件：
         // 宿主版本旧（没有这个接口）时**安静跳过**，不许弹红字吓用户
@@ -777,7 +790,7 @@ body:not([data-ds-dark-theme]) .dshcv-root{
         }
       }, [selected]);
 
-      useEffect(() => { refresh(); checkEnv(); }, []);
+      useEffect(() => { refresh(); checkEnv(); checkLic(); }, []);
 
       // 进度走 SSE：与轮询相比不会漏掉中间态，也不会有刷新延迟。
       useEffect(() => {
@@ -1213,6 +1226,28 @@ body:not([data-ds-dark-theme]) .dshcv-root{
                       ]),
                       batchMsg ? h('div', { key: 'm', className: 'dshcv-sub', style: { marginTop: 8, color: '#3FD0E0' } }, batchMsg) : null,
                       batchLines ? h('div', { key: 'h', className: 'dshcv-sub', style: { marginTop: 6 } }, `共 ${batchLines} 条`) : null,
+                    ]))),
+
+                h('div', { key: 'lic', style: { marginTop: 22 } },
+                  h(Section, { title: '授权' },
+                    h('div', null, [
+                      h('div', { key: 'st', className: 'dshcv-sub' },
+                        !lic ? '检查中…'
+                          : lic.plan === 'licensed' ? `已授权${lic.to ? '（' + lic.to + '）' : ''} · 有效期至 ${new Date(lic.expiresAt).toLocaleDateString('zh-CN')}`
+                          : lic.plan === 'trial' ? `试用中 · 还有 ${lic.daysLeft} 天（试用期内不带水印）`
+                          : `${lic.reason || '免费版'} · 出片会带深鲸画布水印`),
+                      h('div', { key: 'row', style: { marginTop: 10, display: 'flex', gap: 8, alignItems: 'center' } }, [
+                        h('input', {
+                          key: 'i', className: 'dshcv-input', style: { flex: 1 },
+                          value: licCode, placeholder: '输入授权码',
+                          onChange: (e) => setLicCode(e.target.value),
+                          onKeyDown: (e) => { if (e.key === 'Enter') doActivate(); },
+                        }),
+                        h(Btn, { key: 'b', size: 'sm', primary: true, onClick: doActivate, disabled: !!busy || !licCode.trim() }, '激活'),
+                      ]),
+                      licMsg ? h('div', { key: 'm', className: 'dshcv-sub', style: { marginTop: 6, color: '#3FD0E0' } }, licMsg) : null,
+                      (!lic || lic.plan !== 'licensed') ? h('div', { key: 'h', className: 'dshcv-sub', style: { marginTop: 6 } },
+                        '授权后可去除水印、使用批量出片与台账。') : null,
                     ]))),
 
                 h('div', { key: 'outdir', style: { marginTop: 22 } },

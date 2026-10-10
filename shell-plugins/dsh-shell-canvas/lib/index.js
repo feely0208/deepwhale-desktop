@@ -23,6 +23,7 @@
 import { existsSync, mkdirSync, statSync, createReadStream, createWriteStream, rmSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve, extname } from 'node:path';
 import { homedir } from 'node:os';
+import { getState as licState, activate as licActivate } from './license.mjs';
 import { spawn } from 'node:child_process';
 import { JobManager, resolveNode, probeElectron, electronCandidates } from './jobs.mjs';
 import {
@@ -231,6 +232,8 @@ export function apply(ctx) {
       script: request.script || '',
       voiceoverFile: request.voiceoverFile || null,
       bgmId: request.bgmId || null,
+      // 未授权（免费/试用结束）→ 出片带水印；已授权 → 不加（license.mjs 判定）
+      watermark: licState().watermark,
       // 用户自己的背景音乐文件（绕过版权台账，责任在用户）
       bgmFile: (() => {
         const f = request.bgmFile || null;
@@ -299,6 +302,8 @@ export function apply(ctx) {
       if (p === `${ROUTE}/api/output-dir` && req.method === 'POST') return send(res, 200, apiSetOutputDir(body));
       if (p === `${ROUTE}/api/pick-dir` && req.method === 'POST') return send(res, 200, await apiPickDir());
       if (p === `${ROUTE}/api/env-check` && req.method === 'GET') return send(res, 200, await apiEnvCheck());
+      if (p === `${ROUTE}/api/license` && req.method === 'GET') return send(res, 200, licState());
+      if (p === `${ROUTE}/api/license` && req.method === 'POST') return send(res, 200, licActivate(body && body.code));
       if (p === `${ROUTE}/api/producers` && req.method === 'GET') return send(res, 200, await apiProducers());
       if (p === `${ROUTE}/api/produce` && req.method === 'POST') return send(res, 200, await apiProduce(body));
       if (p === `${ROUTE}/api/providers` && req.method === 'GET') return send(res, 200, await apiProviders());

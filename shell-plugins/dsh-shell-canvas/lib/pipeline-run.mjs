@@ -128,7 +128,9 @@ export function injectWatermark(doc, enabled = true) {
   //   ① 这个节点**不进 timeline** —— setFrame 只重写 timeline 里节点的 transform，
   //      不进就保得住静态旋转 ✓
   //   ② 不透明度压到 0.11：既要"一眼看到是我们出的"，又不能毁掉画面 ✓
-  const big = Math.round(Math.min(W, H) * 0.185);        // 竖版 1080×1920 → 200px
+  // 斜度提成常量：两行文字与偏移量都由它算，改一个数就全对
+  const ANGLE = -42;   // 用户：太正了，要左下到右上那种对角线斜度
+  const big = Math.round(Math.min(W, H) * 0.185);        // 竖版 1080x1920 -> 200px
   const textW = Math.round(big * 4.15);                  // 「深鲸画布」四字的估算宽度
   doc.nodes.push({
     id: '__wm_center', type: 'text',
@@ -136,7 +138,33 @@ export function injectWatermark(doc, enabled = true) {
       text: '深鲸画布', font: 'source-han-sans', size: big, weight: 700,
       color: '#8FDCE8', align: 'center', opacity: 0.11, maxLines: 1, letterSpacing: 8,
     },
-    transform: { x: Math.round((W - textW) / 2), y: Math.round((H - big) / 2), rotate: -28 },
+    transform: { x: Math.round((W - textW) / 2), y: Math.round((H - big) / 2), rotate: ANGLE },
+  });
+
+  // 英文一行（用户建议：「把深鲸画布下面再增加一行英文的更好，
+  //   有心人会用图像处理软件处理掉中文的，简单的多」）
+  //   中英两层 + 右下角的鱼 = 三处元素，想抹掉的工作量明显上去 ✓
+  //   （诚实说：任何水印都挡不住铁了心的人；这里要的是"抬高门槛 + 品牌看得清"）
+  const enSize = Math.round(big * 0.42);                  // 竖版约 84px（比原来大一点，更醒目）
+  const enW = Math.round(enSize * 5.6);                   // "DeepWhale" 九个字母的估算宽度
+  // ⚠️ 对齐的算法（上一版就是这里错的）：两个节点各自绕【自己的中心】旋转，
+  //    所以要用"沿旋转后方向"的偏移来排第二行，而不是屏幕上的竖直偏移。
+  //    -28° 时"向下"的方向向量 = (-sin(-28°), cos(-28°)) ≈ (0.469, 0.883)
+  const gap = Math.round(big * 0.95);                     // 两行中心距（沿倾斜方向）
+  const rad = (ANGLE * Math.PI) / 180;
+  const dx = Math.round(-Math.sin(rad) * gap);
+  const dy = Math.round(Math.cos(rad) * gap);
+  doc.nodes.push({
+    id: '__wm_center_en', type: 'text',
+    props: {
+      text: 'DeepWhale', font: 'source-han-sans', size: enSize, weight: 600,
+      color: '#8FDCE8', align: 'center', opacity: 0.11, maxLines: 1, letterSpacing: 12,
+    },
+    transform: {
+      x: Math.round((W - enW) / 2 + dx),
+      y: Math.round((H - enSize) / 2 + dy),
+      rotate: ANGLE,
+    },
   });
 
   // 右下角：**只留大肥鱼**（用户："右下角的深鲸画布四个字还在，没去掉"）

@@ -228,18 +228,6 @@ window.__ModuleLoader__.load({
 .dshcv-pre{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;color:var(--dsw-alias-label-secondary);white-space:pre-wrap;word-break:break-all;line-height:1.7}
 
 
-/* ────────────────────────────────────────────────────────────────
- * 视觉升级（2026-10-10）
- * 用户原话：「我们插件的 UI 还是朴素之极，没有付费那种高大上的感觉，
- *           不是一定要多么高端像大软件一样，至少不能寒酸」
- * 以及：「有这三个小方块显得插件比较有层次感，但是现在效果达不到预期」
- *
- * 做法：**只加覆盖规则，不改原有 12KB**（风险最小）。
- * 四件事：① 节奏（留白与分组）② 层次（卡片/边界/阴影）
- *         ③ 权重（主按钮 vs 次按钮）④ 模板卡（让它像个"选择器"）
- * 全部基于 DSH 自己的 --dsw-alias-* 变量，跟深浅色主题都兼容。
- * ──────────────────────────────────────────────────────────────── */
-
 /* ① 节奏：整页留白加大，卡片之间拉开 */
 .dshcv-root{padding:22px 24px;gap:18px}
 .dshcv-left{width:300px;flex:none}
@@ -302,119 +290,113 @@ textarea.dshcv-input{height:auto;min-height:96px;padding:10px 12px;line-height:1
 .dshcv-log{border-radius:12px;padding:12px 14px;line-height:1.7}
 
 
+/* ① 顶栏：品牌渐变 + 更实的层级 */
+
 /* ────────────────────────────────────────────────────────────────
- * 视觉升级 · 第二版（2026-10-10）
- * 用户反馈：「这样的视觉效果好像变化也不大，你把层次感弄强些，
- *           不要整个界面都是暗色的一片」
+ * 接入 design-spec（2026-10-10）
  *
- * 上一版的问题：**只在暗色里加了一圈边界** —— 那当然看不出变化。
- * 这一版的做法：
- *   ① 分层表面：页面底 → 卡片 → 卡片内嵌行，三层明度拉开（不再一片黑）
- *   ② 品牌色：深鲸的青（#14A5B8 / #3FD0E0）用在关键处 ——
- *      分区标题左侧的色条、主按钮的渐变、选中态、数字角标
- *   ③ 渐变：顶栏与主按钮用青→蓝的渐变，一眼有"纵深"
- *   ④ 亮面：说明条 / 徽标用半透明的青色底，而不是灰底
- *   全部基于 --dsw-alias-* 变量 + 固定品牌色，深浅主题都不崩。
+ * 用户批评：「为什么不去 github 上找找适合高级感的 UI 插件或者其他相关的东西呢，
+ *           为什么一直执着你自己的认知呢」
+ * —— 这条批评我接受。前面两版是我自己脑补的审美（青绿铺满、大圆角、重阴影），
+ *    结果"和官网差不多"，而且犯了本行业的忌讳。
+ *
+ * 采用：https://github.com/garrdbyrd/design-spec
+ *   主题 basalt-dark + core（几何/间距/字体/动效）
+ *   它的自述正对我们的场景：
+ *     「Viewport, canvas and timeline applications where UI chrome
+ *       must not tint the artwork. Neutral grey is a colour-judgement
+ *       requirement, not a style choice.」
+ *   —— 做视频画布，**界面不能给作品染色**。中性灰不是审美口味，是判断作品颜色的前提。
+ *   而且它是 **contrast-audited**（WCAG 2.2 比例逐对校验，token 里带 audit 清单）。
+ *
+ * 与我自己那两版的关键差别（都按规范来）：
+ *   · 圆角 0（规范：偏好研究里方形 +0.45 log-odds，3px 反而 -0.36；max 2 是例外上限）
+ *   · 控件高度 26px（comfortable 档；规范实测紧凑感在 48/49 次对比中胜出）
+ *   · 字体用**平台原生 UI 字体**（规范明确拒绝 Inter/Geist/Poppins）
+ *   · 动效 ≤160ms，且**加载时不许有动画**（只做状态反馈）
+ *   · 强调色只用克制的钢蓝 #4772B3，且只用在选中/聚焦/主操作 —— 不再铺满
+ *   · 层级靠**明度台阶**（sunken→canvas→base→surface→raised→overlay）区分，不靠阴影
  * ──────────────────────────────────────────────────────────────── */
 
 .dshcv-root{
-  background:
-    radial-gradient(1200px 380px at 82% -12%, rgba(20,165,184,.16), transparent 62%),
-    radial-gradient(760px 300px at 8% 108%, rgba(20,165,184,.10), transparent 60%),
-    var(--dsw-alias-bg-layer-2, #17181b);
-  padding:24px 26px;
+  /* 主题变量（basalt-dark） */
+  --cv-canvas:#1B1B1B; --cv-base:#1F1F1F; --cv-surface:#252525; --cv-raised:#2E2E2E;
+  --cv-overlay:#333333; --cv-sunken:#161616; --cv-hover:#3A3A3A; --cv-active:#454545;
+  --cv-border-subtle:#2B2B2B; --cv-border:#3C3C3C; --cv-border-control:#787878;
+  --cv-fg:#E6E6E6; --cv-fg-2:#CCCCCC; --cv-fg-muted:#9D9D9D; --cv-fg-disabled:#6E6E6E;
+  --cv-accent:#4772B3; --cv-accent-line:#6699DD; --cv-accent-hover:#5580C4;
+  --cv-accent-select:#2F4A73; --cv-danger-fg:#E8737F; --cv-success-fg:#5FBF87; --cv-warn-fg:#D9A441;
+  /* 间距（core.space）与动效（core.motion） */
+  --cv-s1:2px; --cv-s2:4px; --cv-s3:6px; --cv-s4:8px; --cv-s5:12px; --cv-s6:16px; --cv-s7:24px; --cv-s8:32px;
+  --cv-fast:80ms; --cv-base:120ms; --cv-slow:160ms; --cv-ease:cubic-bezier(0.2,0,0,1);
+  /* 原生 UI 字体栈（规范 type.family.ui） */
+  --cv-font:"Segoe UI","Noto Sans",-apple-system,"PingFang SC","Microsoft YaHei","DejaVu Sans",Cantarell,sans-serif;
+  --cv-mono:"JetBrains Mono","Cascadia Mono",Consolas,"DejaVu Sans Mono",monospace;
+  font-family:var(--cv-font);
+  background:var(--cv-canvas);
+  color:var(--cv-fg);
+  padding:var(--cv-s6);
+  /* 规范：加载时不允许动画 —— 所以这里没有任何 transition/animation */
 }
-
-/* ① 顶栏：品牌渐变 + 更实的层级 */
-.dshcv-bar{
-  background:linear-gradient(100deg, #0a2532 0%, #0d3140 46%, #0b2030 100%);
-  border:1px solid rgba(63,208,224,.22);
-  border-radius:16px;padding:14px 18px;
-  box-shadow:0 18px 40px -28px rgba(0,0,0,.9), inset 0 1px 0 rgba(255,255,255,.05);
-}
-.dshcv-dot{width:9px;height:9px;border-radius:50%;box-shadow:0 0 0 4px rgba(63,208,224,.16)}
-.dshcv-chip{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.10);border-radius:999px;padding:3px 10px;font-size:12px}
-.dshcv-chip-brand{background:linear-gradient(96deg, rgba(20,165,184,.26), rgba(63,208,224,.16));border:1px solid rgba(63,208,224,.36);color:#9fe8f2}
-
-/* ② 卡片：明度分层 + 更重的立体感 */
+/* 层级靠明度台阶：页面 canvas → 卡片 surface → 内嵌行 raised */
 .dshcv-card{
-  background:linear-gradient(180deg, var(--dsw-alias-bg-layer-1, #1d1e22) 0%, var(--dsw-alias-bg-layer-1, #1a1b1f) 100%);
-  border:1px solid var(--dsw-alias-border-l1, #303237);
-  border-radius:18px;padding:22px 24px;
-  box-shadow:0 1px 0 rgba(255,255,255,.03) inset, 0 24px 48px -34px rgba(0,0,0,.95);
+  background:var(--cv-surface);
+  border:1px solid var(--cv-border-subtle);
+  border-radius:0;                    /* 规范 radius = 0 */
+  padding:var(--cv-s6);
 }
-/* 卡片里再嵌一层"行"，把三层明度拉开 */
-.dshcv-slot{
-  background:var(--dsw-alias-bg-layer-2, #232428);
-  border:1px solid var(--dsw-alias-border-l1, #303237);
-  border-radius:12px;padding:9px 10px;
-}
-
-/* ③ 分区标题：左侧品牌色条（最显眼的"层次"信号） */
-.dshcv-head{
-  display:flex;align-items:center;gap:10px;
-  padding:0 0 14px 0;margin-bottom:18px;
-  border-bottom:1px solid var(--dsw-alias-border-l1, #303237);
-}
-.dshcv-head::before{
-  content:"";width:4px;height:17px;border-radius:2px;
-  background:linear-gradient(180deg,#3FD0E0,#14A5B8);
-  box-shadow:0 0 12px rgba(63,208,224,.55);flex:none;
+.dshcv-slot,.dshcv-log,.dshcv-bar{
+  background:var(--cv-raised);
+  border:1px solid var(--cv-border-subtle);
+  border-radius:0;
 }
 .dshcv-head h2,.dshcv-head h3{
-  font-size:15px;font-weight:680;letter-spacing:.3px;margin:0;
-  background:linear-gradient(90deg,#FFFFFF,#CFEFF5);
-  -webkit-background-clip:text;background-clip:text;color:transparent;
+  font-size:14px; font-weight:600; letter-spacing:0; color:var(--cv-fg);
 }
-
-/* ④ 主按钮：品牌渐变（一眼是"主要动作"） */
+.dshcv-head{padding-bottom:var(--cv-s4); margin-bottom:var(--cv-s6); border-bottom:1px solid var(--cv-border)}
+.dshcv-label{font-size:12px; font-weight:500; color:var(--cv-fg-2); margin-bottom:var(--cv-s2)}
+.dshcv-hint,.dshcv-sub{font-size:12px; color:var(--cv-fg-muted); line-height:1.55}
+/* 控件：26px 高（comfortable），方角，聚焦用钢蓝细线（不做光晕） */
+.dshcv-btn{
+  height:26px; padding:0 var(--cv-s5); border-radius:0;
+  border:1px solid var(--cv-border-control); background:var(--cv-surface); color:var(--cv-fg);
+  font-size:13px; font-weight:500; font-family:var(--cv-font);
+  transition:background var(--cv-base) var(--cv-ease), border-color var(--cv-base) var(--cv-ease);
+}
+.dshcv-btn:hover{background:var(--cv-hover)}
+.dshcv-btn:active{background:var(--cv-active)}
+.dshcv-btn:focus-visible{outline:1px solid var(--cv-accent-line); outline-offset:0}
 .dshcv-btn-primary,.dshcv-btn-main{
-  background:linear-gradient(96deg,#14A5B8 0%, #2AB8CC 100%) !important;
-  color:#04222b !important;border:none !important;font-weight:700 !important;
-  box-shadow:0 10px 24px -14px rgba(42,184,204,.95), inset 0 1px 0 rgba(255,255,255,.35) !important;
+  background:var(--cv-accent) !important; color:#fff !important;
+  border-color:var(--cv-accent) !important; font-weight:600 !important;
 }
-.dshcv-btn-primary:hover,.dshcv-btn-main:hover{filter:brightness(1.06)}
-.dshcv-btn:not(.dshcv-btn-primary):not(.dshcv-btn-main):hover{
-  border-color:rgba(63,208,224,.5);background:rgba(63,208,224,.08);
+.dshcv-btn-primary:hover,.dshcv-btn-main:hover{background:var(--cv-accent-hover) !important}
+.dshcv-input{
+  height:26px; border-radius:0; padding:0 var(--cv-s4);
+  border:1px solid var(--cv-border-control); background:var(--cv-sunken); color:var(--cv-fg);
+  font-size:13px; font-family:var(--cv-font);
+  transition:border-color var(--cv-base) var(--cv-ease);
 }
-
-/* ⑤ 模板卡：选中=品牌色描边 + 青色晕 + 轻抬 */
-.dshcv-tpl{
-  background:var(--dsw-alias-bg-layer-1, #1d1e22);
-  border:1px solid var(--dsw-alias-border-l1, #303237);
-  border-radius:16px;overflow:hidden;
-  box-shadow:0 16px 34px -30px rgba(0,0,0,.95);
-  transition:transform .14s ease, box-shadow .18s ease, border-color .18s ease;
-}
-.dshcv-tpl:hover{transform:translateY(-2px);box-shadow:0 22px 44px -30px rgba(0,0,0,1)}
-.dshcv-tpl-on,.dshcv-tpl[aria-selected="true"]{
-  border-color:rgba(63,208,224,.85);
-  box-shadow:0 0 0 3px rgba(63,208,224,.16), 0 22px 44px -30px rgba(0,0,0,1);
-}
-.dshcv-poster{position:relative}
-.dshcv-poster::after{
-  content:"";position:absolute;inset:0;
-  background:linear-gradient(180deg,transparent 42%, rgba(4,20,28,.72) 100%);
-}
-
-/* ⑥ 徽标/数字：品牌色实底，代替灰底 */
-.dshcv-slot-thumb .n{background:linear-gradient(96deg,#14A5B8,#2AB8CC);color:#04222b;font-weight:700}
-.dshcv-issue{border-left:3px solid #e0645a;background:rgba(224,100,90,.10);border-radius:0 10px 10px 0;padding:10px 12px}
-.dshcv-err{border-left:3px solid #e0645a;background:rgba(224,100,90,.12);border-radius:0 10px 10px 0}
-.dshcv-ok{border-left:3px solid #2ab8cc;background:rgba(42,184,204,.10);border-radius:0 10px 10px 0}
-
-/* ⑦ 空态与说明条：给点光，别是一片灰 */
-.dshcv-banner{
-  background:linear-gradient(96deg, rgba(20,165,184,.12), rgba(20,165,184,.04));
-  border:1px solid rgba(63,208,224,.20);border-radius:12px;padding:12px 14px;
-}
-.dshcv-empty{padding:34px 20px}
-.dshcv-empty-mark{
-  width:52px;height:52px;border-radius:14px;
-  background:linear-gradient(140deg, rgba(63,208,224,.22), rgba(20,165,184,.06));
-  border:1px solid rgba(63,208,224,.28);
-}
-.dshcv-log{background:var(--dsw-alias-bg-layer-2,#232428);border:1px solid var(--dsw-alias-border-l1,#303237);border-radius:12px}
+.dshcv-input:focus{outline:1px solid var(--cv-accent-line); outline-offset:0; border-color:var(--cv-accent-line)}
+textarea.dshcv-input{height:auto; min-height:88px; padding:var(--cv-s5); line-height:1.55}
+.dshcv-actions{gap:var(--cv-s3); padding-top:var(--cv-s5); border-top:1px solid var(--cv-border-subtle)}
+/* 模板卡：选中态用钢蓝选中底 + 细线，不用发光、不用上浮 */
+.dshcv-tpl{background:var(--cv-surface); border:1px solid var(--cv-border-subtle); border-radius:0; transition:border-color var(--cv-base) var(--cv-ease)}
+.dshcv-tpl:hover{border-color:var(--cv-border-control)}
+.dshcv-tpl-on,.dshcv-tpl[aria-selected="true"]{border-color:var(--cv-accent-line); background:var(--cv-accent-select)}
+.dshcv-poster{border-radius:0}
+.dshcv-tpl-meta{font-size:12px; color:var(--cv-fg-muted); font-variant-numeric:tabular-nums}
+.dshcv-chip{background:var(--cv-raised); border:1px solid var(--cv-border-subtle); border-radius:0; font-size:11px; color:var(--cv-fg-2); padding:1px var(--cv-s3)}
+.dshcv-chip-brand{background:var(--cv-accent-select); border-color:var(--cv-accent-line); color:var(--cv-fg)}
+.dshcv-slot-thumb{border-radius:0; border:1px solid var(--cv-border-subtle)}
+.dshcv-slot-thumb .n{background:var(--cv-accent); color:#fff; font-weight:600}
+/* 状态色按规范用语义色，且左细线 + 淡底 */
+.dshcv-err{border-left:2px solid var(--cv-danger-fg); background:var(--cv-surface); border-radius:0}
+.dshcv-ok{border-left:2px solid var(--cv-success-fg); background:var(--cv-surface); border-radius:0}
+.dshcv-issue{border-left:2px solid var(--cv-warn-fg); background:var(--cv-surface); border-radius:0}
+.dshcv-issue-warn{border-left:2px solid var(--cv-warn-fg)}
+.dshcv-code{font-family:var(--cv-mono); font-size:12px}
+.dshcv-empty{padding:var(--cv-s8) var(--cv-s6)}
 `;
 
     function StyleTag() {

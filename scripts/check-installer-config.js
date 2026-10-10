@@ -14,10 +14,32 @@ const yaml = require('js-yaml');
 const file = path.join(__dirname, '..', 'electron-builder.yml');
 const conf = yaml.load(fs.readFileSync(file, 'utf-8'));
 
-/** appId 一旦定下就不能再改：NSIS 用它拼注册表键记安装目录，改了 = 丢掉老用户的安装目录记忆 */
-const FROZEN_APP_ID = 'com.deepwhale.desktop';
+/**
+ * ⚠️ electron-builder 的配置优先级陷阱（2026-10-10 事故）：
+ *   app-builder-lib 的 `loadConfig()` 只要 package.json 有顶层 `"build"` 字段，就**只读它**、
+ *   完全不看 electron-builder.yml —— 本文件上面检查的那些冻结项会被整体架空，
+ *   连 files 白名单 / extraResources / asar:false / appId 也一起丢。
+ *   实测后果：`9c049c9`（「Windows 安装可自选目录」）加的 `build.nsis` 让打包静默退化成
+ *   默认配置 —— 产物里没有随包 DSH 运行时 / office 运行时 / 随包插件，
+ *   而**所有本地命令、离线守卫、安装器守卫全绿**，直到 CI 里跑打包态冒烟才暴露。
+ *   所以这里必须把它也拦成 CI 里的红。
+ */
+const pkgPath = path.join(__dirname, '..', 'package.json');
+const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
 
 const problems = [];
+
+if (pkg.build != null) {
+  problems.push(
+    'package.json 里出现了顶层 "build" 字段\n' +
+      '  → electron-builder 只要看到它就会**完全忽略 electron-builder.yml**' +
+      '（files / extraResources / asar / appId / mac 全部丢失），打包会静默退化成默认配置。\n' +
+      '  → 打包配置请只写在 electron-builder.yml；package.json 里不能有 "build"。',
+  );
+}
+
+/** appId 一旦定下就不能再改：NSIS 用它拼注册表键记安装目录，改了 = 丢掉老用户的安装目录记忆 */
+const FROZEN_APP_ID = 'com.deepwhale.desktop';
 
 if (conf.appId !== FROZEN_APP_ID) {
   problems.push(

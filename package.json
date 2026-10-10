@@ -60,16 +60,5 @@
   "homepage": "https://deepwhale.org.cn",
   "bugs": {
     "url": "https://github.com/feely0208/deepwhale-desktop/issues"
-  },
-  "build": {
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "perMachine": false,
-      "allowElevation": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "shortcutName": "深鲸桌面"
-    }
   }
 }

@@ -347,19 +347,28 @@ textarea.dshcv-input{height:auto;min-height:96px;padding:10px 12px;line-height:1
      —— **默认必须只跟 DSH 自己的主题变量**，这样插件在任何 DSH 上都跟随其外观 ✓
      我们的辉光皮肤只在**自家壳**里叠加（见文件末尾 body[data-dw-skin] 那一段），
      否则会把"深鲸的皮"贴进别人的界面里 ✗ */
-  --cv-canvas:var(--dsw-alias-bg-base, #1F1F1F);
-  --cv-surface:var(--dsw-alias-bg-layer-1, #252525);
-  --cv-raised:var(--dsw-alias-bg-layer-2, #2E2E2E);
-  --cv-border-subtle:var(--dsw-alias-border-l1, #3C3C3C);
-  --cv-border:var(--dsw-alias-border-l1, #3C3C3C);
-  --cv-border-control:var(--dsw-alias-border-l2, #787878);
-  --cv-fg:var(--dsw-alias-label-primary, #E6E6E6);
-  --cv-fg-2:var(--dsw-alias-label-primary, #CCCCCC);
-  --cv-fg-muted:var(--dsw-alias-label-secondary, #9D9D9D);
+  /* ── 面板底色：**我们自己的不透明色**（2026-10-10 用户判断）──────────
+     用户原话：「只变按钮吧，如果格子的背景主题也跟着变是个麻烦事情…
+                某个用户用的是带图案的主题，那这个就成了拖累了」
+     —— 完全正确。DSH 的主题层色往往是**半透明**的（好让用户的背景图案透出来），
+        我们的卡片若跟着它走，用户换一张花纹壁纸，面板里就全是花纹、字也看不清 ✗
+     所以分工：
+       · 格子/输入框的**底** → 自己的不透明色，只按**深/浅两档**切（模式是布尔量，不会带图案）
+       · 按钮/选中/聚焦/链接等**强调色** → 跟随 DSH 主题（对方品牌色，用户一看就知道是自己家界面）✓ */
+  --cv-canvas:#1F1F1F;
+  --cv-surface:#252525;
+  --cv-raised:#2E2E2E;
+  --cv-border-subtle:#3C3C3C;
+  --cv-border:#3C3C3C;
+  --cv-border-control:#787878;
+  --cv-fg:#E6E6E6;
+  --cv-fg-2:#CCCCCC;
+  --cv-fg-muted:#9D9D9D;
+  /* 强调色：跟随 DSH 主题 */
   --cv-accent:var(--dsw-alias-brand-primary, #4772B3);
   --cv-accent-line:var(--dsw-alias-brand-primary, #6699DD);
   --cv-accent-hover:var(--dsw-alias-brand-primary, #5580C4);
-  --cv-accent-select:color-mix(in srgb, var(--dsw-alias-brand-primary, #4772B3) 14%, transparent);
+  --cv-accent-select:color-mix(in srgb, var(--dsw-alias-brand-primary, #4772B3) 16%, transparent);
   --cv-danger-fg:#E8737F;
   --cv-success-fg:#5FBF87;
   --cv-warn-fg:#D9A441;
@@ -530,6 +539,20 @@ body[data-dw-skin] .dshcv-root, body[data-ds-dark-theme][data-dw-skin] .dshcv-ro
 .dshcv-head{padding-bottom:var(--cv-s4)}
 /* 深色下阴影要更明显一点，否则浮不起来 */
 body[data-ds-dark-theme][data-dw-skin] .dshcv-card{box-shadow:0 1px 2px rgba(0,0,0,.35), 0 14px 34px -24px rgba(0,0,0,.85)}
+
+/* ── 浅色档：仍是**我们自己的不透明色**（不跟用户的图案主题走）──────────
+   深浅只用 DSH 的布尔属性判断；强调色依旧跟随 DSH 主题。 */
+body:not([data-ds-dark-theme]) .dshcv-root{
+  --cv-canvas:#F4F6FA;
+  --cv-surface:#FFFFFF;
+  --cv-raised:#EDF1F7;
+  --cv-border-subtle:#DCE3EC;
+  --cv-border:#DCE3EC;
+  --cv-border-control:#B7C2D0;
+  --cv-fg:#152238;
+  --cv-fg-2:#33445F;
+  --cv-fg-muted:#69788F;
+}
 `;
 
     function StyleTag() {

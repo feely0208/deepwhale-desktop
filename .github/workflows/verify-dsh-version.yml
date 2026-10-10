@@ -110,19 +110,19 @@ jobs:
           set -e
           echo "---- 打包前诊断 ----"
           node -v; echo "cwd=$(pwd)"
-          ls -la dist/main/index.js || { echo "::error::打包前 dist/main/index.js 就不存在（npm run build 没成功或 dist 被清）"; exit 1; }
-          echo "---- 开始打包（与 release.yml 同款命令）----"
-          npm run dist -- --publish never --mac --arm64
-          find release dist -maxdepth 3 -name '*.app' -o -maxdepth 3 -name '*.dmg' 2>/dev/null | head -5 || true
-
+          ls -la dist/main/index.js
+          echo "---- 打包（用项目自己的 dist-local.sh：团队惯用入口，已处理输出目录等细节）----"
+          bash scripts/dist-local.sh --mac --arm64 --config.directories.output=release-verify
+          echo "---- 产物 ----"
+          find release-verify -maxdepth 3 -name '*.app' -o -maxdepth 2 -name '*.dmg' 2>/dev/null | head -5 || true
       - name: 打包态冒烟（优先用项目自带的 smoke-local.sh，它已处理"复用用户实例"这个坑）
         if: ${{ inputs.run_packaged_smoke == 'true' }}
         run: |
           set -e
-          if [ -f scripts/smoke-local.sh ]; then
+          if [ -f scripts/smoke-local.sh ] && [ -z "${VERIFY_APP:-}" ]; then
             bash scripts/smoke-local.sh 2>&1 | tee /tmp/verify-smoke.log
           else
-            APP=$(find release -maxdepth 4 -type f -name 'DeepWhale Desktop' -path '*Contents/MacOS*' | head -1)
+            APP=$(find release-verify release -maxdepth 5 -type f -name 'DeepWhale Desktop' -path '*Contents/MacOS*' 2>/dev/null | head -1)
             echo "应用：$APP"; test -n "$APP"
             mkdir -p /tmp/dsh-verify && echo '{ "port": 3399 }' > /tmp/dsh-verify/settings.json
             env -u ELECTRON_RUN_AS_NODE DSH_DESKTOP_SMOKE=1 "$APP" --user-data-dir=/tmp/dsh-verify 2>&1 | tee /tmp/verify-smoke.log

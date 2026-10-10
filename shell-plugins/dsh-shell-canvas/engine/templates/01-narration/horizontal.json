@@ -25,7 +25,7 @@
       "key": "subtitle",
       "type": "text",
       "required": true,
-      "label": "字幕（SRT）"
+      "label": "字幕"
     },
     {
       "key": "shots",

@@ -18,7 +18,8 @@
     {
       "key": "kicker",
       "type": "text",
-      "default": "三步搞定"
+      "default": "三步搞定",
+      "label": "小标题"
     },
     {
       "key": "title",

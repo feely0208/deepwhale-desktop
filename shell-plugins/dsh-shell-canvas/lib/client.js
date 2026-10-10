@@ -677,6 +677,30 @@ body:not([data-ds-dark-theme]) .dshcv-root{
       const [outDir, setOutDir] = useState('');
       const [outDirMsg, setOutDirMsg] = useState('');
       // 环境自检（缺 ffmpeg / 浏览器时给**能照做的指引**，而不是让用户对着报错发呆）
+      // 批量出片（用户："之前说的固定1000张直接出的选项在哪里…不要单单固定成1000，
+      //          也许用户只需要10，或者278呢"）→ 条数**由用户填**，不写死。
+      const [batchText, setBatchText] = useState('');
+      const [batchCount, setBatchCount] = useState('');
+      const [batchMsg, setBatchMsg] = useState('');
+      const doBatch = () => run('批量出片', async () => {
+        // 一条内容 = 一段（空行或 --- 分隔）
+        const all = String(batchText).split(/\n\s*(?:---|===)\s*\n|\n\s*\n/)
+          .map((x) => x.trim()).filter(Boolean);
+        if (!all.length) throw new Error('先在批量框里粘贴内容，每段之间空一行');
+        const want = parseInt(batchCount, 10);
+        const items = (Number.isFinite(want) && want > 0) ? all.slice(0, want) : all;
+        const shotsAll = Object.values(assets).flat().map((x) => (typeof x === 'string' ? x : x && x.path)).filter(Boolean);
+        const jobs = items.map((t, i) => ({
+          id: `第${i + 1}条`,
+          input: { text: t, title: (t.split(/[。！？!?\n]/)[0] || '').slice(0, 24), shots: shotsAll },
+        }));
+        setBatchMsg(`正在出 ${jobs.length} 条…（视长度可能需要几分钟）`);
+        const r = await api('/batch', { method: 'POST', body: { producer: 'text.storyboard', quality: 'preview', jobs } });
+        const m = (r && r.manifest) || {};
+        setBatchMsg(`✅ 出了 ${m.ok || 0}/${m.total || jobs.length} 条${m.failed ? `（${m.failed} 条失败）` : ''} · 台账：${r && r.manifestFile ? r.manifestFile : '（见宿主日志）'}`);
+        return r;
+      });
+
       const [env, setEnv] = useState(null);
       const checkEnv = () => run('环境检测', async () => {
         const r = await api('/env-check', { method: 'GET' });
@@ -1155,6 +1179,32 @@ body:not([data-ds-dark-theme]) .dshcv-root{
                         h(Btn, { key: 'r', size: 'sm', onClick: checkEnv }, '装好了，重新检测'),
                       ]),
                     ]))) : null,
+
+                h('div', { key: 'batch', style: { marginTop: 22 } },
+                  h(Section, { title: '批量出片（同一套设置，一次出多条）' },
+                    h('div', null, [
+                      h('textarea', {
+                        key: 't', className: 'dshcv-input',
+                        style: { width: '100%', minHeight: 96 },
+                        value: batchText,
+                        placeholder: '每段内容之间空一行（或写 --- 分隔）。一段 = 一条片子。',
+                        onChange: (e) => setBatchText(e.target.value),
+                      }),
+                      h('div', { key: 'r', className: 'dshcv-row', style: { marginTop: 10, display: 'flex', gap: 8, alignItems: 'center' } }, [
+                        h('span', { key: 'l', className: 'dshcv-sub' }, '出前'),
+                        h('input', {
+                          key: 'n', className: 'dshcv-input', style: { width: 88 },
+                          value: batchCount,
+                          placeholder: '全部',
+                          onChange: (e) => setBatchCount(e.target.value.replace(/[^0-9]/g, '')),
+                        }),
+                        h('span', { key: 'l2', className: 'dshcv-sub' }, '条（留空 = 全部）'),
+                        h(Btn, { key: 'go', size: 'sm', primary: true, onClick: doBatch, disabled: !!busy }, '开始批量'),
+                      ]),
+                      batchMsg ? h('div', { key: 'm', className: 'dshcv-sub', style: { marginTop: 8, color: '#3FD0E0' } }, batchMsg) : null,
+                      h('div', { key: 'h', className: 'dshcv-sub', style: { marginTop: 6 } },
+                        '每条都按上面的模板、素材、配音、保存位置来出；结果写在台账里（可追溯、可复现）。'),
+                    ]))),
 
                 h('div', { key: 'outdir', style: { marginTop: 22 } },
                   h(Section, { title: '保存位置' },

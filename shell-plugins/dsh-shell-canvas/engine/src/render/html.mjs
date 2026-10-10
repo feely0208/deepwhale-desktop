@@ -32,8 +32,11 @@ function layerStyle(node, width, height) {
     `left:${px(t.x || 0)}`,
     `top:${px(t.y || 0)}`,
     'transform-origin:center center',
+    // ⚠️ 静态旋转（2026-10-10 加）：水印这类"不进时间线"的节点靠这个斜置。
+    //    进时间线的节点会被 setFrame 重写 transform（动画），所以旋转只对静态节点有效 —— 够用。
+    t.rotate ? `transform:rotate(${t.rotate}deg)` : '',
     'will-change:transform,opacity',
-  ];
+  ].filter(Boolean);
   return base.join(';');
 }
 

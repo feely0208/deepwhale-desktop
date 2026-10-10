@@ -62,6 +62,11 @@ jobs:
           test -f dsh-runtime/node_modules/@deepseek-ai/dsh/lib/bin.js
           node scripts/dsh-runtime-version.js --check
 
+      # ⚠️ 必须照 release.yml 的顺序：office 载荷也要先生成，
+      #    否则 test-inject-race.js 会判定"载荷不齐"并主动报错（它拒绝跑成假通过）。
+      - name: Prepare office runtime
+        run: node scripts/build-office-runtime.js darwin-arm64
+
       - name: Prepare bundled plugins
         run: node scripts/build-bundled-plugins.js
 

@@ -1,11 +1,31 @@
 {
   "name": "@deepwhale-cn/dsh-shell-video-preview",
-  "version": "1.0.0",
-  "description": "深鲸桌面：让聊天/侧栏里的视频（mp4/mov/webm）能直接内嵌预览。DSH 自带的预览插件只认 css/html/pdf，视频打不开；本插件用官方扩展点 ctx.documentPreviews.register 注册一个视频预览器接走这些后缀。",
+  "version": "1.0.1",
+  "description": "深鲸桌面：让聊天/侧栏里的视频（mp4/mov/webm）和音频能直接内嵌预览。DSH 自带的预览插件只认 text/css/html/pdf，视频打不开；本插件按官方图片/PDF 预览的同一套做法，注册一个走「整份读入」的媒体预览器接走这些后缀。",
   "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "meta": {
+    "title": "视频预览",
+    "description": "聊天和侧栏里的视频、音频直接内嵌播放。"
+  },
   "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
     "client": {
-      "inject": ["@deepseek-ai/dsh-client-ui-sidebar-right", "@deepseek-ai/dsh-client-ui-sidebar-documentpreview"]
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-sidebar-right",
+        "@deepseek-ai/dsh-client-ui-sidebar-documentpreview"
+      ],
+      "platform": "web",
+      "immediately": true
     }
   }
 }

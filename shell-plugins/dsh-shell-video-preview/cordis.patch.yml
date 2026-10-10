@@ -1,0 +1,14 @@
+# @deepwhale-cn/dsh-shell-video-preview 的组合层
+#
+# profile 在 dsh.profile.bundles 里列出本包后，这一层把插件挂进组合。
+#
+# ⚠️ 这一层**不能省**（2026-10-10 之前的版本就栽在这里）：
+#   @deepseek-ai/dsh-client-modules 只扫描**活动的 loader 行**对应的包，
+#   发现 `dsh.client` 声明才会把 ./client 下发给浏览器。
+#   没有这一层 → 包根本不是 loader 行 → 客户端半边**从来没被加载过**，
+#   连报错都没有，表现就是"点了没反应、还是说无法预览"。
+#
+# 约定（官方 verify-cordis-config 强制）：name 必须与 package.json 的 name 完全一致。
+- insert:
+    - id: shell-video-preview
+      name: '@deepwhale-cn/dsh-shell-video-preview'

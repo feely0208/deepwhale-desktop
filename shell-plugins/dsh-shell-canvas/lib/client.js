@@ -226,6 +226,80 @@ window.__ModuleLoader__.load({
 .dshcv-empty-mark{opacity:.5}
 .dshcv-banner{padding:11px 13px;border-radius:10px;background:var(--dsw-alias-bg-layer-2);border:.5px solid var(--dsw-alias-border-l1);font-size:12px;line-height:1.6}
 .dshcv-pre{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;color:var(--dsw-alias-label-secondary);white-space:pre-wrap;word-break:break-all;line-height:1.7}
+
+
+/* ────────────────────────────────────────────────────────────────
+ * 视觉升级（2026-10-10）
+ * 用户原话：「我们插件的 UI 还是朴素之极，没有付费那种高大上的感觉，
+ *           不是一定要多么高端像大软件一样，至少不能寒酸」
+ * 以及：「有这三个小方块显得插件比较有层次感，但是现在效果达不到预期」
+ *
+ * 做法：**只加覆盖规则，不改原有 12KB**（风险最小）。
+ * 四件事：① 节奏（留白与分组）② 层次（卡片/边界/阴影）
+ *         ③ 权重（主按钮 vs 次按钮）④ 模板卡（让它像个"选择器"）
+ * 全部基于 DSH 自己的 --dsw-alias-* 变量，跟深浅色主题都兼容。
+ * ──────────────────────────────────────────────────────────────── */
+
+/* ① 节奏：整页留白加大，卡片之间拉开 */
+.dshcv-root{padding:22px 24px;gap:18px}
+.dshcv-left{width:300px;flex:none}
+.dshcv-body{gap:20px}
+.dshcv-card{padding:20px 22px;border-radius:16px}
+.dshcv-field{margin-bottom:18px}
+.dshcv-section + .dshcv-section{margin-top:26px}
+
+/* ② 层次：卡片有边界和一层很轻的阴影，不再"平铺在背景上" */
+.dshcv-card{
+  border:1px solid var(--dsw-alias-border-l1);
+  box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 24px -18px rgba(0,0,0,.28);
+  background:var(--dsw-alias-bg-layer-1);
+}
+.dshcv-head{padding-bottom:14px;margin-bottom:14px;border-bottom:1px solid var(--dsw-alias-border-l1)}
+.dshcv-head h2,.dshcv-head h3{font-weight:650;letter-spacing:.2px}
+
+/* ③ 权重：主按钮更实、次按钮更轻 —— 一眼看出该点哪个 */
+.dshcv-btn{
+  height:34px;padding:0 15px;border-radius:10px;font-weight:550;
+  border:1px solid var(--dsw-alias-border-l1);
+  transition:background .15s ease, border-color .15s ease, transform .06s ease;
+}
+.dshcv-btn:hover{background:var(--dsw-alias-bg-layer-2)}
+.dshcv-btn:active{transform:translateY(.5px)}
+.dshcv-btn-primary{
+  background:var(--dsw-alias-text-1);color:var(--dsw-alias-bg-layer-1);
+  border-color:transparent;box-shadow:0 2px 8px -4px rgba(0,0,0,.5);
+}
+.dshcv-btn-primary:hover{opacity:.92;background:var(--dsw-alias-text-1)}
+.dshcv-btn-main{height:38px;padding:0 22px;border-radius:12px;font-weight:650}
+.dshcv-actions{gap:10px;padding-top:18px;margin-top:6px;border-top:1px solid var(--dsw-alias-border-l1)}
+
+/* ④ 模板卡：从"一张图+两行字"变成真正的选择器（有自己的边界、选中态、悬停） */
+.dshcv-poster{cursor:pointer;border-radius:14px;overflow:hidden;border:1px solid var(--dsw-alias-border-l1);transition:border-color .15s ease, box-shadow .15s ease, transform .12s ease}
+.dshcv-poster:hover{transform:translateY(-1px);box-shadow:0 10px 26px -18px rgba(0,0,0,.45)}
+.dshcv-tpl{border-radius:14px;overflow:hidden;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-layer-1);transition:border-color .15s ease, box-shadow .15s ease}
+.dshcv-tpl:hover{border-color:var(--dsw-alias-text-3, var(--dsw-alias-border-l1))}
+.dshcv-tpl.dshcv-tpl-on,.dshcv-tpl[aria-selected="true"]{
+  border-color:var(--dsw-alias-text-1);
+  box-shadow:0 0 0 1px var(--dsw-alias-text-1), 0 12px 28px -20px rgba(0,0,0,.5);
+}
+.dshcv-tpl-meta{opacity:.72;font-variant-numeric:tabular-nums}
+
+/* ⑤ 输入控件：统一高度与圆角，聚焦有明确反馈 */
+.dshcv-input{
+  height:36px;border-radius:10px;padding:0 12px;
+  border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-layer-2);
+  transition:border-color .15s ease, box-shadow .15s ease;
+}
+.dshcv-input:focus{outline:none;border-color:var(--dsw-alias-text-1);box-shadow:0 0 0 3px rgba(127,127,127,.16)}
+textarea.dshcv-input{height:auto;min-height:96px;padding:10px 12px;line-height:1.65}
+
+/* ⑥ 字幕/说明文字：分两级，不再一律一个灰度 */
+.dshcv-sub,.dshcv-hint{line-height:1.6}
+.dshcv-label{font-weight:600;margin-bottom:7px;display:block}
+
+/* ⑦ 结果区：成片预览有"作品"的样子 */
+.dshcv-big{border-radius:14px;overflow:hidden;border:1px solid var(--dsw-alias-border-l1)}
+.dshcv-log{border-radius:12px;padding:12px 14px;line-height:1.7}
 `;
 
     function StyleTag() {

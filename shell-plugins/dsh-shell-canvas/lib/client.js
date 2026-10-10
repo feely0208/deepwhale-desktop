@@ -32,13 +32,21 @@ window.__ModuleLoader__.load({
     Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
 
     const react = require('react');
-    // 辉光皮肤开关：只有自家壳会定义 --dw-skin；别人的 DSH 没有 → 插件纯跟对方主题 ✓
+    /* 辉光皮肤开关（2026-10-10）
+     * 要判断"插件是不是跑在我们自己的深鲸壳里"，两个信号任一成立即可：
+     *   ① window.dsh.petState / themeState —— 我们壳注入的桥
+     *      （**petState 是桌面宠物，只有我们有** ✓ 官方 DSH 不会有）
+     *      → 这个信号**现在已安装的 1.0.55 壳就有**，不用等新版 ✓
+     *   ② --dw-skin —— 壳里新加的显式标记（下个桌面版起，作为更明确的信号）
+     * 两个都没有 → 当作别人的/官方 DSH：纯跟随对方主题，不叠我们的辉光 ✓ */
     try {
-      if (typeof document !== 'undefined') {
+      if (typeof document !== 'undefined' && typeof window !== 'undefined') {
+        const dsh = window.dsh || {};
+        const ownShell = typeof dsh.petState === 'function' || typeof dsh.themeState === 'function';
         const v = getComputedStyle(document.body).getPropertyValue('--dw-skin').trim();
-        if (v) document.body.setAttribute('data-dw-skin', v);
+        if (ownShell || v) document.body.setAttribute('data-dw-skin', v || 'glow');
       }
-    } catch (e) { /* 拿不到就当作不在自家壳里，安全默认 */ }
+    } catch (e) { /* 拿不到就当作不在自家壳里 —— 安全默认（纯跟随对方主题） */ }
     const h = react.createElement;
     const { useState, useEffect, useMemo, useRef, useCallback } = react;
 

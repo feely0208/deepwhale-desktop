@@ -165,6 +165,46 @@ let petStudioWin: BrowserWindow | null = null;
 let welcomeWin: BrowserWindow | null = null;
 let quitting = false;
 let service: ServiceManager | null = null;
+
+/**
+ * 插件热重载（开发用，2026-10-10）
+ *
+ * 痛点：DSH 服务**常驻内存**，插件宿主代码改完不重启就不生效 ——
+ * 用户和开发都反复踩（"怎么又改回去了"）。dsh-shell-reload 只重载**界面**（⌘R），
+ * 动不了宿主代码。
+ *
+ * 做法：监听插件目录，改动后**重启 DSH 服务**（界面刷新由 ⌘R 负责）。
+ * ⚠️ 默认关闭，只有 `DSH_WATCH_PLUGINS=1` 时才启用 —— 绝不能影响正常用户。
+ * 调用 service 的方法前都做 typeof 判断，避免版本差异把壳搞崩。
+ */
+function startPluginWatcher(): void {
+  if (process.env.DSH_WATCH_PLUGINS !== '1') return;
+  try {
+    const fs = require('node:fs');
+    const path = require('node:path');
+    const home = process.env.DSH_HOME || path.join(app.getPath('userData'), 'dsh-home');
+    const dir = path.join(home, 'plugins');
+    if (!fs.existsSync(dir)) return;
+    let timer: NodeJS.Timeout | null = null;
+    fs.watch(dir, { recursive: true }, (_e: string, f: string | null) => {
+      if (!f || !/\.(js|mjs|json)$/.test(f)) return;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(async () => {
+        console.log('[watch] 插件改动：' + f + ' → 重启 DSH 服务');
+        try {
+          if (service && typeof (service as any).stop === 'function') await (service as any).stop();
+          if (service && typeof (service as any).ensureReady === 'function') await (service as any).ensureReady();
+          console.log('[watch] DSH 服务已重启（界面按 ⌘R 刷新）');
+        } catch (e) {
+          console.warn('[watch] 重启失败：' + (e as Error).message);
+        }
+      }, 1200);
+    });
+    console.log('[watch] 已监听插件目录：' + dir + '（DSH_WATCH_PLUGINS=1）');
+  } catch (e) {
+    console.warn('[watch] 起不来：' + (e as Error).message);
+  }
+}
 /**
  * 自动更新：读取本仓库 GitHub Releases。
  * 纯增量模块，不参与法律模式/桌宠/皮肤/用量等任何既有逻辑；

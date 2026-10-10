@@ -319,29 +319,32 @@ textarea.dshcv-input{height:auto;min-height:96px;padding:10px 12px;line-height:1
  * ──────────────────────────────────────────────────────────────── */
 
 .dshcv-root{
-  /* 配色**跟随应用主题**（用户："只有深色没有随系统变色这道吗"）——
-     所以这里一律用应用自己的语义变量，只把 basalt-dark 的值当兜底。
-     骨架（几何/密度/字体/动效）用 design-spec，皮肤用应用的 —— 这样切浅色也自动跟着走。 */
-  --cv-canvas:var(--dsw-alias-bg-base, #1B1B1B);
-  --cv-base:var(--dsw-alias-bg-base, #1F1F1F);
-  --cv-surface:var(--dsw-alias-bg-layer-1, #252525);
-  --cv-raised:var(--dsw-alias-bg-layer-2, #2E2E2E);
-  --cv-sunken:var(--dsw-alias-bg-base, #161616);
-  --cv-hover:var(--dsw-alias-interactive-bg-hover, #3A3A3A);
-  --cv-active:var(--dsw-alias-interactive-bg-hover, #454545);
-  --cv-border-subtle:var(--dsw-alias-border-l1, #2B2B2B);
-  --cv-border:var(--dsw-alias-border-l1, #3C3C3C);
-  --cv-border-control:var(--dsw-alias-border-l2, #787878);
-  --cv-fg:var(--dsw-alias-label-primary, #E6E6E6);
-  --cv-fg-2:var(--dsw-alias-label-primary, #CCCCCC);
-  --cv-fg-muted:var(--dsw-alias-label-secondary, #9D9D9D);
-  --cv-accent:var(--dsw-alias-brand-primary, #4772B3);
-  --cv-accent-line:var(--dsw-alias-brand-primary, #6699DD);
-  --cv-accent-hover:var(--dsw-alias-brand-primary, #5580C4);
-  --cv-accent-select:var(--dsw-alias-brand-primary, #2F4A73);
-  --cv-danger-fg:var(--dsw-alias-label-secondary, #E8737F);
-  --cv-success-fg:var(--dsw-alias-brand-primary, #5FBF87);
-  --cv-warn-fg:var(--dsw-alias-label-secondary, #D9A441);
+  /* ── 辉光主题（我们自己的皮肤，2026-10-10）──────────────────────────
+     用户问："用我们的辉光浅色、深色可以吗" —— 当然，而且这才是对的：
+     插件和桌面壳用同一套皮肤，用户看到的是**同一个产品**，
+     而不是"壳是深海的、面板是外来的"。
+     来源：dsh-desktop/src/main/skin-presets.ts
+       浅色底 #eaf1fb（本身带蓝，不是白）；深色底 #0b1018；
+       三色辉光 #1A3870 / #2D5F9E / #4A8AC4。
+     ⚠️ 深浅信号用 body[data-ds-dark-theme]（DSH 自己的属性）——
+        规范里实测写明了不能用 prefers-color-scheme：两者不一致时
+        会「文字按深色渲染、背景按浅色铺」→ 整屏被洗白。 */
+  --cv-canvas:#eaf1fb;
+  --cv-surface:rgba(255,255,255,.74);
+  --cv-raised:rgba(255,255,255,.55);
+  --cv-border-subtle:rgba(26,56,112,.16);
+  --cv-border:rgba(26,56,112,.22);
+  --cv-border-control:rgba(26,56,112,.34);
+  --cv-fg:#12233d;
+  --cv-fg-2:#2b3f5e;
+  --cv-fg-muted:#5a6b85;
+  --cv-accent:#2D5F9E;
+  --cv-accent-line:#4A8AC4;
+  --cv-accent-hover:#24507f;
+  --cv-accent-select:rgba(74,138,196,.16);
+  --cv-danger-fg:#b3452f;
+  --cv-success-fg:#2f7d5a;
+  --cv-warn-fg:#8a6a1f;
   /* 间距（core.space）与动效（core.motion） */
   --cv-s1:2px; --cv-s2:4px; --cv-s3:6px; --cv-s4:8px; --cv-s5:12px; --cv-s6:16px; --cv-s7:24px; --cv-s8:32px;
   --cv-fast:80ms; --cv-base:120ms; --cv-slow:160ms; --cv-ease:cubic-bezier(0.2,0,0,1);
@@ -349,7 +352,11 @@ textarea.dshcv-input{height:auto;min-height:96px;padding:10px 12px;line-height:1
   --cv-font:"Segoe UI","Noto Sans",-apple-system,"PingFang SC","Microsoft YaHei","DejaVu Sans",Cantarell,sans-serif;
   --cv-mono:"JetBrains Mono","Cascadia Mono",Consolas,"DejaVu Sans Mono",monospace;
   font-family:var(--cv-font);
-  background:var(--cv-canvas);
+  background:
+    radial-gradient(58% 46% at 10% -6%, rgba(74,138,196,.30), transparent 64%),
+    radial-gradient(52% 44% at 92% 4%, rgba(45,95,158,.20), transparent 62%),
+    radial-gradient(70% 60% at 50% 118%, rgba(74,138,196,.16), transparent 70%),
+    var(--cv-canvas);
   color:var(--cv-fg);
   padding:var(--cv-s6);
   /* 规范：加载时不允许动画 —— 所以这里没有任何 transition/animation */
@@ -438,6 +445,31 @@ textarea.dshcv-input{height:auto; min-height:88px; padding:var(--cv-s5); line-he
 }
 .dshcv-tpl:hover{border-color:var(--cv-border-control); background:color-mix(in srgb, var(--cv-fg) 4%, transparent)}
 .dshcv-bar{background:transparent; border:1px solid var(--cv-border-subtle)}
+
+/* ── 辉光 · 深色（body[data-ds-dark-theme] 由 DSH 自己挂）───────────── */
+body[data-ds-dark-theme] .dshcv-root{
+  --cv-canvas:#0b1018;
+  --cv-surface:rgba(19,31,50,.72);
+  --cv-raised:rgba(26,56,112,.30);
+  --cv-border-subtle:rgba(74,138,196,.20);
+  --cv-border:rgba(74,138,196,.28);
+  --cv-border-control:rgba(74,138,196,.42);
+  --cv-fg:#e8eefb;
+  --cv-fg-2:#c7d5ec;
+  --cv-fg-muted:#9db0cc;
+  --cv-accent:#4A8AC4;
+  --cv-accent-line:#5A9AD4;
+  --cv-accent-hover:#3d76ad;
+  --cv-accent-select:rgba(74,138,196,.22);
+  --cv-danger-fg:#E8737F;
+  --cv-success-fg:#5FBF87;
+  --cv-warn-fg:#D9A441;
+  background:
+    radial-gradient(58% 46% at 10% -6%, rgba(26,56,112,.62), transparent 64%),
+    radial-gradient(52% 44% at 92% 4%, rgba(45,95,158,.46), transparent 62%),
+    radial-gradient(70% 60% at 50% 118%, rgba(74,138,196,.28), transparent 70%),
+    var(--cv-canvas);
+}
 `;
 
     function StyleTag() {

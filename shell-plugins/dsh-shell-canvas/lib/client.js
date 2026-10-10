@@ -704,11 +704,19 @@ body:not([data-ds-dark-theme]) .dshcv-root{
       });
 
       const [env, setEnv] = useState(null);
-      const checkEnv = () => run('环境检测', async () => {
-        const r = await api('/env-check', { method: 'GET' });
-        setEnv(r);
-        return r;
-      });
+      const checkEnv = async () => {
+        // 环境自检是**锦上添花**，不是出片的前置条件：
+        // 宿主版本旧（没有这个接口）时**安静跳过**，不许弹红字吓用户
+        // （"未知接口"这种报错对用户毫无意义，只会让他以为插件坏了）。
+        try {
+          const r = await api('/env-check', { method: 'GET' });
+          setEnv(r && r.ok !== undefined ? r : null);
+          return r;
+        } catch (e) {
+          setEnv(null);      // 检测不了就不显示任何东西
+          return null;
+        }
+      };
       /** 应用保存位置并给回执（成功必须有回执 —— 否则按了"确定"什么都不变，就是"用不了"） */
       const applyOutDir = async (dir) => {
         const use = (dir && String(dir).trim()) || (state && state.runtime && state.runtime.outputRoot) || '';
@@ -1178,7 +1186,7 @@ body:not([data-ds-dark-theme]) .dshcv-root{
                         h('div', { className: 'dshcv-sub', style: { marginTop: 4 } }, env.guide.browser),
                       ]) : null,
                       h('div', { key: 'a', style: { marginTop: 10 } }, [
-                        h(Btn, { key: 'r', size: 'sm', onClick: checkEnv }, '装好了，重新检测'),
+                        h(Btn, { key: 'r', size: 'sm', onClick: checkEnv }, '重新检测'),
                       ]),
                     ]))) : null,
 

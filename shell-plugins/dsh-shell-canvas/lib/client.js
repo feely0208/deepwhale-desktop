@@ -682,6 +682,8 @@ body:not([data-ds-dark-theme]) .dshcv-root{
       const [batchText, setBatchText] = useState('');
       const [batchCount, setBatchCount] = useState('');
       const [batchMsg, setBatchMsg] = useState('');
+      // 只用来在界面上显示"共几条" —— 用户看到数字就懂分段规则，不需要我们解释
+      const batchLines = String(batchText).split(/\n\s*(?:---|===)\s*\n|\n\s*\n/).map((x) => x.trim()).filter(Boolean).length;
       const doBatch = () => run('批量出片', async () => {
         // 一条内容 = 一段（空行或 --- 分隔）
         const all = String(batchText).split(/\n\s*(?:---|===)\s*\n|\n\s*\n/)
@@ -1090,7 +1092,7 @@ body:not([data-ds-dark-theme]) .dshcv-root{
                   h(Section, { title: '素材' },
                     h('div', null, assetVars.map((v) => h(Field, {
                       key: v.key, label: v.label || v.key,
-                      hint: `${v.max ? `建议 ${v.max} 张以内（多了按时间轮播）` : '可多张图 / 一个视频'}。素材不出本机：只把本机绝对路径交给渲染子进程。`,
+                      hint: v.max ? `最多 ${v.max} 张` : '可多张图，或一个视频',
                     }, h('div', { className: 'dshcv-slot' }, [
                       // 多素材（2026-10-09）：可以是多张图，也可以是一个视频。
                       // 显示：第一个的缩略图 + "共 N 个"，不再只当一个路径。
@@ -1187,23 +1189,22 @@ body:not([data-ds-dark-theme]) .dshcv-root{
                         key: 't', className: 'dshcv-input',
                         style: { width: '100%', minHeight: 96 },
                         value: batchText,
-                        placeholder: '每段内容之间空一行（或写 --- 分隔）。一段 = 一条片子。',
+                        placeholder: '把内容贴进来',
                         onChange: (e) => setBatchText(e.target.value),
                       }),
                       h('div', { key: 'r', className: 'dshcv-row', style: { marginTop: 10, display: 'flex', gap: 8, alignItems: 'center' } }, [
-                        h('span', { key: 'l', className: 'dshcv-sub' }, '出前'),
+                        h('span', { key: 'l', className: 'dshcv-sub' }, '出'),
                         h('input', {
                           key: 'n', className: 'dshcv-input', style: { width: 88 },
                           value: batchCount,
                           placeholder: '全部',
                           onChange: (e) => setBatchCount(e.target.value.replace(/[^0-9]/g, '')),
                         }),
-                        h('span', { key: 'l2', className: 'dshcv-sub' }, '条（留空 = 全部）'),
+                        h('span', { key: 'l2', className: 'dshcv-sub' }, '条'),
                         h(Btn, { key: 'go', size: 'sm', primary: true, onClick: doBatch, disabled: !!busy }, '开始批量'),
                       ]),
                       batchMsg ? h('div', { key: 'm', className: 'dshcv-sub', style: { marginTop: 8, color: '#3FD0E0' } }, batchMsg) : null,
-                      h('div', { key: 'h', className: 'dshcv-sub', style: { marginTop: 6 } },
-                        '每条都按上面的模板、素材、配音、保存位置来出；结果写在台账里（可追溯、可复现）。'),
+                      batchLines ? h('div', { key: 'h', className: 'dshcv-sub', style: { marginTop: 6 } }, `共 ${batchLines} 条`) : null,
                     ]))),
 
                 h('div', { key: 'outdir', style: { marginTop: 22 } },
@@ -1228,7 +1229,7 @@ body:not([data-ds-dark-theme]) .dshcv-root{
                         h(Btn, { key: 'o2', size: 'sm', onClick: () => reveal((state && state.runtime && state.runtime.outputRoot) || '') }, '打开位置'),
                       ]),
                       h('div', { key: 'h', className: 'dshcv-sub', style: { marginTop: 6 } },
-                        '成片存放在这里（不是插件目录、不是系统盘深处）。点常用位置或「选择文件夹…」即生效。'),
+                        '成片存放在这里。'),
                       outDirMsg ? h('div', { key: 'm', className: 'dshcv-sub', style: { marginTop: 6, color: '#3FD0E0' } }, outDirMsg) : null,
                     ]))),
 
@@ -1260,7 +1261,7 @@ body:not([data-ds-dark-theme]) .dshcv-root{
                     ]))),
 
                 h('div', { key: 'board', style: { marginTop: 22 } },
-                  h(Section, { title: '分镜表（可选 · 控制每句配哪张素材、停多久）' },
+                  h(Section, { title: '分镜表' },
                     h('div', null, [
                       h('div', { className: 'dshcv-row', key: 'act' }, [
                         h(Btn, { key: 'b', size: 'sm', onClick: buildBoard }, board ? '重新按旁白稿生成' : '按旁白稿生成分镜'),
@@ -1320,7 +1321,7 @@ body:not([data-ds-dark-theme]) .dshcv-root{
                           style: { width: 76 }, value: previewSeconds,
                           onChange: (e) => setPreviewSeconds(Number(e.target.value) || 4),
                         }),
-                        h('span', { className: 'dshcv-sub', key: 'h' }, '预览是半分辨率 + 隔帧、不出配音，先看版式与动效。'),
+                        h('span', { className: 'dshcv-sub', key: 'h' }, '预览：出得快，只看版式。'),
                       ]),
                     ]))),
 

@@ -326,6 +326,13 @@ textarea.dshcv-input{height:auto;min-height:96px;padding:10px 12px;line-height:1
      来源：dsh-desktop/src/main/skin-presets.ts
        浅色底 #eaf1fb（本身带蓝，不是白）；深色底 #0b1018；
        三色辉光 #1A3870 / #2D5F9E / #4A8AC4。
+     ⚠️ 决策（2026-10-10 用户拍板，方案 A）：**插件不做自己的深浅开关**。
+        深浅只跟壳走（body[data-ds-dark-theme]），用户要自主切换就去
+        应用设置里切主题（跟随系统 / 浅色 / 深色）—— 壳一改，插件自动跟。
+        为什么不自己做一个开关：壳浅色 + 插件深色 = 看着像坏了；
+        而且 skin-presets.ts 里实测记录过「两个信号不一致 →
+        文字按深色渲染、背景按浅色铺 → 整屏被洗白」。
+        （若将来要做，正确做法是插件去调壳的主题设置，而不是插件自己存偏好。）
      ⚠️ 深浅信号用 body[data-ds-dark-theme]（DSH 自己的属性）——
         规范里实测写明了不能用 prefers-color-scheme：两者不一致时
         会「文字按深色渲染、背景按浅色铺」→ 整屏被洗白。 */

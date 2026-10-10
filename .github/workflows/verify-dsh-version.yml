@@ -16,8 +16,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: '要验证的 @deepseek-ai/dsh 版本（如 0.2.1-alpha.2）'
-        required: true
+        description: '要验证的 @deepseek-ai/dsh 版本（留空则自动取 npm 的 alpha 标签）'
+        required: false
+        default: ''
       registry:
         description: 'npm 镜像源'
         required: false
@@ -26,6 +27,10 @@ on:
         description: '打包后是否跑打包态冒烟（更慢但更接近真实）'
         required: false
         default: 'true'
+  # 每天 07:00 / 19:00（北京）自动验证 alpha 通道的最新版：上游一发我们就能知道能不能跟
+  schedule:
+    - cron: '0 23 * * *'
+    - cron: '0 11 * * *'
 
 jobs:
   verify:
@@ -42,10 +47,22 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: 解析要验证的版本（留空则取 npm alpha 标签）
+        id: ver
+        run: |
+          set -e
+          V="${{ inputs.version }}"
+          if [ -z "$V" ]; then
+            V=$(node -e "fetch('https://registry.npmmirror.com/@deepseek-ai/dsh').then(r=>r.json()).then(d=>console.log(d['dist-tags'].alpha||d['dist-tags'].latest))")
+            echo "未指定版本 → 自动取 alpha 标签：$V"
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "已解析版本：$V"
+
       - name: 钉住要验证的运行时版本
         run: |
           set -e
-          echo "${{ inputs.version }}" > dsh-runtime.version
+          echo "${{ steps.ver.outputs.version }}" > dsh-runtime.version
           node scripts/dsh-runtime-version.js --generate
           echo "将验证 DSH 运行时：$(node scripts/dsh-runtime-version.js)"
 
@@ -89,7 +106,14 @@ jobs:
 
       - name: Package (不发布)
         if: ${{ inputs.run_packaged_smoke == 'true' }}
-        run: npm run dist -- --publish never --mac --arm64
+        run: |
+          set -e
+          echo "---- 打包前诊断 ----"
+          node -v; echo "cwd=$(pwd)"
+          ls -la dist/main/index.js || { echo "::error::打包前 dist/main/index.js 就不存在（npm run build 没成功或 dist 被清）"; exit 1; }
+          echo "---- 开始打包（与 release.yml 同款命令）----"
+          npm run dist -- --publish never --mac --arm64
+          find release dist -maxdepth 3 -name '*.app' -o -maxdepth 3 -name '*.dmg' 2>/dev/null | head -5 || true
 
       - name: 打包态冒烟（优先用项目自带的 smoke-local.sh，它已处理"复用用户实例"这个坑）
         if: ${{ inputs.run_packaged_smoke == 'true' }}
@@ -108,13 +132,22 @@ jobs:
           ! grep -qE "DSH 启动失败|service failed" /tmp/verify-smoke.log || { echo "::error::DSH 服务启动失败"; exit 1; }
           grep -qE "\[smoke\] ok" /tmp/verify-smoke.log || { echo "::warning::未看到 [smoke] ok，请人工核对日志"; }
 
+      - name: 抓上游 release notes（CI 能访问 GitHub，本机被墙）
+        if: always()
+        run: |
+          V="${{ steps.ver.outputs.version }}"
+          OUT=/tmp/release-notes.md
+          gh api "repos/deepseek-ai/deepseek-harness/releases/tags/dsh-v$V" --jq '.body' > "$OUT" 2>/dev/null ||           curl -sL --max-time 30 "https://api.github.com/repos/deepseek-ai/deepseek-harness/releases/tags/dsh-v$V" \
+            -H "Accept: application/vnd.github+json" | python3 -c "import json,sys;d=json.load(sys.stdin);print(d.get('body') or '(无 body)')" > "$OUT" 2>/dev/null || echo "(抓取失败)" > "$OUT"
+          echo "---- release notes（dsh-v$V）----"; head -40 "$OUT"
+
       - name: 结论写入 Summary
         if: always()
         run: |
           {
             echo "## 跟版验证结果"
             echo ""
-            echo "- 目标版本：\`${{ inputs.version }}\`"
+            echo "- 目标版本：\`${{ steps.ver.outputs.version }}\`"
             echo "- 是否跑打包冒烟：\`${{ inputs.run_packaged_smoke }}\`"
             echo ""
             echo "### 关键结论（看上面各步是否全绿）"
@@ -124,6 +157,11 @@ jobs:
             echo ""
             echo "> 全绿即可评估把 \`dsh-runtime.version\` 跟到该版本；"
             echo "> 若有红：把失败步骤的原样行贴给负责人，不要只报\"失败\"。"
+            echo ""
+            echo "### 上游 release notes"
+            echo '```'
+            head -30 /tmp/release-notes.md 2>/dev/null || echo "(无)"
+            echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: 上传日志

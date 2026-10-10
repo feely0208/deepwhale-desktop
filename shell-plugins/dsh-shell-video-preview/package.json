@@ -1,0 +1,11 @@
+{
+  "name": "@deepwhale-cn/dsh-shell-video-preview",
+  "version": "1.0.0",
+  "description": "深鲸桌面：让聊天/侧栏里的视频（mp4/mov/webm）能直接内嵌预览。DSH 自带的预览插件只认 css/html/pdf，视频打不开；本插件用官方扩展点 ctx.documentPreviews.register 注册一个视频预览器接走这些后缀。",
+  "private": true,
+  "dsh": {
+    "client": {
+      "inject": ["@deepseek-ai/dsh-client-ui-sidebar-right", "@deepseek-ai/dsh-client-ui-sidebar-documentpreview"]
+    }
+  }
+}

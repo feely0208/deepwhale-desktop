@@ -32,6 +32,13 @@ window.__ModuleLoader__.load({
     Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
 
     const react = require('react');
+    // 辉光皮肤开关：只有自家壳会定义 --dw-skin；别人的 DSH 没有 → 插件纯跟对方主题 ✓
+    try {
+      if (typeof document !== 'undefined') {
+        const v = getComputedStyle(document.body).getPropertyValue('--dw-skin').trim();
+        if (v) document.body.setAttribute('data-dw-skin', v);
+      }
+    } catch (e) { /* 拿不到就当作不在自家壳里，安全默认 */ }
     const h = react.createElement;
     const { useState, useEffect, useMemo, useRef, useCallback } = react;
 
@@ -336,22 +343,26 @@ textarea.dshcv-input{height:auto;min-height:96px;padding:10px 12px;line-height:1
      ⚠️ 深浅信号用 body[data-ds-dark-theme]（DSH 自己的属性）——
         规范里实测写明了不能用 prefers-color-scheme：两者不一致时
         会「文字按深色渲染、背景按浅色铺」→ 整屏被洗白。 */
-  --cv-canvas:#eaf1fb;
-  --cv-surface:rgba(255,255,255,.74);
-  --cv-raised:rgba(255,255,255,.55);
-  --cv-border-subtle:rgba(26,56,112,.16);
-  --cv-border:rgba(26,56,112,.22);
-  --cv-border-control:rgba(26,56,112,.34);
-  --cv-fg:#12233d;
-  --cv-fg-2:#2b3f5e;
-  --cv-fg-muted:#5a6b85;
-  --cv-accent:#2D5F9E;
-  --cv-accent-line:#4A8AC4;
-  --cv-accent-hover:#24507f;
-  --cv-accent-select:rgba(74,138,196,.16);
-  --cv-danger-fg:#b3452f;
-  --cv-success-fg:#2f7d5a;
-  --cv-warn-fg:#8a6a1f;
+  /* 决策（2026-10-10 用户提问："插件装到别人的/官方 DSH 上，界面也随他们切换吗"）
+     —— **默认必须只跟 DSH 自己的主题变量**，这样插件在任何 DSH 上都跟随其外观 ✓
+     我们的辉光皮肤只在**自家壳**里叠加（见文件末尾 body[data-dw-skin] 那一段），
+     否则会把"深鲸的皮"贴进别人的界面里 ✗ */
+  --cv-canvas:var(--dsw-alias-bg-base, #1F1F1F);
+  --cv-surface:var(--dsw-alias-bg-layer-1, #252525);
+  --cv-raised:var(--dsw-alias-bg-layer-2, #2E2E2E);
+  --cv-border-subtle:var(--dsw-alias-border-l1, #3C3C3C);
+  --cv-border:var(--dsw-alias-border-l1, #3C3C3C);
+  --cv-border-control:var(--dsw-alias-border-l2, #787878);
+  --cv-fg:var(--dsw-alias-label-primary, #E6E6E6);
+  --cv-fg-2:var(--dsw-alias-label-primary, #CCCCCC);
+  --cv-fg-muted:var(--dsw-alias-label-secondary, #9D9D9D);
+  --cv-accent:var(--dsw-alias-brand-primary, #4772B3);
+  --cv-accent-line:var(--dsw-alias-brand-primary, #6699DD);
+  --cv-accent-hover:var(--dsw-alias-brand-primary, #5580C4);
+  --cv-accent-select:color-mix(in srgb, var(--dsw-alias-brand-primary, #4772B3) 14%, transparent);
+  --cv-danger-fg:#E8737F;
+  --cv-success-fg:#5FBF87;
+  --cv-warn-fg:#D9A441;
   /* 间距（core.space）与动效（core.motion） */
   --cv-s1:2px; --cv-s2:4px; --cv-s3:6px; --cv-s4:8px; --cv-s5:12px; --cv-s6:16px; --cv-s7:24px; --cv-s8:32px;
   --cv-fast:80ms; --cv-base:120ms; --cv-slow:160ms; --cv-ease:cubic-bezier(0.2,0,0,1);
@@ -359,11 +370,7 @@ textarea.dshcv-input{height:auto;min-height:96px;padding:10px 12px;line-height:1
   --cv-font:"Segoe UI","Noto Sans",-apple-system,"PingFang SC","Microsoft YaHei","DejaVu Sans",Cantarell,sans-serif;
   --cv-mono:"JetBrains Mono","Cascadia Mono",Consolas,"DejaVu Sans Mono",monospace;
   font-family:var(--cv-font);
-  background:
-    radial-gradient(58% 46% at 10% -6%, rgba(74,138,196,.30), transparent 64%),
-    radial-gradient(52% 44% at 92% 4%, rgba(45,95,158,.20), transparent 62%),
-    radial-gradient(70% 60% at 50% 118%, rgba(74,138,196,.16), transparent 70%),
-    var(--cv-canvas);
+  background:var(--cv-canvas);   /* 默认纯 DSH 底色，不带我们的辉光 */
   color:var(--cv-fg);
   padding:var(--cv-s6);
   /* 规范：加载时不允许动画 —— 所以这里没有任何 transition/animation */
@@ -453,8 +460,31 @@ textarea.dshcv-input{height:auto; min-height:88px; padding:var(--cv-s5); line-he
 .dshcv-tpl:hover{border-color:var(--cv-border-control); background:color-mix(in srgb, var(--cv-fg) 4%, transparent)}
 .dshcv-bar{background:transparent; border:1px solid var(--cv-border-subtle)}
 
-/* ── 辉光 · 深色（body[data-ds-dark-theme] 由 DSH 自己挂）───────────── */
-body[data-ds-dark-theme] .dshcv-root{
+/* ── 辉光 · 外观（**只在自家壳里**：壳注入 --dw-skin，插件把它挂成属性）─────
+   默认（别人的 DSH）：上面那套纯 DSH 变量 → 完全跟随对方主题 ✓
+   自家壳：这里再叠上我们的辉光与半透明表面 ✓ */
+body[data-dw-skin] .dshcv-root{
+  --cv-canvas:#eaf1fb;
+  --cv-surface:rgba(255,255,255,.74);
+  --cv-raised:rgba(255,255,255,.55);
+  --cv-border-subtle:rgba(26,56,112,.16);
+  --cv-border:rgba(26,56,112,.22);
+  --cv-border-control:rgba(26,56,112,.34);
+  --cv-fg:#12233d;
+  --cv-fg-2:#2b3f5e;
+  --cv-fg-muted:#5a6b85;
+  --cv-accent:#2D5F9E;
+  --cv-accent-line:#4A8AC4;
+  --cv-accent-hover:#24507f;
+  --cv-accent-select:rgba(74,138,196,.16);
+  background:
+    radial-gradient(58% 46% at 10% -6%, rgba(74,138,196,.30), transparent 64%),
+    radial-gradient(52% 44% at 92% 4%, rgba(45,95,158,.20), transparent 62%),
+    radial-gradient(70% 60% at 50% 118%, rgba(74,138,196,.16), transparent 70%),
+    #eaf1fb;
+}
+/* ── 辉光 · 深色（在自家壳里 + DSH 深色属性）────────────────── */
+body[data-dw-skin] .dshcv-root, body[data-ds-dark-theme][data-dw-skin] .dshcv-root{
   --cv-canvas:#0b1018;
   --cv-surface:rgba(19,31,50,.72);
   --cv-raised:rgba(26,56,112,.30);
@@ -499,7 +529,7 @@ body[data-ds-dark-theme] .dshcv-root{
 .dshcv-empty-mark{border-radius:12px}
 .dshcv-head{padding-bottom:var(--cv-s4)}
 /* 深色下阴影要更明显一点，否则浮不起来 */
-body[data-ds-dark-theme] .dshcv-card{box-shadow:0 1px 2px rgba(0,0,0,.35), 0 14px 34px -24px rgba(0,0,0,.85)}
+body[data-ds-dark-theme][data-dw-skin] .dshcv-card{box-shadow:0 1px 2px rgba(0,0,0,.35), 0 14px 34px -24px rgba(0,0,0,.85)}
 `;
 
     function StyleTag() {

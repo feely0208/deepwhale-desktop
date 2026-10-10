@@ -53,7 +53,7 @@ for dep in $DEPS; do
     cp -R "$CANVAS_SRC/node_modules/$dep" "$NM/$dep"
     echo "[sync]   + 依赖 $dep"
   else
-    echo "[sync]   ⚠️ 找不到依赖 $dep（引擎的 ajv 校验会失败）" >&2
+    echo "[sync]   ⚠️ 找不到依赖 ${dep}（引擎的 ajv 校验会失败）" >&2
   fi
 done
 

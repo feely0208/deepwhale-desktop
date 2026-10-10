@@ -81,7 +81,7 @@ jobs:
           case "$code" in
             0) echo "renew=no"  >> "$GITHUB_OUTPUT"; echo "→ 证书尚在有效期内，本次不续期" ;;
             2) echo "renew=yes" >> "$GITHUB_OUTPUT"; echo "→ 需要签发/续期" ;;
-            *) echo "::error::CDN 查询失败（退出码 $code），不继续"; exit 1 ;;
+            *) echo "::error::CDN 查询失败（退出码 ${code}），不继续"; exit 1 ;;
           esac
 
       # 手动模式下 mode=check 就到此为止
@@ -139,7 +139,7 @@ jobs:
             if out=$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' "https://$DOMAIN/_verify/verify.txt" 2>&1); then
               [ "$out" = "200" ] && { ok=1; break; }
             fi
-            echo "  第 $i 次：尚未生效（$out）"
+            echo "  第 $i 次：尚未生效（${out}）"
           done
           [ "$ok" = "1" ] || { echo "::error::HTTPS 在 2 分钟内未生效"; exit 1; }
           echo "✅ HTTPS 已生效"

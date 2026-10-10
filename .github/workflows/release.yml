@@ -178,7 +178,7 @@ jobs:
         run: |
           set -e
           check() { # $1=目录  $2=说明  $3=最低字节数
-            test -d "$1" || { echo "❌ 缺少随包载荷 $1（$2）"; exit 1; }
+            test -d "$1" || { echo "❌ 缺少随包载荷 ${1}（${2}）"; exit 1; }
             N=$(find "$1" -type f | wc -l | tr -d ' ')
             S=$(du -sk "$1" | cut -f1)
             echo "  $1: $N 个文件, ${S} KB — $2"

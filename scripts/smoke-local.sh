@@ -36,7 +36,7 @@ while [ $# -gt 0 ]; do
     --app=*) APP="${1#--app=}" ;;
     --port) PORT="${2:-}"; shift ;;
     --port=*) PORT="${1#--port=}" ;;
-    *) echo "未知参数：$1（可用：--app <路径> / --keep / --port <端口>）" >&2; exit 2 ;;
+    *) echo "未知参数：${1}（可用：--app <路径> / --keep / --port <端口>）" >&2; exit 2 ;;
   esac
   shift
 done
@@ -104,7 +104,7 @@ if [ -n "$APP" ]; then
   APP_ARGS=("$APP_BIN" "--user-data-dir=$UD" "--no-sandbox")
   echo "── 打包态冒烟（不重新 build，直接跑打包产物）──"
   echo "  应用：$APP_BIN"
-  echo "  userData：$UD（全新隔离）"
+  echo "  userData：${UD}（全新隔离）"
   echo "  端口：$PORT"
   mkdir -p "$UD"
   printf '{"port":%d}' "$PORT" > "$UD/settings.json"
@@ -136,7 +136,7 @@ PY
   npm run build 2>&1 | grep -E "error TS|copy-assets\] done" | head -5
 fi
 
-echo "── 跑冒烟（端口 $PORT，隔离 userData=$UD）──"
+echo "── 跑冒烟（端口 ${PORT}，隔离 userData=${UD}）──"
 # 壳放后台跑，同时并发轮询 DSH 界面查插件清单 ——
 # 必须断言**用户实际能看到的结果**（界面里有没有法律模式），
 # 而不是"注入写了盘"。本轮踩的坑恰恰是"写盘了但界面看不到"：
@@ -201,7 +201,7 @@ fi
 rm -f "$UI_JAR" "$UI_HTML"
 
 echo
-echo "── 结果（已滤 GPU 噪音；完整日志：$LOG）──"
+echo "── 结果（已滤 GPU 噪音；完整日志：${LOG}）──"
 grep -vE "SharedImageManager|Invalid mailbox|shared_image_manager|skia_output_device" "$LOG" \
   | grep -E "smoke|service|legal-mode|office|plugins|Error" | head -20
 
@@ -228,14 +228,14 @@ if grep -q "\[smoke\] DSH ready" "$LOG" && grep -q "\[smoke\] page ready" "$LOG"
   #   但用户在界面上看不到法律模式 —— 因为 DSH 的插件清单是服务启动时定型的。
   #   只断言"注入成功"会给出假通过，必须断言"界面能看到"。
   if [ "${LEGAL_OK:-0}" = "1" ]; then
-    echo "  ✅ 冒烟通过（真实拉起了随包运行时，exit=$CODE；法律模式首次启动即可见）"
+    echo "  ✅ 冒烟通过（真实拉起了随包运行时，exit=${CODE}；法律模式首次启动即可见）"
   else
     echo "  ❌ 冒烟未通过：法律模式在首次启动的界面上不可见 —— 完整日志：$LOG"
     rm -f "$PLUGIN_OUT"
     exit 1
   fi
 else
-  echo "  ❌ 冒烟未通过（exit=$CODE）—— 完整日志：$LOG"
+  echo "  ❌ 冒烟未通过（exit=${CODE}）—— 完整日志：$LOG"
   echo "  ── 日志尾部 ──"
   tail -20 "$LOG" 2>/dev/null
   rm -f "$PLUGIN_OUT"
@@ -255,5 +255,5 @@ pgrep -f "$RESIDUE_PAT" >/dev/null 2>&1 \
 if [ "$KEEP" = "0" ]; then
   [ -n "$APP" ] || du -sh "$UD" 2>/dev/null | sed 's/^/  缓存目录: /'
 else
-  echo "  （--keep：现场保留在 $UD，日志 $LOG）"
+  echo "  （--keep：现场保留在 ${UD}，日志 ${LOG}）"
 fi

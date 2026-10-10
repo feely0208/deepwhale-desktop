@@ -118,4 +118,4 @@ jobs:
             --notes-file notes.md \
             --draft \
             suite-out/*.zip suite-out/SHA256SUMS.txt suite-out/INSTALL-zh.txt
-          echo "✅ 已创建草稿 release: $TAG（发布时记得勾 Pre-release）"
+          echo "✅ 已创建草稿 release: ${TAG}（发布时记得勾 Pre-release）"

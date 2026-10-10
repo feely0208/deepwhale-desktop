@@ -171,7 +171,7 @@ jobs:
           OUT=/tmp/release-notes.md
           gh api "repos/deepseek-ai/deepseek-harness/releases/tags/dsh-v$V" --jq '.body' > "$OUT" 2>/dev/null ||           curl -sL --max-time 30 "https://api.github.com/repos/deepseek-ai/deepseek-harness/releases/tags/dsh-v$V" \
             -H "Accept: application/vnd.github+json" | python3 -c "import json,sys;d=json.load(sys.stdin);print(d.get('body') or '(无 body)')" > "$OUT" 2>/dev/null || echo "(抓取失败)" > "$OUT"
-          echo "---- release notes（dsh-v$V）----"; head -40 "$OUT"
+          echo "---- release notes（dsh-v${V}）----"; head -40 "$OUT"
 
       - name: 结论写入 Summary
         if: always()

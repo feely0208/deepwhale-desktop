@@ -123,7 +123,7 @@ jobs:
             # CI 上曾因此把 133MB 的完整包误判成「没有 app 内容」。
             COUNT=$(python3 -c "import sys,zipfile;print(sum(1 for n in zipfile.ZipFile(sys.argv[1]).namelist() if 'Contents/MacOS/' in n))" "$ZIP")
             if [ "$COUNT" -lt 1 ]; then
-              echo "❌ $ZIP 里没有 app 内容（Contents/MacOS/ 条目数 = $COUNT）"
+              echo "❌ $ZIP 里没有 app 内容（Contents/MacOS/ 条目数 = ${COUNT}）"
               echo "---- zip 实际条目（解码失败以 ? 显示）----"
               python3 -c "import sys,zipfile;[print('   ',repr(n)) for n in zipfile.ZipFile(sys.argv[1]).namelist()[:10]]" "$ZIP" || true
               exit 1
@@ -338,7 +338,7 @@ jobs:
             gh release create "$TAG" "${FILES[@]}" \
               --prerelease \
               --title "深鲸·律师端 v$VER" \
-              --notes "深鲸·律师端 v$VER（法律版，需激活）
+              --notes "深鲸·律师端 v${VER}（法律版，需激活）
 
           ## 下载
           - macOS（Apple Silicon）：\`DeepWhale-Lawyer-$VER-arm64.zip\`

@@ -57,7 +57,7 @@ jobs:
               tpl = tpl.replace('{{%s}}' % key, os.environ.get(key, '?'))
           open('/tmp/upstream-issue.md', 'w', encoding='utf-8').write(tpl)
           PY
-          TITLE="上游 DSH 有新版本：$LATEST（我们随包 $PINNED）"
+          TITLE="上游 DSH 有新版本：${LATEST}（我们随包 ${PINNED}）"
           EXIST=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
             --search "上游 DSH 有新版本 in:title" --json number --jq '.[0].number')
           if [ -n "$EXIST" ] && [ "$EXIST" != "null" ]; then

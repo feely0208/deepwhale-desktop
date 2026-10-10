@@ -16,7 +16,7 @@ TARGET="$HOME_DIR/plugins/dsh-shell-canvas"
 #   而它失败时会保留旧载荷 → 用 bundled-plugins/ 会装进**旧版本**（踩过）。
 SRC="$(cd "$(dirname "$0")/.." && pwd)/shell-plugins/dsh-shell-canvas"
 
-[ -d "$SRC" ] || { echo "找不到构建产物：$SRC（先跑 npm run build / node scripts/build-bundled-plugins.js）" >&2; exit 1; }
+[ -d "$SRC" ] || { echo "找不到构建产物：${SRC}（先跑 npm run build / node scripts/build-bundled-plugins.js）" >&2; exit 1; }
 [ -d "$HOME_DIR/plugins" ] || { echo "找不到应用的插件目录：$HOME_DIR/plugins" >&2; exit 1; }
 
 echo "[装] 来源: $SRC"

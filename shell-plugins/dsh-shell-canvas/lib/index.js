@@ -298,6 +298,7 @@ export function apply(ctx) {
       // ── 框架面（A）：把「生产者 / Provider / 批量」开给面板 ──────────────
       if (p === `${ROUTE}/api/output-dir` && req.method === 'POST') return send(res, 200, apiSetOutputDir(body));
       if (p === `${ROUTE}/api/pick-dir` && req.method === 'POST') return send(res, 200, await apiPickDir());
+      if (p === `${ROUTE}/api/env-check` && req.method === 'GET') return send(res, 200, await apiEnvCheck());
       if (p === `${ROUTE}/api/producers` && req.method === 'GET') return send(res, 200, await apiProducers());
       if (p === `${ROUTE}/api/produce` && req.method === 'POST') return send(res, 200, await apiProduce(body));
       if (p === `${ROUTE}/api/providers` && req.method === 'GET') return send(res, 200, await apiProviders());
@@ -334,6 +335,48 @@ export function apply(ctx) {
     if (!r || !r.ok) throw httpError(409, '引擎未就绪，先在面板里指定引擎目录');
     return r.root;
   };
+
+  /**
+   * 环境自检（2026-10-10）：出片依赖两个"用户机器上不一定有"的东西 ——
+   *   ① ffmpeg       合成编码的硬依赖
+   *   ② 一个 Chromium 浏览器（Chrome/Edge）  出帧要用
+   * 缺了不是"报个错就完事"：用户不知道怎么装。这里把**分平台的安装指引**一起给出去。
+   * 别人的 DSH 上装我们的插件、或者新同事的电脑，第一步就会撞上这个。
+   */
+  async function apiEnvCheck() {
+    const root = state.resolved?.root || null;
+    let ffmpeg = { ok: false, path: null };
+    if (root) {
+      try {
+        const { findFfmpeg } = await import(pathToFileURL(join(root, 'src/paths.mjs')).href);
+        const f = findFfmpeg();
+        ffmpeg = { ok: !!f, path: f };
+      } catch (e) { ffmpeg = { ok: false, path: null, error: e.message }; }
+    }
+    const browser = state.electron && state.electron.systemBrowser
+      ? { ok: true, name: state.electron.systemBrowser.name || '系统浏览器', path: state.electron.systemBrowser.path || null }
+      : { ok: false, name: null, path: null };
+    const guides = {
+      macos: {
+        ffmpeg: '在终端执行：brew install ffmpeg（没有 Homebrew 就先装 Homebrew）',
+        browser: '安装 Google Chrome 或 Microsoft Edge 即可',
+      },
+      win32: {
+        ffmpeg: '在 PowerShell 执行：winget install Gyan.FFmpeg（或去 ffmpeg.org 下载后把 bin 目录加进 PATH）',
+        browser: '系统自带的 Microsoft Edge 就够（不用额外装）',
+      },
+      linux: {
+        ffmpeg: 'apt install ffmpeg（或 dnf install ffmpeg）',
+        browser: 'apt install chromium（或安装 Chrome / Edge）',
+      },
+    };
+    return {
+      ffmpeg, browser,
+      platform: process.platform,
+      guide: guides[process.platform] || guides.linux,
+      ok: ffmpeg.ok && browser.ok,
+    };
+  }
 
   /**
    * 弹**系统自己的**文件夹对话框（2026-10-09 用户要求）。

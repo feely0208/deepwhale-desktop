@@ -676,6 +676,13 @@ body:not([data-ds-dark-theme]) .dshcv-root{
       // 成片保存位置（用户要求：不能是默认位置，尤其 Win 上不能塞 C 盘）
       const [outDir, setOutDir] = useState('');
       const [outDirMsg, setOutDirMsg] = useState('');
+      // 环境自检（缺 ffmpeg / 浏览器时给**能照做的指引**，而不是让用户对着报错发呆）
+      const [env, setEnv] = useState(null);
+      const checkEnv = () => run('环境检测', async () => {
+        const r = await api('/env-check', { method: 'GET' });
+        setEnv(r);
+        return r;
+      });
       /** 应用保存位置并给回执（成功必须有回执 —— 否则按了"确定"什么都不变，就是"用不了"） */
       const applyOutDir = async (dir) => {
         const use = (dir && String(dir).trim()) || (state && state.runtime && state.runtime.outputRoot) || '';
@@ -736,7 +743,7 @@ body:not([data-ds-dark-theme]) .dshcv-root{
         }
       }, [selected]);
 
-      useEffect(() => { refresh(); }, []);
+      useEffect(() => { refresh(); checkEnv(); }, []);
 
       // 进度走 SSE：与轮询相比不会漏掉中间态，也不会有刷新延迟。
       useEffect(() => {
@@ -1132,6 +1139,22 @@ body:not([data-ds-dark-theme]) .dshcv-root{
                         }, voiceover ? '换一个' : '选择…'),
                       ]) : null,
                     ]))),
+
+                (env && !env.ok) ? h('div', { key: 'env', style: { marginTop: 16 } },
+                  h(Section, { title: '运行环境' },
+                    h('div', null, [
+                      env.ffmpeg && !env.ffmpeg.ok ? h('div', { key: 'f', className: 'dshcv-issue dshcv-issue-warn', style: { marginBottom: 8 } }, [
+                        h('div', { style: { fontWeight: 600 } }, '⚠️ 没找到 ffmpeg —— 出片必须用它'),
+                        h('div', { className: 'dshcv-sub', style: { marginTop: 4 } }, env.guide.ffmpeg),
+                      ]) : null,
+                      env.browser && !env.browser.ok ? h('div', { key: 'b', className: 'dshcv-issue dshcv-issue-warn' }, [
+                        h('div', { style: { fontWeight: 600 } }, '⚠️ 没找到可用的浏览器 —— 出帧要用'),
+                        h('div', { className: 'dshcv-sub', style: { marginTop: 4 } }, env.guide.browser),
+                      ]) : null,
+                      h('div', { key: 'a', style: { marginTop: 10 } }, [
+                        h(Btn, { key: 'r', size: 'sm', onClick: checkEnv }, '装好了，重新检测'),
+                      ]),
+                    ]))) : null,
 
                 h('div', { key: 'outdir', style: { marginTop: 22 } },
                   h(Section, { title: '保存位置' },

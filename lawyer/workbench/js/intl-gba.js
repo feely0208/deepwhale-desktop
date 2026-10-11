@@ -45,7 +45,7 @@
   function render(container, title, sub) {
     var coop = loadCoop();
     var html =
-      "<style>.intl-chip{background:rgba(127,127,127,.09);border-radius:999px;padding:4px 12px;font-size:12px;border:1px solid transparent;cursor:pointer}.intl-chip.on{background:linear-gradient(135deg,#4f8cff,#7aa8ff);color:#fff}.intl-note{font-size:12px;opacity:.62}.intl-sec{display:none}.intl-sec.on{display:block}.intl-city{padding:14px;border:1px solid rgba(127,127,127,.14);border-radius:14px;background:rgba(127,127,127,.04)}.intl-coop{padding:10px 0;border-bottom:1px solid rgba(127,127,127,.12);font-size:13px}</style>"
+      "<style>.intl-note{font-size:12px;opacity:.62}.intl-sec{display:none}.intl-sec.on{display:block}.intl-city{padding:14px;border:1px solid rgba(127,127,127,.14);border-radius:14px;background:rgba(127,127,127,.04)}.intl-coop{padding:10px 0;border-bottom:1px solid rgba(127,127,127,.12);font-size:13px}</style>"
       + '<div class="page-head"><div><h1>' + esc(title) + "</h1><div class='sub'>" + esc(sub) + "</div></div></div>"
       + '<div class="tabs" style="margin-bottom:14px">'
       + [["cities", "大湾区 · 九市执业"], ["qualify", "港澳律师资质"], ["zones", "合作区政策"], ["coop", "合作登记(" + coop.length + ")"]]

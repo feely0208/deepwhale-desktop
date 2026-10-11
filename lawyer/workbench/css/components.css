@@ -275,3 +275,90 @@
   transition: all 0.2s var(--ease);
 }
 .tabs button.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+
+/* =========================================================================
+   涉外模块共用的过滤器 chip
+   ---------------------------------------------------------------------------
+   原先这段样式在 intl-kb / intl-docs / intl-arb / intl-compliance / intl-gba
+   五个 js 文件里各写一遍，定义还不一致（kb 有 hover、用 var(--accent)；
+   其余没有 hover、硬编码 #4f8cff）。2026-10-11 抽到公共 CSS 做单一来源。
+
+   同时把尺寸提到规范：原 padding 4px 12px + font-size 12px 实际高度约 27px，
+   低于「可点元素最小高度 32px」。现用 min-height:32px 兜底。
+   ========================================================================= */
+.intl-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: rgba(127, 127, 127, .09);
+  color: inherit;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  transition: .18s;
+}
+.intl-chip:hover { border-color: var(--accent); }
+.intl-chip.on {
+  background: linear-gradient(135deg, var(--accent), #7aa8ff);
+  color: #fff;
+  border-color: transparent;
+}
+
+/* =========================================================================
+   过滤器分组
+   ---------------------------------------------------------------------------
+   原先筛选项直接塞进一个 flex-wrap 容器，标签和 chip 是同级子元素 ——
+   chip 换行后会从容器左边缘续行（跑到标签下面），看着"排列不规则"。
+   现在拆成「固定宽度标签列 + 独立的 chip 区」，chip 在自己的区域里换行，
+   续行与首个 chip 对齐；间距统一 8px（原为 6px，低于规范）。
+   ========================================================================= */
+.filter-row { display: flex; align-items: flex-start; gap: 10px; margin-top: 8px; }
+.filter-label {
+  flex: 0 0 34px; font-size: 12px; opacity: .6;
+  line-height: 32px;   /* 与 chip 的 min-height 对齐，视觉居中 */
+}
+.filter-chips { flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* =========================================================================
+   卡片标题行 / 标签组 / 操作行
+   ---------------------------------------------------------------------------
+   严禁用 margin-left:auto 把日期或按钮推到右侧：容器一旦 flex-wrap，
+   该项会在换行时跳到奇怪的位置（涉外法规列表就踩过这个坑）。
+   正确做法是「标题 flex:1 + 省略，日期固定右侧」；操作按钮独立成行、左对齐。
+   ========================================================================= */
+.card-title-row { display: flex; align-items: center; gap: 8px; width: 100%; }
+.card-title-row .ctr-title {
+  flex: 1 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.card-title-row .ctr-date { flex: 0 0 auto; font-size: 11px; opacity: .55; }
+.card-meta { font-size: 11px; opacity: .55; margin-top: 4px; }
+.card-tags, .card-actions {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  margin-top: 8px; width: 100%;
+}
+
+/* =========================================================================
+   「查看原文」展开面板（涉外双语模板库，对齐鸿蒙端）
+   ---------------------------------------------------------------------------
+   中文正文动辄上千字，会把英文顶到十几屏之外 —— 面板内用中英切换，各占一屏。
+   正文限高 + 内部滚动，避免一个模板把整页撑到很长。
+   ========================================================================= */
+.tpl-orig {
+  margin-top: 8px;
+  padding: 10px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+.tpl-orig-body {
+  font-size: 12.5px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  max-height: 320px;
+  overflow: auto;
+}

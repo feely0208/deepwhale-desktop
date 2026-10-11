@@ -42,13 +42,22 @@
 }
 #wallpaper-dim { /* 保证可读性的暗化/亮化遮罩 */
   position: fixed; inset: 0; z-index: 0;
-  background: radial-gradient(120% 120% at 50% 0%, transparent 30%, rgba(0,0,0,.35) 100%);
+  /* 2026-10-11 修：原圆心是**全透明**（transparent 30%），壁纸最亮的部分 100% 透出来 ——
+     灰调壁纸（如原默认的「晨雾」）把内容区托成一片灰，而卡片是近黑的，于是「灰黑不协调」。
+     桌面端早就诊断过同一问题，注释原话：「只有模块是黑的、背景一片灰」，
+     做法是把壁纸压到 brightness(0.30)。这里等价地压一刀：圆心也加 30% 暗化，
+     保证**背景始终比卡片暗**，明暗层级回到「页面 < 卡片」。 */
+  background: radial-gradient(120% 120% at 50% 0%, rgba(0,0,0,.30) 0%, rgba(0,0,0,.62) 100%);
   transition: background 0.4s var(--ease);
 }
 [data-theme="light"] #wallpaper-dim { background: radial-gradient(120% 120% at 50% 0%, rgba(255,255,255,.18), rgba(255,255,255,.45) 100%); }
+/* 浅色主题的着色要轻得多：--bg 在浅色下是接近白的浅蓝，78% 会直接把壁纸洗没 */
+[data-theme="light"] #wallpaper-tint { background: color-mix(in srgb, var(--bg) 55%, transparent); }
 #wallpaper-tint {
   position: fixed; inset: 0; z-index: 0;
-  background: color-mix(in srgb, var(--bg) 62%, transparent);
+  /* 2026-10-11：62% → 78%。着色更重，底色才能"掌握主动权"，灰调壁纸不会把背景洗成中灰。
+     浅色主题另有单独取值（见下），不受影响。 */
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
   transition: background 0.4s var(--ease);
 }
 
@@ -234,10 +243,17 @@
   padding: 20px;
 }
 .card .card-head {
-  display: flex; align-items: center; justify-content: space-between;
+  /* 2026-10 修：原为 flex + space-between，窄窗口下长标题会把右侧动作顶出容器
+     （鸿蒙端 SectionCard 的 Row+Blank() 是同一类问题，那边已改为可换行 Flex）。
+     flex-wrap 让右侧动作放不下时自动落到第二行，而不是被截断。
+     2026-10-11 再修：space-between 在换行后会「拉开」第二行的多个子项（看着排列不规则），
+     且单项独占一行时靠左、与其他行的右侧项对不齐。改为「标题 flex:1 撑开把右侧项顶到右边
+     + 常规流向」，换行后子项自然靠左成组，不再被拉扯。 */
+  display: flex; flex-wrap: wrap; align-items: center;
+  gap: 8px;                     /* 行列统一 8px（原 6px 8px，低于规范） */
   margin-bottom: 16px;
 }
-.card .card-head h2 { margin: 0; font-size: 16px; font-weight: 700; }
+.card .card-head h2 { flex: 1 1 auto; min-width: 0; margin: 0; font-size: 16px; font-weight: 700; }
 .card .card-head .link { font-size: 13px; color: var(--accent-2); cursor: pointer; }
 
 /* 案件进度列表 */
@@ -282,7 +298,7 @@
 }
 .wp-type-badge {
   position: absolute; top: 6px; right: 6px;
-  font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 6px;
+  font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 6px;
   background: rgba(0,0,0,.5); color: #fff;
 }
 
@@ -392,7 +408,7 @@
 .gantt-title-col { font-size: 12px; color: var(--text-dim); padding-right: 12px; }
 .gantt-title-col.head { font-weight: 700; color: var(--text-soft); }
 .gantt-axis { position: relative; height: 22px; }
-.gantt-tick { position: absolute; top: 0; bottom: 0; font-size: 10px; color: var(--text-dim); border-left: 1px solid var(--border); padding-left: 4px; }
+.gantt-tick { position: absolute; top: 0; bottom: 0; font-size: 11px; color: var(--text-dim); border-left: 1px solid var(--border); padding-left: 4px; }
 .gantt-body .gantt-row { display: grid; grid-template-columns: 150px 1fr; align-items: center; min-height: 40px; }
 .gantt-row .grow { position: relative; height: 30px; }
 .gantt-row .grow .lane { position: absolute; inset: 4px 0; }
@@ -604,7 +620,7 @@
 .p-av { width: 84px; height: 84px; border-radius: 22px; display: grid; place-items: center; font-size: 38px; font-weight: 800; color: #fff; box-shadow: 0 8px 30px rgba(79,140,255,.4); }
 .p-name { font-size: 26px; font-weight: 800; display: flex; align-items: center; gap: 8px; }
 .p-sub { color: var(--text-soft); font-size: 14px; margin-top: 6px; }
-.p-tags { display: flex; gap: 6px; margin-top: 12px; flex-wrap: wrap; }
+.p-tags { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 .profile-card { display: flex; flex-direction: column; justify-content: center; min-height: 240px; }
 .profile-card .profile-hero { flex: 1; align-content: center; }
 
@@ -698,8 +714,9 @@
 .case-doc-row .cd-head { display: flex; align-items: center; gap: 10px; margin-bottom: 9px; }
 .case-doc-row .cd-head strong { color: var(--accent-2); }
 .case-doc-row .cd-head span { color: var(--text-soft); font-size: 13px; }
-.cd-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.cd-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .doc-chip {
+  display: inline-flex; align-items: center; min-height: 32px;   /* 原约 27px，低于可点最小高度 */
   padding: 5px 12px; border-radius: 999px; cursor: pointer; font-size: 12.5px;
   background: var(--surface-3); color: var(--text-soft); border: 1px solid var(--border);
   transition: all .15s var(--ease);
@@ -865,3 +882,122 @@
   display: flex; gap: 6px; align-items: flex-start;
 }
 .sidebar-foot .dsh-ai-note .dsh-ai-note-dot { font-size: 9px; color: var(--accent); margin-top: 3px; }
+
+/* =========================================================================
+   深鲸辉光背景（移植自桌面端 src/main/skin-presets.ts，用**原版**实现）
+   ---------------------------------------------------------------------------
+   为什么不用「background-image 多层渐变」的写法：
+   桌面端试过，结论写在那边注释里 ——
+
+     「官方三层各自带 filter: blur()，而且是不同的值：blur(80px)/blur(100px)/blur(60px)。
+       第一版用的是不带 filter 的径向渐变 —— 那出来是"三个彩色圆盘"，
+       而官方是"三团化开的光"。这是最大的差距。」
+
+   桌面端后来改用渐变图层，是被逼的：它的壳里「插 DOM + z-index:-1」在 1.0.28 后
+   静默失效，只能把光挂到 html 的 background 上（那里没法给单个图层加 blur）。
+   **律师端没有这个限制** —— #wallpaper-glow 是我们自己的元素，z-index 可控。
+   所以这里用原版：三个真 DOM 光斑，各自 filter: blur() + mix-blend-mode: screen。
+
+   参数全部照抄官网实测值（尺寸 px / 各自 blur / 各自 opacity / 各自锚点）。
+   ========================================================================= */
+#wallpaper-glow {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  overflow: hidden;
+  display: none;
+  background: #0b1018;              /* 带蓝深底 —— 中性黑会让辉光"发闷发脏" */
+}
+[data-theme="light"] #wallpaper-glow { background: #eaf1fb; }
+
+/* 单个光斑：screen 混合让光是在底色上"加"上去的（越叠越亮），不是盖上去 */
+.glow-blob {
+  position: absolute;
+  mix-blend-mode: screen;
+  will-change: transform;
+  border-radius: 50%;
+}
+/* L1 500×500 左侧 10%、下 −100px  opacity .30  blur(80px) */
+.glow-blob.b1 {
+  width: 500px; height: 500px;
+  /* ⚠️ 2026-10-11 二改：官方坐标（固定 top:430px + 图层高/2）算出来光心在 y≈760，
+     在 700~800px 高的窗口里**直接落到屏幕外**，加上卡片铺满 → 完全看不到光。
+     官方那套是给 DSH 壳的稀疏聊天界面调的（大片空白），律师端是密集卡片页，
+     必须改成视口相对定位，把光心放进可视区上部。 */
+  left: 6vw; top: 6vh;
+  opacity: .42; filter: blur(80px);
+  background: radial-gradient(circle, #1A3870 0%, rgba(26,56,112,0) 70%);
+  animation: dw-drift-1 26s ease-in-out infinite alternate;
+}
+/* L2 700×400 水平居中、下 −50px  opacity .40  blur(100px) */
+.glow-blob.b2 {
+  width: 700px; height: 400px;
+  left: calc(50vw - 350px); top: 14vh;
+  opacity: .58; filter: blur(100px);
+  background: radial-gradient(ellipse at center, #2D5F9E 0%, #1A3870 40%, rgba(26,56,112,0) 70%);
+  animation: dw-drift-2 26s ease-in-out infinite alternate;
+}
+/* L3 400×400 右侧 10%、下 −80px  opacity .20  blur(60px) */
+.glow-blob.b3 {
+  width: 400px; height: 400px;
+  left: calc(88vw - 400px); top: 8vh;
+  opacity: .30; filter: blur(60px);
+  background: radial-gradient(circle, #4A8AC4 0%, #2D5F9E 30%, rgba(45,95,158,0) 70%);
+  animation: dw-drift-3 26s ease-in-out infinite alternate;
+}
+
+/* 漂移：幅度很小 —— 官网那种"在动但不明显"的调子。
+   位移量照抄桌面端反推的 from/to 差值（+36,−16 / −62,+14 / +36,−12）。 */
+@keyframes dw-drift-1 { from { transform: translate(0,0); }      to { transform: translate(36px,-16px); } }
+@keyframes dw-drift-2 { from { transform: translate(0,0); }      to { transform: translate(-62px,14px); } }
+@keyframes dw-drift-3 { from { transform: translate(0,0); }      to { transform: translate(36px,-12px); } }
+
+/* ⚠️ 2026-10-11 修：浅色**不能用 screen**。
+   screen 的语义是"越叠越亮"，浅底 #eaf1fb 已经接近白，再 screen 一层浅蓝 → 直接洗成白，
+   实测等于"没有辉光"。桌面端的浅色版本来就不是 screen（是普通叠加），这里对齐。 */
+[data-theme="light"] .glow-blob { mix-blend-mode: normal; }
+
+/* 浅色＝淡蓝（不是把深色压低透明度 —— 那样白底上会发灰发脏） */
+[data-theme="light"] .glow-blob.b1 { background: radial-gradient(circle, #a0c5f1 0%, rgba(160,197,241,0) 70%); }
+[data-theme="light"] .glow-blob.b2 { background: radial-gradient(ellipse at center, #84b2ea 0%, #a0c5f1 40%, rgba(132,178,234,0) 70%); }
+[data-theme="light"] .glow-blob.b3 { background: radial-gradient(circle, #bedaf8 0%, #84b2ea 30%, rgba(190,218,248,0) 70%); }
+
+@media (prefers-reduced-motion: reduce) {
+  .glow-blob { animation: none; }
+}
+
+/* 辉光模式下卡片给一点透明度 —— 否则密集卡片（如系统看板三卡 + 甘特图）会把光完全挡死，
+   用户看到的就是"辉光被卡片挡住了，啥也看不到"。
+   只放掉 14%，正文对比度不受影响（卡片底色仍接近不透明）。 */
+/* ⚠️ 2026-10-11：辉光模式下**卡片保持实心**（试过玻璃卡片，用户否决）。
+   曾经为了"让背景光透出来"把卡片放到 58% + backdrop-filter，实测光确实可见了，
+   但**用户明确否决**，理由成立：
+     「卡片不能改，改了就会出大问题了，版面不清晰，律师实际使用体验感就会极差」
+   —— 律师端的首要目标是把案子看清楚，不是视觉花哨。
+   撤掉. 结论记进 AGENTS.md 6.6，后续会话不要重试。
+   代价：背景辉光只在**卡片之外的区域**（页头、页边、卡片间隙）可见 —— 这是可接受的。 */
+
+/* 选中「深鲸辉光」时：底图与着色/暗化遮罩都要让位，否则会把光洗掉 */
+[data-bg="glow"] #wallpaper-glow { display: block; }
+[data-bg="glow"] #wallpaper { display: none; }
+[data-bg="glow"] #wallpaper-tint { background: transparent; }
+[data-bg="glow"] #wallpaper-dim {
+  /* 只保留顶部渐隐，避免窗口上沿出现硬分界线；不再整体压暗（会把光压死） */
+  background: linear-gradient(to bottom, transparent 0%, transparent 32%, rgba(0,0,0,.10) 100%);
+}
+/* 预设背景的缩略图：画一个缩小版深鲸辉光（没有图片文件可显示） */
+.wp-thumb[data-type="preset"] {
+  background-color: #0b1018;
+  background-image:
+    radial-gradient(circle closest-side at center, rgba(46,92,168,.92) 0%, rgba(46,92,168,0) 100%),
+    radial-gradient(circle closest-side at center, rgba(82,146,214,1) 0%, rgba(82,146,214,0) 100%),
+    radial-gradient(circle closest-side at center, rgba(124,186,240,.85) 0%, rgba(124,186,240,0) 100%);
+  background-size: 62% 62%, 84% 56%, 52% 52%;
+  background-position: 10% 60%, 50% 56%, 90% 62%;
+  background-repeat: no-repeat;
+}
+[data-theme="light"] .wp-thumb[data-type="preset"] {
+  background-color: #eaf1fb;
+  background-image:
+    radial-gradient(circle closest-side at center, rgba(160,197,241,.95) 0%, rgba(160,197,241,0) 100%),
+    radial-gradient(circle closest-side at center, rgba(132,178,234,1) 0%, rgba(132,178,234,0) 100%),
+    radial-gradient(circle closest-side at center, rgba(190,218,248,.9) 0%, rgba(190,218,248,0) 100%);
+}

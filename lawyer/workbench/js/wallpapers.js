@@ -4,6 +4,9 @@
 (function () {
   // 内置精选壁纸（相对路径）。type: image | video。.gif 归入 image（浏览器自动播放）。
   const LIBRARY = [
+    // 「深鲸辉光」：不是图片，是纯 CSS 背景预设（移植自桌面端 skin-presets.ts）。
+    // src 用伪协议占位，好让缩略图的 active 判定与其它壁纸用同一套比较。
+    { name: "深鲸辉光", src: "preset:glow", type: "preset", subtype: "brand" },
     { name: "法律·藏青", src: "assets/wallpapers/legal-navy.jpg", type: "image", subtype: "brand" },
     { name: "极光", src: "assets/wallpapers/aurora.jpg", type: "image" },
     { name: "晚霞", src: "assets/wallpapers/sunset.jpg", type: "image" },
@@ -39,6 +42,16 @@
   }
 
   function setWallpaper(src, type, name, isLocal) {
+    // —— 预设背景（深鲸辉光）：不插图片/视频，改用 html 上的 data-bg 开关，
+    //    由 CSS 里的 #wallpaper-glow 承载（纯 CSS 三层光斑 + 漂移动画）。
+    if (type === "preset") {
+      clearLayers();
+      document.documentElement.setAttribute("data-bg", src.split(":")[1] || "glow");
+      current = { src, type, name };
+      document.dispatchEvent(new CustomEvent("wallpaper:change", { detail: current }));
+      return;
+    }
+    document.documentElement.removeAttribute("data-bg");
     clearLayers();
     const target = document.createElement(type === "video" ? "video" : "img");
     if (type === "video") {
@@ -70,10 +83,12 @@
       t.className = "wp-thumb glow" + (current && current.src === wp.src ? " active" : "");
       t.setAttribute("data-type", wp.type);
       t.innerHTML =
-        (wp.type === "video"
-          ? '<video src="' + wp.src + '" muted loop autoplay playsinline></video>'
-          : '<img src="' + wp.src + '" alt="">') +
-        '<span class="wp-type-badge">' + (wp.type === "video" ? "视频" : (wp.subtype === "gif" ? "GIF" : "图片")) + "</span>" +
+        (wp.type === "preset"
+          ? ""   // 预设背景由 CSS 的 .wp-thumb[data-type="preset"] 画（画一个缩小版光斑）
+          : (wp.type === "video"
+            ? '<video src="' + wp.src + '" muted loop autoplay playsinline></video>'
+            : '<img src="' + wp.src + '" alt="">')) +
+        '<span class="wp-type-badge">' + (wp.type === "preset" ? "预设" : (wp.type === "video" ? "视频" : (wp.subtype === "gif" ? "GIF" : "图片"))) + "</span>" +
         '<span class="wp-name">' + wp.name + "</span>";
       t.addEventListener("click", function () {
         setWallpaper(wp.src, wp.type, wp.name, false);
@@ -87,8 +102,10 @@
     el.layer = document.getElementById("wallpaper");
     el.tint = document.getElementById("wallpaper-tint");
     el.dim = document.getElementById("wallpaper-dim");
-    // 默认壁纸
-    setWallpaper(LIBRARY[3].src, "image", LIBRARY[3].name, false);
+    // 默认背景：深鲸辉光（LIBRARY[0]）。
+    // 2026-10-11 改：原来默认是「晨雾」（LIBRARY[3]）—— 灰调壁纸配中性近黑面板，
+    // 用户反馈「灰黑不协调、难看」。桌面端早就用带蓝深底 + 辉光解决过同一问题。
+    setWallpaper(LIBRARY[0].src, LIBRARY[0].type, LIBRARY[0].name, false);
   }
 
   // 本地文件选择：支持图片 / GIF / 视频

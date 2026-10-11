@@ -9,7 +9,7 @@
    生产应由**后端爬虫**抓取权威源 + 本地/云端入库。此处先跑通「任务抓取去重入库直连」闭环。
    ========================================================================= */
 (function () {
-  var LS = { items: "legal-kb.intl.items", meta: "legal-kb.intl.meta", cfg: "legal-kb.intl.cfg" };
+  var LS = { items: "legal-kb.intl.items", meta: "legal-kb.intl.meta", cfg: "legal-kb.intl.cfg", watch: "legal-kb.intl.watch" };
   var now = function () { return new Date(); };
   var dateStr = function (d) { d = d || now(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
   var fmtDate = function (d) { return dateStr(new Date(d)); };
@@ -48,6 +48,20 @@
     { name: "广东省司法厅·大湾区", tag: "粤港澳大湾区", url: "https://sft.gd.gov.cn/" },
   ];
 
+  // —— 官方权威源（2026-10 新增）——
+  // 司法部「法通」网（2026-10-10 正式上线）与浙江律协「浙商涉外」平台，是国家/省级
+  // 已建成的公益性涉外法律服务平台，权威且免费。
+  // 定位：它们把「查得到」做成了公共服务，我们不再自建同类资料库去正面竞争；
+  // 改为**跳转引用**——只跳转，不抓取、不复制其内容。
+  var OFFICIAL = [
+    { name: "法通网", issuer: "司法部 · 全国性涉外法律服务平台",
+      note: "全球主要经济体法律法规中文译本、区域国别法务指南、典型案例、机构与人员名录",
+      url: "https://lexcom.12348.gov.cn/homepage" },
+    { name: "浙商涉外法律服务", issuer: "浙江省律师协会",
+      note: "对外投资国别指南、涉外法规政策、国际条约与境外法规、涉外律师与调解员名录",
+      url: "https://shewai.zjbar.com/site/" },
+  ];
+
   // —— CORS 代理（浏览器跨域 best-effort；失败则回退/提示） ——
   var PROXIES = [
     function (u) { return "https://api.allorigins.win/get?url=" + encodeURIComponent(u); },
@@ -62,6 +76,32 @@
   function saveMeta(m) { try { localStorage.setItem(LS.meta, JSON.stringify(m)); } catch (e) { } }
   function loadCfg() { try { var c = localStorage.getItem(LS.cfg); return c ? JSON.parse(c) : null; } catch (e) { return null; } }
   function saveCfg(c) { try { localStorage.setItem(LS.cfg, JSON.stringify(c)); } catch (e) { } }
+
+  // —— 法规盯守（2026-10 新增）——
+  // 订阅关心的关键词；每次抓取/渲染后本地比对，命中即列出。
+  // 诚实边界：浏览器关闭时无法后台运行，所以是「打开工作台 / 手动抓取时比对」，
+  // 不是推送。价值在「不用自己回头翻」——官方平台是「你去看」，这里是
+  // 「你关心的词一出现就标给你」。
+  function loadWatch() {
+    try { var w = localStorage.getItem(LS.watch); var o = w ? JSON.parse(w) : null; return o && Array.isArray(o.words) ? o : { words: [], last: 0, hits: [] }; }
+    catch (e) { return { words: [], last: 0, hits: [] }; }
+  }
+  function saveWatch(w) { try { localStorage.setItem(LS.watch, JSON.stringify(w)); } catch (e) { } }
+  function watchBlob(x) {
+    return [x.title, x.summary, x.topic, x.jurisdiction, x.domain, (x.tags || []).join(" ")].join(" ");
+  }
+  function runWatch(items, w) {
+    if (!w || !w.words.length) { if (w) { w.hits = []; saveWatch(w); } return w; }
+    var hits = [];
+    items.forEach(function (x) {
+      var blob = watchBlob(x);
+      for (var i = 0; i < w.words.length; i++) {
+        if (w.words[i] && blob.indexOf(w.words[i]) >= 0) { hits.push(x.title); break; }
+      }
+    });
+    w.hits = hits; w.last = Date.now(); saveWatch(w);
+    return w;
+  }
 
   function seedOnce() {
     var items = loadItems();
@@ -132,6 +172,8 @@
     saveItems(items);
     meta.lastRun = Date.now(); meta.lastResult = results; meta.total = items.length;
     saveMeta(meta);
+    // 抓取后自动跑一次盯守比对：命中订阅关键词的条目会出现在「法规盯守」卡片里
+    runWatch(items, loadWatch());
     return { items: items, results: results, meta: meta };
   }
 
@@ -189,6 +231,8 @@
     var items = loadItems();
     var meta = loadMeta();
     var list = filtered(items);
+    // 每次渲染都跑一次盯守比对（本地字符串比对，不联网）
+    var watch = runWatch(items, loadWatch());
 
     var jurisdictions = ["全部"].concat(Object.keys(items.reduce(function (a, x) { a[x.jurisdiction] = 1; return a; }, {})).sort());
     var domains = ["全部"].concat(Object.keys(items.reduce(function (a, x) { a[x.domain] = 1; return a; }, {})).sort());
@@ -196,8 +240,8 @@
 
     var html =
       "<style>"
-      + ".intl-chip{background:rgba(127,127,127,.09);border:1px solid transparent;border-radius:999px;padding:4px 12px;font-size:12px;color:inherit;cursor:pointer;transition:.18s}"
-      + ".intl-chip:hover{border-color:var(--accent,#4f8cff)}.intl-chip.on{background:linear-gradient(135deg,var(--accent,#4f8cff),#7aa8ff);color:#fff;border-color:transparent}"
+      + ""
+      + ""
       + ".intl-badge{padding:2px 8px;border-radius:999px;font-size:11px}.intl-badge.high{background:rgba(220,60,60,.14);color:#e05555}.intl-badge.mid{background:rgba(230,150,40,.16);color:#d7882c}.intl-badge.low{background:rgba(90,170,90,.16);color:#3f9b5c}"
       + ".intl-item{cursor:pointer}.intl-item.done .intl-sum{display:none}"
       + ".intl-box{margin-top:8px}.intl-note{font-size:12px;color:inherit;opacity:.62;margin-top:6px}"
@@ -218,20 +262,63 @@
       + '<div class="stat-card glow"><div class="stat-label">上次抓取</div><div class="stat-value" style="font-size:15px">' + (meta.lastRun ? fmtDate(meta.lastRun) : "未抓取") + '</div></div>'
       + "</div>"
 
+      // 官方权威源（国家 / 省级公益平台）—— 只跳转、不抓取、不复制
+      + '<div class="card glow" style="margin-bottom:14px"><div class="card-head"><h2>官方权威源</h2><span style="font-size:12px;opacity:.6">跳转 · 不抓取</span></div>'
+      + OFFICIAL.map(function (o) {
+        return '<div style="padding:10px;border-radius:10px;background:rgba(127,127,127,.06);margin-bottom:8px">'
+          + '<div style="display:flex;align-items:center;gap:8px"><b style="flex:1">' + esc(o.name) + '</b><span class="badge badge-info">官方</span></div>'
+          + '<div style="font-size:12px;opacity:.62;margin-top:4px">' + esc(o.issuer) + '</div>'
+          + '<div style="font-size:12.5px;opacity:.82;margin-top:4px;line-height:1.6">' + esc(o.note) + '</div>'
+          + '<div style="margin-top:8px"><button class="btn btn-sm btn-primary glow" data-official="' + esc(o.url) + '">直达官网</button></div>'
+          + '</div>';
+      }).join("")
+      + '<div class="intl-note">以上为司法部与省级律协的公益性涉外法律服务平台，内容权威、免费开放。本模块只做跳转、不复制其内容；在本案中引用后，可用「＋ 新增」把要点留存在本机。</div>'
+      + "</div>"
+
+      // 法规盯守（本地比对 · 不做后台推送）
+      + '<div class="card glow" style="margin-bottom:14px"><div class="card-head"><h2>法规盯守</h2><span style="font-size:12px;opacity:.6">本地比对 · 不做后台推送</span></div>'
+      + '<div class="intl-note" style="margin-top:0;margin-bottom:8px">填入你关心的关键词（如：数据出境、出口管制、反倾销、外汇），用空格或逗号分隔。每次抓取后自动比对，命中即列在下方。</div>'
+      + '<input id="intlWatchInput" placeholder="数据出境 出口管制 反倾销" value="' + esc(watch.words.join(" ")) + '" style="width:100%;padding:9px 12px;border-radius:10px;border:1px solid rgba(127,127,127,.25);background:rgba(127,127,127,.06);color:inherit;font-family:inherit" />'
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px">'
+      + '<button class="btn btn-sm btn-primary" id="intlWatchSave">开启 / 更新盯守</button>'
+      + '<button class="btn btn-sm btn-ghost" id="intlWatchClear">停止盯守</button></div>'
+      + (watch.words.length
+        ? '<div style="font-size:12px;opacity:.72;margin-top:8px">盯守中：' + esc(watch.words.join("、"))
+          + '　上次比对：' + (watch.last ? fmtDate(watch.last) : "尚未比对") + '　命中：' + watch.hits.length + ' 条</div>'
+        : '')
+      + watch.hits.slice(0, 5).map(function (t) {
+        return '<div style="font-size:12.5px;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">· ' + esc(t) + '</div>';
+      }).join("")
+      + (watch.hits.length > 5 ? '<div class="intl-note">… 其余 ' + (watch.hits.length - 5) + ' 条见下方条目列表</div>' : '')
+      + '<div class="intl-note">说明：浏览器关闭时无法后台运行，所以这里是「打开工作台 / 手动抓取时比对」，不是推送。</div>'
+      + "</div>"
+
       + '<div class="card glow" style="margin-bottom:14px"><div class="card-head"><h2> 检索 / 过滤</h2><span style="font-size:12px;opacity:.6">直连本地 · 断网可用</span></div>'
-      + '<input id="intlSearch" class="intl-input" placeholder="搜索标题 / 摘要 / 主题 / 标签…" value="' + esc(state.q) + '" style="width:100%;padding:9px 12px;border-radius:10px;border:1px solid rgba(127,127,127,.25);background:rgba(127,127,127,.06);color:inherit;font-family:inherit;margin-bottom:10px" />'
-      + '<div class="row" style="display:flex;align-items:center;flex-wrap:wrap;gap:6px">'
-      + '<span style="font-size:12px;opacity:.6">法域</span>' + jurisdictions.map(function (j) { return chip(j, state.jurisdiction === j, 'data-j="' + esc(j) + '"'); }).join("")
-      + "</div><div class=\"row\" style=\"align-items:center;flex-wrap:wrap;gap:6px;margin-top:6px\">"
-      + '<span style="font-size:12px;opacity:.6">领域</span>' + domains.map(function (d) { return chip(d, state.domain === d, 'data-d="' + esc(d) + '"'); }).join("")
-      + "</div><div class=\"row\" style=\"align-items:center;flex-wrap:wrap;gap:6px;margin-top:6px\">"
-      + '<span style="font-size:12px;opacity:.6">重要</span>' + importanceOptions.map(function (o) { return chip(o[1], state.importance === o[0], "data-i='" + o[0] + "'"); }).join("")
-      + '<span style="margin-left:auto;font-size:12px;opacity:.6">排序</span>'
-      + '<select id="intlSort" style="padding:6px;border-radius:8px;border:1px solid rgba(127,127,127,.25);background:transparent;color:inherit;font-family:inherit">'
+      + '<input id="intlSearch" class="intl-input" placeholder="搜索标题 / 摘要 / 主题 / 标签…" value="' + esc(state.q) + '" style="width:100%;padding:9px 12px;border-radius:10px;border:1px solid rgba(127,127,127,.25);background:rgba(127,127,127,.05);color:inherit;font-family:inherit;font-size:13px">'
+      // 2026-10-11 改：原先标签与 chip 同级塞进一个 flex-wrap 容器 —— chip 换行后从容器
+      // 左边缘续行（跑到标签下面），且间距 6px 低于规范。现在用 .filter-row：
+      // 标签固定宽度成列，chip 在独立区域里换行（续行与首个 chip 对齐），间距统一 8px。
+      // 「排序」原用 margin-left:auto 推到右侧，换行时会跳位 —— 现独立成行、左对齐。
+      + '<div class="filter-row">'
+      + '<span class="filter-label">法域</span>'
+      + '<div class="filter-chips">' + jurisdictions.map(function (j) { return chip(j, state.jurisdiction === j, 'data-j="' + esc(j) + '"'); }).join("") + '</div>'
+      + '</div>'
+      + '<div class="filter-row">'
+      + '<span class="filter-label">领域</span>'
+      + '<div class="filter-chips">' + domains.map(function (d) { return chip(d, state.domain === d, 'data-d="' + esc(d) + '"'); }).join("") + '</div>'
+      + '</div>'
+      + '<div class="filter-row">'
+      + '<span class="filter-label">重要</span>'
+      + '<div class="filter-chips">' + importanceOptions.map(function (o) { return chip(o[1], state.importance === o[0], "data-i='" + o[0] + "'"); }).join("") + '</div>'
+      + '</div>'
+      + '<div class="filter-row">'
+      + '<span class="filter-label">排序</span>'
+      + '<div class="filter-chips">'
+      + '<select id="intlSort" style="min-height:32px;padding:6px 12px;border-radius:8px;border:1px solid rgba(127,127,127,.25);background:transparent;color:inherit;font-family:inherit;font-size:12px">'
       + '<option value="date-desc"' + (state.sort === "date-desc" ? " selected" : "") + '>最新优先</option>'
       + '<option value="importance"' + (state.sort === "importance" ? " selected" : "") + '>重要优先</option>'
       + '<option value="date-asc"' + (state.sort === "date-asc" ? " selected" : "") + '>最早优先</option>'
-      + "</select></div></div>"
+      + '</select></div></div></div>'
 
       + '<div class="card glow" id="intlCapturePanel" style="margin-bottom:14px;display:none">'
       + '<div class="card-head"><h2> 抓取工具</h2><span class="badge badge-info">best-effort · 生产改后端爬虫</span></div>'
@@ -251,17 +338,26 @@
 
   function itemRow(x) {
     var tags = (x.tags || []).map(function (t) { return '<span class="intl-chip" style="cursor:default;background:rgba(127,127,127,.12)">' + esc(t) + "</span>"; }).join("");
+    // 2026-10-11 改：按 UI 规范「徽标往上走、按钮往下走，两者永不同排」重排。
+    // 原先日期用 margin-left:auto 推到右侧、操作按钮也用 auto 推到右侧 ——
+    // 容器一旦 flex-wrap，这两处都会在换行时跳到奇怪位置（规范里的「禁止 1」）。
     return '<div class="intl-item" data-id="' + x.id + '" style="padding:14px 0;border-bottom:1px solid rgba(127,127,127,.12)">'
-      + '<div class="row" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' + importanceBadge(x.importance)
-      + '<span class="link" data-openx="' + x.id + '" style="font-weight:600">' + esc(x.title) + "</span>"
-      + '<span style="font-size:11px;opacity:.55">' + esc(x.jurisdiction) + " · " + esc(x.domain) + "</span>"
-      + '<span style="margin-left:auto;font-size:11px;opacity:.55">' + esc(x.date) + "</span></div>"
-      + '<div class="tl-meta" style="margin-top:4px">来源：' + esc(x.source) + (x.url ? ' <a href="' + esc(x.url) + '" target="_blank" rel="noopener">原文</a>' : "") + "</div>"
-      + '<div class="intl-sum" style="margin-top:6px;font-size:13px;opacity:.85">' + esc(x.summary) + "</div>"
-      + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:8px">' + tags
-      + '<div style="margin-left:auto;display:flex;gap:8px">'
+      // 标题行：标题占满剩余宽度并省略；徽标与日期固定在右，不用 auto
+      + '<div class="card-title-row">'
+      + '<span class="link ctr-title" data-openx="' + x.id + '">' + esc(x.title) + '</span>'
+      + importanceBadge(x.importance)
+      + '<span class="ctr-date">' + esc(x.date) + '</span></div>'
+      // 元信息行：法域 · 领域 + 来源（单行，不与操作按钮同排）
+      + '<div class="card-meta">' + esc(x.jurisdiction) + ' · ' + esc(x.domain)
+      + '　来源：' + esc(x.source)
+      + (x.url ? ' <a href="' + esc(x.url) + '" target="_blank" rel="noopener">原文</a>' : '') + '</div>'
+      + '<div class="intl-sum" style="margin-top:6px;font-size:13px;opacity:.85">' + esc(x.summary) + '</div>'
+      // 标签组：带 8px 间距的换行容器
+      + '<div class="card-tags">' + tags + '</div>'
+      // 操作行：独立成行、左对齐、可换行（原先是推到右侧）
+      + '<div class="card-actions">'
       + '<button class="btn btn-sm btn-ghost" data-ai="' + x.id + '">AI 摘要</button>'
-      + '<button class="btn btn-sm btn-ghost" data-del="' + x.id + '">删除</button></div></div>'
+      + '<button class="btn btn-sm btn-ghost" data-del="' + x.id + '">删除</button></div>'
       + '<div class="intl-box" data-box="' + x.id + '" style="display:none"></div></div>';
   }
 
@@ -277,6 +373,34 @@
     var ioBtn = byId("intlIoBtn"); if (ioBtn) ioBtn.addEventListener("click", function () { openIoModal(); });
     var fetchBtn = byId("intlFetchBtn"); if (fetchBtn) fetchBtn.addEventListener("click", function () { doFetch(container); });
     var cfgBtn = byId("intlCfgBtn"); if (cfgBtn) cfgBtn.addEventListener("click", function () { openCfgModal(container); });
+
+    // 官方权威源：只跳转（不抓取、不复制内容）—— 这是与官方平台共存的边界
+    container.querySelectorAll("[data-official]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var u = b.getAttribute("data-official");
+        if (u) window.open(u, "_blank", "noopener");
+      });
+    });
+
+    // 法规盯守
+    var watchSave = byId("intlWatchSave");
+    if (watchSave) watchSave.addEventListener("click", function () {
+      var inp = byId("intlWatchInput");
+      var parts = String(inp ? inp.value : "").replace(/[,，、;；]/g, " ").split(/\s+/);
+      var words = [];
+      parts.forEach(function (p) { var t = p.trim(); if (t && words.indexOf(t) < 0) { words.push(t); } });
+      var w = loadWatch();
+      w.words = words;
+      runWatch(loadItems(), w);
+      render(container);
+      toast(words.length ? ("盯守已开启：" + words.length + " 个关键词，命中 " + w.hits.length + " 条") : "已停止盯守（未填写关键词）", "success");
+    });
+    var watchClear = byId("intlWatchClear");
+    if (watchClear) watchClear.addEventListener("click", function () {
+      saveWatch({ words: [], last: 0, hits: [] });
+      render(container);
+      toast("已停止盯守并清除订阅", "success");
+    });
 
     container.querySelectorAll("[data-openx]").forEach(function (b) {
       b.addEventListener("click", function () {

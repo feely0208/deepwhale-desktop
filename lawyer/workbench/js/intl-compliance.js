@@ -181,12 +181,18 @@
     if (low) low.textContent = a.length;
     if (!a.length) { logEl.innerHTML = "<div class='empty'>暂无筛查记录。先在上方做一次筛查。</div>"; return; }
     logEl.innerHTML = a.slice(0, 40).map(function (x) {
-      return '<div class="intl-item" style="padding:10px 0;border-bottom:1px solid rgba(127,127,127,.12)"><div class="row" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
-        riskBadge(x.risk) + '<span style="font-weight:600">' + esc(x.type) + "</span>" +
-        '<span style="font-size:12px;opacity:.7">' + esc(x.target) + "</span>" +
-        '<span style="margin-left:auto;font-size:11px;opacity:.55">' + fmt(x.date) + "</span>" +
+      // 2026-10-11 改：按 UI 规范重排 —— 徽标/日期进标题行，按钮独立成操作行、左对齐。
+      // 原先日期用 margin-left:auto 右推、且「删」按钮与标题同排（规范禁止）。
+      return '<div class="intl-item" style="padding:10px 0;border-bottom:1px solid rgba(127,127,127,.12)">' +
+        '<div class="card-title-row">' +
+        '<span class="ctr-title" style="font-weight:600">' + esc(x.type) + "</span>" +
+        riskBadge(x.risk) +
+        '<span class="ctr-date">' + fmt(x.date) + "</span></div>" +
+        '<div class="card-meta">' + esc(x.target) + "</div>" +
+        (x.meta ? '<div class="tl-meta" style="margin-top:4px;font-size:12px;opacity:.7">' + esc(x.meta) + "</div>" : "") +
+        '<div class="card-actions">' +
         '<button class="btn btn-sm btn-ghost" data-clog="' + x.date + '">删</button></div>' +
-        (x.meta ? '<div class="tl-meta" style="margin-top:4px;font-size:12px;opacity:.7">' + esc(x.meta) + "</div>" : "") + "</div>";
+        "</div>";
     }).join("");
     logEl.querySelectorAll("[data-clog]").forEach(function (b) {
       b.addEventListener("click", function () { var d = Number(b.getAttribute("data-clog")); var a2 = loadLog().filter(function (x) { return x.date !== d; }); saveLog(a2); renderLog(container); });
@@ -199,7 +205,7 @@
     var byRisk = { high: 0, medium: 0, low: 0 }; a.forEach(function (x) { byRisk[x.risk] = (byRisk[x.risk] || 0) + 1; });
     var tabs = [["party", "主体/清单筛查"], ["item", "物项筛查"], ["check", "交易体检"], ["data", "数据出境"], ["log", "筛查记录"]];
     var html =
-      "<style>.intl-chip{background:rgba(127,127,127,.09);border-radius:999px;padding:4px 12px;font-size:12px;border:1px solid transparent;cursor:pointer}.intl-chip.on{background:linear-gradient(135deg,#4f8cff,#7aa8ff);color:#fff}.intl-note{font-size:12px;opacity:.62;margin-top:6px}.intl-input{width:100%;padding:8px 11px;border-radius:9px;border:1px solid rgba(127,127,127,.25);background:rgba(127,127,127,.06);color:inherit;font-family:inherit;margin-bottom:8px}.intl-sec{display:none}.intl-sec.on{display:block}.intl-tab .tabs button.active{color:var(--accent,#4f8cff)}</style>"
+      "<style>.intl-note{font-size:12px;opacity:.62;margin-top:6px}.intl-input{width:100%;padding:8px 11px;border-radius:9px;border:1px solid rgba(127,127,127,.25);background:rgba(127,127,127,.06);color:inherit;font-family:inherit;margin-bottom:8px}.intl-sec{display:none}.intl-sec.on{display:block}.intl-tab .tabs button.active{color:var(--accent,#4f8cff)}</style>"
       + '<div class="page-head"><div><h1>' + esc(title) + "</h1><div class='sub'>" + esc(sub) + "</div></div>"
       + '<button class="btn btn-ghost btn-sm" id="compImport"> 导入清单</button></div>'
       + '<div class="grid cols-4" style="margin-bottom:14px">'

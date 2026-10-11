@@ -47,11 +47,17 @@
     { key: "schedule", label: "日历看板", icon: "calendar" },
     { key: "documents", label: "文书管理", icon: "folder" },
     { key: "evidence", label: "证据材料", icon: "folder" },
-    { key: "intlkb", label: "涉外法律知识库", icon: "globe" },
-    { key: "intlcomp", label: "跨境合规筛查", icon: "shield" },
+    // 尽调工作台（2026-10 新增：桌面端原本缺失，按鸿蒙版补齐）
+    { key: "duediligence", label: "尽调工作台", icon: "search" },
+    // 涉外五模块 · 顺序即卖点（2026-10 调整）：
+    //   双语文书放第一 —— 官方公益平台不做、「我们做交付物」的主打能力；
+    //   法规库放最后 —— 司法部「法通」网已免费提供权威法规中文译本与国别法务指南，
+    //   我们不与官方比资料量，只做「官方权威源直达 + 办案引用」。
     { key: "intldocs", label: "涉外双语文书", icon: "lang" },
+    { key: "intlcomp", label: "跨境合规筛查", icon: "shield" },
     { key: "intlgba", label: "港澳大湾区", icon: "bridge" },
     { key: "intlarb", label: "国际仲裁", icon: "gavel" },
+    { key: "intlkb", label: "涉外法规·官方源", icon: "globe" },
     { key: "reports", label: "报表中心", icon: "chart" },
     { label: "团队", kind: "label" },
     { key: "settings", label: "系统设置", icon: "settings" },
@@ -81,6 +87,7 @@
     lang: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H8l-3 3v-3H5a1 1 0 0 1-1-1z"/><path d="M15 9h3a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-1v2l-2-2h-2"/></svg>',
     bridge: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17c5-8 13-8 18 0M6 17V9M12 17V7M18 17V9M2 19h20"/></svg>',
     gavel: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m13 6 5 5-1.5 1.5-5-5zM11 8l5 5M3 21l9-5M4 20l4 2M8 17l4 2M6 4l3 3"/></svg>',
+    search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></svg>',
   };
 
   const STATUS_BADGE = {
@@ -126,7 +133,8 @@
   const TITLES = {
     dashboard: "仪表盘", cases: "案件管理", approval: "授权签批", board: "系统看板", clients: "客户管理", contracts: "合同管理",
     finance: "财务管理", schedule: "日历看板", documents: "文书管理", evidence: "证据材料",
-    intlkb: "涉外法律知识库",
+    duediligence: "尽调工作台",
+    intlkb: "涉外法规 · 官方源",
     intlcomp: "跨境合规筛查",
     intldocs: "涉外双语文书",
     intlgba: "港澳大湾区",
@@ -166,7 +174,8 @@
       schedule: ["日历看板", "每日/未来节点安排 · 期限预警与倒计时"],
       documents: ["文书管理", "起诉状、代理词、证据目录等"],
       evidence: ["证据材料", "视频 / 录音证据的元数据、转写与随时调看"],
-      intlkb: ["涉外法律知识库", "抓取并直连本地的涉外法律知识 · 新《律师法》第七条"],
+      duediligence: ["尽调工作台", "半自动核查清单 · 来源留痕 · 企业/境外投资/自然人三套章节 · 不抓取任何数据"],
+      intlkb: ["涉外法规 · 官方源", "官方权威源直达 · 本地留痕 · 新《律师法》第七条"],
       intlcomp: ["跨境合规筛查", "清单筛查 · 物项定级 · 交易体检 · 数据出境评估"],
       intldocs: ["涉外双语文书", "中英模板 · 生成/编辑 · 法律翻译 · 公证/海牙认证指引"],
       intlgba: ["港澳大湾区", "九市执业 · 港澳律师资质 · 合作区政策 · 跨境协作登记"],
@@ -184,6 +193,7 @@
     else if (key === "board") renderBoard();
     else if (key === "schedule") renderCalendar();
     else if (key === "evidence") renderEvidenceView();
+    else if (key === "duediligence" && window.DueDiligence) DueDiligence.render(el.content, curTitle, curSub);
     else if (key === "documents") renderDocuments();
     else if (key === "intlkb" && window.IntlKB) IntlKB.render(el.content, curTitle, curSub);
     else if (key === "intlcomp" && window.IntlCompliance) IntlCompliance.render(el.content, curTitle, curSub);
@@ -1396,7 +1406,7 @@
           return "<tr><td><strong>" + d.title + "</strong></td><td><span class='badge badge-info'>" + d.type + "</span></td>" +
             "<td>" + d.caseTitle + "</td><td>" + gen + "</td><td><span class='badge badge-warning'>" + d.status + "</span></td>" +
             "<td>" + d.date + "</td>" +
-            "<td><div style='display:flex;gap:6px'>" +
+            "<td><div style='display:flex;gap:8px'>" +
             "<button class='btn btn-sm btn-ghost' data-edit='" + d.id + "'>编辑</button>" +
             "<button class='btn btn-sm btn-primary' data-print='" + d.id + "'>打印</button>" +
             "<button class='btn btn-sm btn-danger' data-del='" + d.id + "'>删</button></div></td></tr>";
@@ -1496,7 +1506,7 @@
       "<div class='modal-actions approval-no-print'>" +
       "<button class='btn btn-ghost' data-edittoggle> 编辑</button>" +
       "<button class='btn' data-exportpdf> 导出 PDF</button>" +
-      "<button class='btn' data-exportdocx> 导出 DOCX</button>" +
+      "<button class='btn' data-exportdocx> 导出 Word (.docx)</button>" +
       "<button class='btn btn-ghost' data-print> 一键打印</button>" +
       "<button class='btn btn-primary' data-save>保存</button>" +
       "<button class='btn btn-ghost' data-close>关闭</button></div></div>";
@@ -1533,15 +1543,52 @@
   }
 
   // 导出 DOCX（Word 兼容 HTML  .doc，Word 打开可另存为 .docx）
+  /** 去 HTML 标签并还原实体 */
+  function stripTags(x) {
+    return String(x).replace(/<[^>]+>/g, "")
+      .replace(/&nbsp;/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+      .replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+  }
+
+  /** 文书 HTML → { title, paragraphs }：doc-h 元素当标题，其余按块级标签切段落 */
+  function splitDocHtml(html) {
+    var s = String(html || "");
+    var title = "";
+    var m = s.match(/<div[^>]*class=['"][^'"]*doc-h[^'"]*['"][^>]*>([\s\S]*?)<\/div>/i);
+    if (m) { title = stripTags(m[1]).trim(); s = s.replace(m[0], "\n"); }
+    s = s.replace(/<\/(p|div|h[1-6]|li|tr|table)>/gi, "\n");
+    s = s.replace(/<br\s*\/?>/gi, "\n");
+    s = stripTags(s);
+    return {
+      title: title,
+      paragraphs: s.split("\n").map(function (x) { return x.trim(); })
+        .filter(function (x) { return x.length > 0; })
+    };
+  }
+
+  /**
+   * 导出**真 .docx**（OOXML）—— 用 js/docx.js 生成，与鸿蒙端同一套算法。
+   * ⚠️ 2026-10-11 修：原先是「Word 兼容 HTML 改后缀 .doc」，还提示用户"可另存为 .docx"。
+   * 现在直接产出真 .docx，Word / WPS 双击即可打开编辑，不用二次转换。
+   */
   function exportDocx(rec) {
-    const html = "<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'>" +
-      "<style>body{font-family:FangSong_GB2312,FangSong,SimSun,serif;font-size:14pt;line-height:28pt;color:#000;} .doc-h{font-size:22pt;font-weight:bold;text-align:center;letter-spacing:4px;} .doc-h2{font-size:16pt;font-weight:bold;} .doc-sign{text-align:right;margin-top:16pt;} td,th,li,p{font-size:14pt;}</style></head><body>" + rec.content + "</body></html>";
-    const blob = new Blob(["\ufeff" + html], { type: "application/msword" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = (rec.title || "文书") + ".doc";
-    a.click();
-    toast("已导出 Word 文档（.doc，可另存为 .docx）", "success");
+    if (!window.Docx || typeof window.Docx.build !== "function") {
+      toast("导出失败：docx 生成器未加载（检查 index.html 是否引入 js/docx.js）", "error");
+      return;
+    }
+    var split = splitDocHtml(rec.content || "");
+    var title = split.title || rec.title || "文书";
+    try {
+      var bytes = window.Docx.build(title, split.paragraphs);
+      var blob = new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = title + ".docx";
+      a.click();
+      toast("已导出 .docx（OOXML，Word / WPS 可直接打开编辑）", "success");
+    } catch (err) {
+      toast("导出失败：" + (err && err.message ? err.message : err), "error");
+    }
   }
 
   function printDoc(rec) {
@@ -1640,7 +1687,7 @@
           "<td>" + a.item + "</td><td>" + a.applicant + "</td><td>" + a.authorizer + "</td>" +
           "<td><span class='badge " + st[1] + "'><i class='badge-dot'></i>" + st[0] + "</span> " + methodBadge + "</td>" +
           "<td>" + a.date + "</td>" +
-          "<td><div style='display:flex;gap:6px;flex-wrap:wrap'>" + actionHtml + delLock + "</div></td></tr>";
+          "<td><div style='display:flex;gap:8px;flex-wrap:wrap'>" + actionHtml + delLock + "</div></td></tr>";
       }).join("");
       list = "<div class='card glow'><div class='card-head'><h2>授权申请列表</h2></div>" +
         "<table class='table'><thead><tr><th>案号 / 案件</th><th>申请事项</th><th>申请人(被授权人)</th><th>授权人</th><th>状态/签批方式</th><th>申请日期</th><th>操作</th></tr></thead><tbody>" +

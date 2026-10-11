@@ -53,7 +53,7 @@
   function render(container, title, sub) {
     var cases = loadCases(), nodes = loadNodes().slice();
     var html =
-      "<style>.intl-chip{background:rgba(127,127,127,.09);border-radius:999px;padding:4px 12px;font-size:12px;border:1px solid transparent;cursor:pointer}.intl-chip.on{background:linear-gradient(135deg,#4f8cff,#7aa8ff);color:#fff}.intl-note{font-size:12px;opacity:.62}.intl-sec{display:none}.intl-sec.on{display:block}.intl-note{font-size:12px;opacity:.62}.intl-arb{padding:10px 0;border-bottom:1px solid rgba(127,127,127,.12);font-size:13px}</style>"
+      "<style>.intl-note{font-size:12px;opacity:.62}.intl-sec{display:none}.intl-sec.on{display:block}.intl-note{font-size:12px;opacity:.62}.intl-arb{padding:10px 0;border-bottom:1px solid rgba(127,127,127,.12);font-size:13px}</style>"
       + '<div class="page-head"><div><h1>' + esc(title) + "</h1><div class='sub'>" + esc(sub) + "</div></div></div>"
       + '<div class="tabs" style="margin-bottom:14px">'
       + [["institutions", "仲裁机构对比"], ["clause", "争议解决条款"], ["node", "程序节点"], ["enforce", "承认与执行"], ["cases", "涉案登记(" + cases.length + ")"]]

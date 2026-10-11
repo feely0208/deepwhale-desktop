@@ -177,6 +177,10 @@ export class SkinManager {
       body:not([data-ds-dark-theme])::before {
         filter: brightness(1.38) saturate(0.95) !important;
       }
+      /* 2026-10-10：给插件一个"我们在自家壳里"的信号 ——
+         插件据此决定要不要叠加深鲸辉光皮肤；
+         别人的/官方 DSH 没有这个变量 → 插件就只跟随对方自己的主题 ✓ */
+      body { --dw-skin: glow; }
       body:not([data-ds-dark-theme]) {
         --dsw-alias-bg-base: transparent !important;
         --dsw-alias-bg-layer-1: rgba(255, 255, 255, var(--dsh-skin-alpha)) !important;

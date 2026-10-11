@@ -125,7 +125,19 @@ const listTargets = () => new Promise((res) => {
   const ws = new WebSocket(target.webSocketDebuggerUrl);
   await new Promise((res, rej) => { ws.addEventListener('open', res, { once: true }); ws.addEventListener('error', () => rej(new Error('CDP 连接失败')), { once: true }); });
   let seq = 0; const pend = new Map();
-  ws.addEventListener('message', (ev) => { let m; try { m = JSON.parse(ev.data); } catch { return; } if (m.id && pend.has(m.id)) { pend.get(m.id)(m); pend.delete(m.id); } });
+  // CDP 事件收集 + 等待指定事件（喂素材要等 Page.fileChooserOpened）
+  const cdpEvents = [];
+  const waitEvent = (method, timeoutMs) => new Promise((res) => {
+    const t0 = Date.now();
+    const tick = () => {
+      const i = cdpEvents.findIndex((e) => e.method === method);
+      if (i >= 0) { const e = cdpEvents.splice(i, 1)[0]; return res(e.params); }
+      if (Date.now() - t0 > timeoutMs) return res(null);
+      setTimeout(tick, 100);
+    };
+    tick();
+  });
+  ws.addEventListener('message', (ev) => { let m; try { m = JSON.parse(ev.data); } catch { return; } if (m.method) cdpEvents.push(m); if (m.id && pend.has(m.id)) { pend.get(m.id)(m); pend.delete(m.id); } });
   const send = (method, params) => new Promise((res, rej) => { const id = ++seq; pend.set(id, (m) => (m.error ? rej(new Error(method + ': ' + m.error.message)) : res(m.result))); ws.send(JSON.stringify({ id, method, params })); });
   let ev = async (fn, args) => { const r = await send('Runtime.evaluate', { expression: '(' + fn + ')(' + JSON.stringify(args || {}) + ')', awaitPromise: true, returnByValue: true }); if (r.exceptionDetails) throw new Error(r.exceptionDetails.text); return r.result.value; };
   let shot = async (f) => { const r = await send('Page.captureScreenshot', { format: 'png' }); fs.writeFileSync(f, Buffer.from(r.data, 'base64')); };
@@ -273,6 +285,9 @@ const listTargets = () => new Promise((res) => {
         const title = document.querySelector('.dshcv-input');
         if (area) setVal(area, '很多人第一次用 AI，是被它会不会胡说劝退的。深鲸画布把稿子变成片子，全程在本机完成。');
         if (title) setVal(title, '本机出片实测');
+        // 素材：点「选择…」→ 由外层拦截文件选择器并塞入真实图片
+        const pick = [...document.querySelectorAll('.dshcv-btn')].find((b) => /选择…/.test((b.textContent || '').trim()));
+        if (pick) { window.__dwPickClicked = true; pick.click(); }
         await new Promise((r) => setTimeout(r, 800));
         // 点「预览」（比出终版快，同样走完 配音→渲染→合成 全链路）
         // CANVAS_FINAL=1 → 点「出终版（横竖双版）」；否则点「预览」（快，先验版式）
@@ -282,6 +297,20 @@ const listTargets = () => new Promise((res) => {
         btn.click();
         return { clicked: true, label: btn.textContent.trim(), tpls: tpls.length, hasArea: !!area, hasTitle: !!title };
       }, { setter: setReactValue, final: process.env.CANVAS_FINAL === '1' });
+      // 素材：拦截文件选择器 → 直接把真实图片塞进 input（不走系统对话框）
+      if (process.env.CANVAS_SHOT_IMG) {
+        await send('Page.enable');   // 拦截文件选择器前必须先 enable
+        await send('Page.setInterceptFileChooserDialog', { enabled: true });
+        const chooser = waitEvent('Page.fileChooserOpened', 15000);
+        const p2 = await chooser;
+        if (p2 && p2.backendNodeId) {
+          await send('DOM.setFileInputFiles', { files: [process.env.CANVAS_SHOT_IMG], backendNodeId: p2.backendNodeId });
+          console.log('[iso] 已塞入素材:', process.env.CANVAS_SHOT_IMG);
+          await sleep(1200);
+        } else {
+          console.log('[iso] ⚠️ 没等到文件选择器事件（素材可能没进去）');
+        }
+      }
       console.log('[iso] 已提交任务:', JSON.stringify(started));
       const t0 = Date.now();
       // 等任务完成：出现 <video>（成片预览）或文本含"打开位置"
@@ -292,10 +321,12 @@ const listTargets = () => new Promise((res) => {
           const vids = document.querySelectorAll('.dshcv-video video');
           const text = (document.querySelector('.dshcv-root') || document.body).innerText.replace(/\s+/g, ' ');
           const err = (text.match(/\[E_[A-Z_]+\][^。]{0,60}/) || [])[0] || '';
-          return { videos: vids.length, err: err, tail: text.slice(-400) };
+          return { videos: vids.length, err: err, tail: text.slice(-1600) };
         }, {});
         // 每次都把面板真实文本打出来 —— 任务卡在哪儿只能从这里看
-        console.log('[iso] 等出片… ' + (i * 4) + 's  videos=' + st.videos + '  | ' + String(st.tail).slice(-260));
+        // 出现异常文本时把**整段**打出来（之前只截尾 260 字符，把错误开头截没了）
+        const looksErr = /at \w|TypeError|ReferenceError|Cannot read|is not a function|undefined is not/.test(String(st.tail));
+        console.log('[iso] 等出片… ' + (i * 4) + 's  videos=' + st.videos + '  | ' + String(st.tail).slice(looksErr ? -1500 : -240));
         if (st.videos > 0) { done = true; console.log('[iso] ✅ 出片完成，成片预览 ' + st.videos + ' 个 · 总耗时 ' + ((Date.now() - t0) / 1000).toFixed(0) + 's'); }
         if (st.err) { console.log('[iso] ⚠️ 面板报错: ' + st.err); break; }
       }

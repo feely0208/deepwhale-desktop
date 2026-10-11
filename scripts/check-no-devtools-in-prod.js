@@ -31,12 +31,55 @@ const FILES = [
   path.join(REPO, 'src', 'main', 'index.ts'),
 ];
 
+/**
+ * 把注释替换成**等长空格**后再匹配 —— 偏移量不变，受控区域的 index 判断照旧有效。
+ *
+ * ⚠️ 2026-10-11 修（判据本身的 bug，不是代码的 bug）：
+ *   原来直接在原文上 `matchAll(/role:\s*'forceReload'/)`，**把注释也算进去了**。
+ *   src/main/tray.ts 里有一句注释在解释「为什么**不**用 role: 'forceReload'」
+ *   （它的默认快捷键 ⇧⌘R 和我们那条冲突），结果被判成「生产包会暴露」。
+ *   于是从 2026-10-10 起三个平台的 CI 全红 —— 而代码一直是对的。
+ *
+ *   教训（对齐 release-selfcheck 第五节的排查顺序）：
+ *   **先确认判据对不对，再怀疑业务代码。** 判据错了会把正确的东西判成错的。
+ */
+function stripComments(src) {
+  const out = src.split('');
+  let i = 0;
+  const n = src.length;
+  let state = null; // 'line' | 'block' | "'" | '"' | '`'
+  while (i < n) {
+    const c = src[i];
+    const d = src[i + 1];
+    if (state === 'line') {
+      if (c === '\n') state = null;
+      else out[i] = ' ';
+      i++;
+    } else if (state === 'block') {
+      if (c === '*' && d === '/') { out[i] = ' '; out[i + 1] = ' '; i += 2; state = null; }
+      else { if (c !== '\n') out[i] = ' '; i++; }
+    } else if (state === "'" || state === '"' || state === '`') {
+      if (c === '\\') { i += 2; continue; }
+      if (c === state) state = null;
+      i++;
+    } else {
+      if (c === '/' && d === '/') { out[i] = ' '; out[i + 1] = ' '; i += 2; state = 'line'; }
+      else if (c === '/' && d === '*') { out[i] = ' '; out[i + 1] = ' '; i += 2; state = 'block'; }
+      else if (c === "'" || c === '"' || c === '`') { state = c; i++; }
+      else i++;
+    }
+  }
+  return out.join('');
+}
+
 const problems = [];
 console.log('== 生产包开发者工具入口检查 ==');
 
 for (const file of FILES) {
   if (!fs.existsSync(file)) continue;
-  const src = fs.readFileSync(file, 'utf8');
+  const raw = fs.readFileSync(file, 'utf8');
+  // 匹配只在「去掉注释」的副本上做；偏移量与 raw 一致，所以下面用 raw 取受控区域坐标也没问题
+  const src = stripComments(raw);
   const rel = path.relative(REPO, file);
 
   // 受允许的区域：DEV_MENU_ITEMS 那个三目表达式

@@ -1,8 +1,7 @@
 {
   "name": "@deepwhale-cn/dsh-shell-canvas",
-  "version": "1.0.1",
-  "description": "深鲸桌面：把深鲸画布（鲸幕）引擎做成侧边栏面板 —— 选模板、填参数、校验、预览、出横竖双版成片。渲染跑在独立子进程里（Chromium 或桌面端自带的 Electron OSR），界面不卡。",
-  "private": true,
+  "version": "1.0.5",
+  "description": "把一段文字变成能发的视频。贴一段稿子、选几张素材，点一下出横竖双版成片；稿子、素材、成片都在你自己的电脑上，不上传、不联网。免费版即可用，授权后去水印。",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -27,5 +26,24 @@
       "platform": "web",
       "immediately": true
     }
-  }
+  },
+  "keywords": [
+    "dsh",
+    "dsh插件",
+    "深鲸画布",
+    "video",
+    "text-to-video",
+    "canvas",
+    "whale",
+    "deepwhale"
+  ],
+  "license": "UNLICENSED",
+  "files": [
+    "lib/",
+    "engine/",
+    "locale/",
+    "icon.svg",
+    "cordis.patch.yml",
+    "README.md"
+  ]
 }

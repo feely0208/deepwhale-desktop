@@ -14,7 +14,17 @@
     "highlightColor": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
     "keywords": { "type": "array", "maxItems": 12, "items": { "type": "string", "minLength": 1, "maxLength": 16 } },
     "outline": { "type": "number", "minimum": 0, "maximum": 20 },
+    "outlineColor": {
+      "type": "string",
+      "description": "可选：描边颜色。不填沿用半透明黑。允许 #RRGGBB 或 rgb()/rgba()",
+      "pattern": "^(#[0-9a-fA-F]{6}|rgba?\\([0-9., %]+\\))$"
+    },
     "shadow": { "type": "boolean" },
+    "shadowColor": {
+      "type": "string",
+      "description": "可选：投影颜色。不填沿用半透明黑。允许 #RRGGBB 或 rgb()/rgba()",
+      "pattern": "^(#[0-9a-fA-F]{6}|rgba?\\([0-9., %]+\\))$"
+    },
     "align": { "enum": ["left", "center", "right"] },
     "anchor": { "enum": ["bottom", "center", "top"] },
     "safeBottom": { "type": "number", "minimum": 0, "description": "距底部安全区（避开平台 UI 遮挡）" },

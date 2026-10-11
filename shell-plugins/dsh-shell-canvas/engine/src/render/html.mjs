@@ -41,8 +41,9 @@ function layerStyle(node, width, height) {
 }
 
 /** 文本层：按语义宽度换行；行高/字距/描边都来自白名单 props */
-function renderText(node, width) {
+function renderText(node, ctx) {
   const p = node.props;
+  const width = ctx.width;
   const size = p.size;
   const align = p.align || 'left';
   const boxW = width - ((node.transform?.x || 0) * 2);
@@ -58,8 +59,10 @@ function renderText(node, width) {
     'white-space:pre-wrap',
     'word-break:break-word',
     p.letterSpacing ? `letter-spacing:${px(p.letterSpacing)}` : '',
-    p.outline ? `-webkit-text-stroke:${px(p.outline)} rgba(0,0,0,.6)` : '',
-    p.shadow ? 'text-shadow:0 4px 16px rgba(0,0,0,.45)' : '',
+    // 描边色可配（2026-10-10）：原来写死 rgba(0,0,0,.6)，"外框与字不同色"做不出来。
+    // 默认仍是半透明黑，保持既有模板的观感不变。
+    p.outline ? `-webkit-text-stroke:${px(p.outline)} ${p.outlineColor || 'rgba(0,0,0,.6)'}` : '',
+    p.shadow ? `text-shadow:0 4px 16px ${p.shadowColor || 'rgba(0,0,0,.45)'}` : '',
   ].filter(Boolean).join(';');
   return `<div id="layer-${esc(node.id)}" data-node="${esc(node.id)}" style="${style}">${esc(p.text)}</div>`;
 }
@@ -77,7 +80,9 @@ function renderImage(node, slots) {
     `opacity:${p.opacity ?? 1}`,
     p.blur ? `filter:blur(${px(p.blur)})` : '',
     'overflow:hidden',
-    'background:#0E2233',
+    // ⚠️ 占位底色**只在没有素材时**铺（见下面 no-data 分支）。
+    //    之前写在这里 = 所有图片节点都垫一层 #0E2233 —— fit:contain 的
+    //    **透明 PNG（logo/角标）会露出一块深色方板**。2026-10-10 实测踩到。
   ].filter(Boolean).join(';');
 
   const slotName = String(p.src).startsWith('user:') ? String(p.src).slice(5) : null;
@@ -100,7 +105,7 @@ function renderImage(node, slots) {
     return `<div id="layer-${esc(node.id)}" data-node="${esc(node.id)}" style="${style}"><img src="${first}" style="width:100%;height:100%;object-fit:${p.fit || 'cover'};display:block"></div>`;
   }
   // 没有素材时给一个确定性占位（而不是空白，避免"看起来渲成功了其实没内容"）
-  return `<div id="layer-${esc(node.id)}" data-node="${esc(node.id)}" style="${style};display:flex;align-items:center;justify-content:center;color:#3E6B85;font-size:28px;font-family:${fontStack('source-han-sans')}">素材槽位：${esc(slotName || p.src)}</div>`;
+  return `<div id="layer-${esc(node.id)}" data-node="${esc(node.id)}" style="${style};background:#0E2233;display:flex;align-items:center;justify-content:center;color:#3E6B85;font-size:28px;font-family:${fontStack('source-han-sans')}">素材槽位：${esc(slotName || p.src)}</div>`;
 }
 
 /**
@@ -132,8 +137,9 @@ function renderSubtitle(node, ctx) {
     `text-align:${p.align || 'center'}`,
     `line-height:${p.lineHeight || 1.35}`,
     'white-space:pre-wrap',
-    p.outline ? `-webkit-text-stroke:${px(p.outline)} rgba(0,0,0,.65)` : '',
-    p.shadow ? 'text-shadow:0 3px 12px rgba(0,0,0,.6)' : '',
+    // 与正文同一条规则：描边色/阴影色可配，默认维持原观感。
+    p.outline ? `-webkit-text-stroke:${px(p.outline)} ${p.outlineColor || 'rgba(0,0,0,.65)'}` : '',
+    p.shadow ? `text-shadow:0 3px 12px ${p.shadowColor || 'rgba(0,0,0,.6)'}` : '',
     'pointer-events:none',
   ].filter(Boolean).join(';');
 
@@ -169,7 +175,7 @@ function renderShape(node, ctx) {
 function renderNode(node, ctx) {
   if (node.visible === false) return '';
   switch (node.type) {
-    case 'text': return renderText(node, ctx.width);
+    case 'text': return renderText(node, ctx);
     case 'image': return renderImage(node, ctx.slots);
     case 'shape': return renderShape(node, ctx);
     case 'subtitle': return renderSubtitle(node, ctx);
@@ -182,6 +188,7 @@ ${FONT_PROBE_SCRIPT}
 function ease(name, p) {
   switch (name) {
     case 'linear': return p;
+    case 'ease-in': return p*p*p;
     case 'ease-in-out': return p < 0.5 ? 4*p*p*p : 1 - Math.pow(-2*p+2,3)/2;
     case 'spring': return 1 - Math.exp(-6*p)*Math.cos(10*p);
     case 'ease-out':
@@ -236,6 +243,12 @@ function setFrame(f) {
       } else if (name === 'blur-in') {
         blur = (1 - e) * (q.blur ?? 14);
         opacity = e;
+      } else if (name === 'blur-out') {
+        // 由实到虚：焦点拉走。和 blur-in 配成一对，就能做"景深式切换"——
+        // 前一个主体**原地**虚化淡出，后一个主体在同一位置由虚转实，
+        // 全程没有位移和缩放（不是"飞走"，是"换焦点"）。
+        blur = e * (q.blur ?? 14);
+        opacity = q.keepOpacity === true ? 1 : 1 - e;
       } else if (name === 'wipe-in') {
         // 按方向揭示（clip-path）：适合条带、强调线、图片入场
         // ⚠️ 这里在注入页面的 JS 字符串里，**不能用反引号**（会截断外层字符串，踩过）
@@ -256,9 +269,11 @@ function setFrame(f) {
         scale = 1 + Math.sin(p * Math.PI * 2 * (q.turns ?? 1)) * (q.amount ?? 0.04);
       } else if (name === 'ken-burns') {
         const s0 = q.fromScale ?? 1, s1 = q.toScale ?? 1;
-        scale = s0 + (s1 - s0) * p;
+        scale = s0 + (s1 - s0) * e;
         x = (q.panX ?? 0) * p;
         y = (q.panY ?? 0) * p;
+        // 可选的景深：边收边虚（toScale 允许到 0，就是"由大变小到没有"）
+        if (q.blur) blur = q.blur * e;
       }
     }
     el.style.visibility = 'visible';
@@ -321,6 +336,16 @@ window.__canvas = {
   warnings: [],
   ready: (async () => {
     if (document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch (e) {} }
+    // ⚠️ document.fonts.ready 只等"已经开始加载"的字体；@font-face 声明了但没被请求时
+    //    它会立刻 resolve，于是探测在字体到位前就测了宽度 → 误报"回退"。
+    //    这里对每个声明字族显式 fonts.load() 一次，把加载真正等到位（2026-10-10 实测踩到）。
+    //    ⚠️ 本段在注入页面的模板字符串里，注释里不能出现反引号。
+    if (document.fonts && document.fonts.load) {
+      try {
+        const stacks = Object.values(window.__canvasFontStacks || {});
+        await Promise.all(stacks.map((s) => document.fonts.load('64px ' + s).catch(() => {})));
+      } catch (e) {}
+    }
     const imgs = Array.from(document.images);
     await Promise.all(imgs.map(img => img.decode ? img.decode().catch(() => {}) : Promise.resolve()));
     try {

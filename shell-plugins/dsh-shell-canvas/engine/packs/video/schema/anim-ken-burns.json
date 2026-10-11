@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://spec.deepwhale.org.cn/canvas/packs/video/anim-ken-burns.schema.json",
-  "title": "video / ken-burns 动效参数（Ken Burns 缓推）",
+  "title": "video / ken-burns 动效参数（Ken Burns 缓推；也用于原地缩到没有）",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -12,8 +12,9 @@
     },
     "toScale": {
       "type": "number",
-      "minimum": 0.1,
-      "maximum": 10
+      "minimum": 0,
+      "maximum": 10,
+      "description": "允许 0：由大变小到没有（收束式退场），不必再靠 hold:false 硬消失"
     },
     "panX": {
       "type": "number",
@@ -24,6 +25,15 @@
       "type": "number",
       "minimum": -2000,
       "maximum": 2000
+    },
+    "blur": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 120,
+      "description": "随进度从 0 涨到该值（景深：边收边虚）"
+    },
+    "easing": {
+      "type": "string"
     }
   }
 }

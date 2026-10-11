@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.deepwhale.org.cn/canvas/packs/video/anim-blur-out.schema.json",
+  "title": "video / blur-out 动效参数（由实到虚：焦点拉走 / 景深退出）",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "easing": {
+      "type": "string"
+    },
+    "blur": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 120,
+      "description": "退出时达到的最大模糊半径（px）"
+    },
+    "keepOpacity": {
+      "type": "boolean",
+      "description": "true = 只虚化不淡出（默认 false：虚化同时淡出）"
+    }
+  }
+}

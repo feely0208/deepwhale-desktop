@@ -16,7 +16,7 @@ import { encodeVideo, probe } from '../encode.mjs';
 
 const MIME = {
   '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
-  '.webp': 'image/webp', '.gif': 'image/gif', '.mp4': 'video/mp4',
+  '.webp': 'image/webp', '.gif': 'image/gif', '.mp4': 'video/mp4', '.svg': 'image/svg+xml',
 };
 
 export function fileToDataUrl(p) {

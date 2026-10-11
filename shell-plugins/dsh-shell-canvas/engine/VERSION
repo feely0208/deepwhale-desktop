@@ -1,4 +1,4 @@
 source: deepwhale-canvas-cn
-version: fd4edfe-dirty
-commit: fd4edfe 2026-10-10 fix(模板): 补齐中文字段名 —— kicker→小标题、字幕（SRT）→字幕
-synced_at: 2026-10-10 10:59:12
+version: 9d265fc-dirty
+commit: 9d265fc 2026-10-10 feat(落版): 鲸鱼原地缩到没有 → 字弹出；文字改用矢量轮廓，彻底绕开字体加载
+synced_at: 2026-10-10 19:16:54

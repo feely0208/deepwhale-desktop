@@ -155,6 +155,15 @@
         "image",
         "shape"
       ]
+    },
+    {
+      "name": "blur-out",
+      "paramsSchema": "./schema/anim-blur-out.json",
+      "appliesTo": [
+        "text",
+        "image",
+        "shape"
+      ]
     }
   ],
   "fonts": [

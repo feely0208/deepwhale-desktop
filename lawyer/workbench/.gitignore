@@ -1,0 +1,22 @@
+# 深鲸·律师端 桌面端 · 工作台界面
+# （外层 legal-desktop 仓库已排除本目录，本仓库独立管理）
+
+# 系统噪音
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# 本地备份
+*.bak
+*.bak-*
+*.old
+*.orig
+
+# 日志
+*.log
+npm-debug.log*
+
+# 编辑器
+.idea/
+.vscode/

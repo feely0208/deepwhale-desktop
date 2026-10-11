@@ -35,6 +35,8 @@ Thumbs.db
 *.log
 npm-debug.log*
 
-# 嵌套仓库：workbench/ 是独立 git 仓库（有自己的历史），
-# 由它自己管版本；外层仓库不重复登记，避免变成脆弱的 submodule 引用。
-workbench/
+# ⚠️ 2026-10-11 修正：原先这里写着「workbench/ 是独立 git 仓库」并整目录忽略 ——
+# 但 workbench/.git 根本不存在，规则的前提不成立。
+# 后果（发布自检时发现）：index.html 引用的 js/docx.js、js/due-diligence.js、js/log.js
+# 从未进过 git —— 本地能跑（文件在磁盘上），**干净检出/CI 构建会缺这三个模块，直接坏**。
+# 现在改为不忽略整个目录，只忽略它自己的系统噪音（见 workbench/.gitignore）。

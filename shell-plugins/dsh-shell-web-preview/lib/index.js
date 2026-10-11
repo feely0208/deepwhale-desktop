@@ -1,16 +1,18 @@
 /**
- * dsh-shell-web-preview —— 宿主半边（占位）。
+ * dsh-shell-web-preview —— 宿主半边。
  *
- * ⚠️ 本包**不插入任何 loader 行**：它的组合层只是一条对官方 `ui-sidebar-browser` 的
- * `disabled` 覆盖（见 cordis.patch.yml）。所以这个文件在运行期**不会被 import**。
+ * 本插件**不需要宿主侧行为**：探测逻辑走 Electron 主进程的 IPC
+ * （window.dsh.probeFrameable，见 src/preload/preload.ts 与 src/main/index.ts
+ * 的 `webframe:probe`），真正的界面在客户端半边 lib/client.js。
  *
- * 留着它是一个防御：万一将来有人给它加一条 insert 行，模块形态已经是可挂载的
- * （`name` + `apply()`），不会重复踩 dsh-shell-brand-mark 那个
- * 「只导出 name → 挂不上 → 客户端清单扫不到 → 安静地不生效」的坑。
+ * 但宿主半边**必须存在且被挂载**，原因是个容易踩的坑（dsh-shell-brand-mark
+ * 就栽在这上面安静地不生效过两个月）：
+ *   @deepseek-ai/dsh-client-modules 只扫描**活动 loader 行**对应的包，
+ *   发现 `dsh.client` 声明后才把 `./client` 下发给浏览器。
+ * 所以 cordis.patch.yml 里必须有 `- insert:` 本包这一行，name 与 package.json 一致。
  */
-
 export const name = 'shell-web-preview';
 
 export function apply() {
-  // 无宿主侧行为。
+  // 无宿主侧行为：探测在主进程，界面在客户端半边。
 }

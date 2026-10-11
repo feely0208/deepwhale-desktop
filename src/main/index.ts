@@ -873,6 +873,65 @@ function registerIpc(): void {
   });
 
   // ---- 通用设置读写（设置页扩展用） ----
+  // ---- 右栏「网页预览」的兜底探测（见 src/preload/preload.ts 与随包插件 dsh-shell-web-preview）----
+  // 为什么必须放在主进程：渲染进程 fetch 跨域会被 CORS 挡、读 iframe 又被同源策略挡，
+  // **只有主进程能拿到真实响应头**。这里只判断"允许不允许被内嵌"，不代理内容、不留副本。
+  // 判据：X-Frame-Options 为 DENY/SAMEORIGIN，或 CSP frame-ancestors 为 'none'/'self'。
+  ipcMain.handle('webframe:probe', async (_e, rawUrl: string) => {
+    const url = String(rawUrl || '');
+    if (!/^https?:\/\//i.test(url)) return { frameable: true, unknown: true };
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 6000);
+    try {
+      const res = await fetch(url, {
+        method: 'GET',
+        redirect: 'follow',
+        signal: ctrl.signal,
+        headers: { 'user-agent': 'Mozilla/5.0 (compatible; DeepWhaleDesktop)' },
+      });
+      // 只要响应头，正文立刻丢弃 —— 别为了探一个头把整页资源拉下来。
+      try { void res.body?.cancel(); } catch { /* 忽略 */ }
+
+      const xfo = (res.headers.get('x-frame-options') || '').toLowerCase();
+      const csp = (res.headers.get('content-security-policy') || '').toLowerCase();
+      let frameable = true;
+      let reason = '';
+
+      if (xfo.includes('deny')) {
+        frameable = false;
+        reason = 'X-Frame-Options: DENY';
+      } else if (xfo.includes('sameorigin')) {
+        frameable = false;
+        reason = 'X-Frame-Options: SAMEORIGIN';
+      } else {
+        const m = csp.match(/frame-ancestors([^;]*)/);
+        if (m) {
+          const v = m[1].trim();
+          if (v.includes("'none'")) {
+            frameable = false;
+            reason = "CSP frame-ancestors 'none'";
+          } else if (v.includes("'self'")) {
+            frameable = false;
+            reason = "CSP frame-ancestors 'self'";
+          }
+        }
+      }
+      return { frameable, reason, status: res.status };
+    } catch {
+      // 探测失败（超时/网络/证书）→ **一律不拦**，交给 iframe 自己试。
+      // 宁可漏报一次空白，也不能把本来能打开的站点误判成打不开。
+      return { frameable: true, unknown: true };
+    } finally {
+      clearTimeout(timer);
+    }
+  });
+
+  /** 用系统默认浏览器打开链接（兜底提示里的按钮）。只放行 http/https，避免被当成任意协议执行器。 */
+  ipcMain.handle('shell:open-external', (_e, rawUrl: string) => {
+    const url = String(rawUrl || '');
+    if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
+  });
+
   ipcMain.handle('settings:get', (_e, key: string) => store.get(key as never) ?? null);
   ipcMain.on('settings:set', (_e, payload: { key: string; value: unknown }) => {
     if (!payload || typeof payload.key !== 'string') return;

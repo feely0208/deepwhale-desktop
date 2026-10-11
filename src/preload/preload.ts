@@ -75,6 +75,13 @@ contextBridge.exposeInMainWorld('dsh', {
   sessionAction: (payload: { kind: string; sessionId: string; title?: string }) =>
     ipcRenderer.invoke('session:action', payload),
 
+  // ---- 右栏「网页预览」的兜底（随包插件 @deepwhale-cn/dsh-shell-web-preview）----
+  // 站点禁止内嵌时（X-Frame-Options / CSP frame-ancestors），iframe 会静默失败成
+  // 一片空白。客户端读不到跨域响应头，所以由主进程探测并把结论回传。
+  probeFrameable: (url: string) => ipcRenderer.invoke('webframe:probe', url),
+  /** 用系统默认浏览器打开链接（兜底提示里的「用浏览器打开」） */
+  openExternal: (url: string) => ipcRenderer.invoke('shell:open-external', url),
+
   // ---- 文档预览的「打印」（PDF / 图片走主进程打印**文件本身**）----
   // 由随包客户端插件 @deepwhale-cn/dsh-shell-document-print 调用。
   // 渲染层只转交预览面板给出的路径，主进程自己校验它确实是本机一个可打印文件

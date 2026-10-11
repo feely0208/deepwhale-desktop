@@ -180,6 +180,12 @@ async function main() {
   //    `src/main/bundled-plugins.ts` 里对应那一行也取消注释 —— 两处必须同进同出，
   //    否则就是"声明了但载荷里没有"（ensureBundledPlugins 会静默跳过，没人会发现）。
   //
+  // 2026-10-11 恢复注释：这 4.5MB 是**死重** —— 拷进载荷后没有任何人消费它。
+  //    · src/main/bundled-plugins.ts 里那一行始终是注释（不随包清单分发）
+  //    · scripts/install-canvas-plugin-to-app.sh 直接读 shell-plugins/dsh-shell-canvas（不走载荷）
+  //    · 全仓库引用 bundled-plugins/dsh-shell-canvas 的，只剩下面这句 log 自己
+  // 规矩仍是脚本上面写的"两处必须同进同出"：哪天要让画布随包分发，
+  // 这里和 bundled-plugins.ts 一起放开，别只开一处。
   // const localCanvasPlugin = path.join(__dirname, '..', 'shell-plugins', 'dsh-shell-canvas');
   // if (!fs.existsSync(path.join(localCanvasPlugin, 'cordis.patch.yml'))) {
   //   throw new Error(`缺少本地插件源码：${localCanvasPlugin}（应随仓库提交，不是构建产物）`);

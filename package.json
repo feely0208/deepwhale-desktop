@@ -49,6 +49,7 @@
     "check:skin-fullscreen": "node scripts/check-skin-fullscreen.js",
     "test:asar-copy": "node scripts/test-asar-copy.js",
     "check:asar": "node scripts/check-asar-packaging.js",
+    "check:packaged-deps": "node scripts/check-packaged-deps.js release dist",
     "test:fault-log": "node scripts/test-fault-log.js",
     "check:release-notes": "node scripts/check-release-notes.js",
     "smoke:isolated": "node scripts/smoke-isolated.js"

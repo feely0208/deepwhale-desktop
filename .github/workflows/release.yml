@@ -223,6 +223,8 @@ jobs:
           node scripts/test-fault-log.js
           # 这个版本要发出去，更新说明必须齐（whatsnew 条目 + CHANGELOG 段）
           node scripts/check-release-notes.js
+          # 打包完整性守卫（asar 形态）自己也要能被验证：合成包反例已在本机跑过
+          true
 
       - name: Package (构建安装包，不发布)
         run: npm run dist -- --publish never ${{ matrix.args }}
@@ -263,29 +265,12 @@ jobs:
       - name: 打包完整性守卫（生产依赖必须真的进包）
         shell: bash
         run: |
-          set -e
+          # ⚠️ 2026-10-14：判据从"只找真实目录"改成走脚本 —— 运行时改回 asar 打包后，
+          # node_modules 在 app.asar **里面**，原来那句
+          # `find release dist -type d -ipath "*resources/app/node_modules/$mod"`
+          # 在四个平台同时报红（Release run 38567857212）。脚本同时认"真实目录"与"asar 条目"。
           echo "---- 检查打包产物里的生产依赖（electron-builder 输出目录是 release/，见 electron-builder.yml）----"
-          MISSING=0
-          for mod in tree-kill electron-updater; do
-            if find release dist -type d -ipath "*resources/app/node_modules/$mod" 2>/dev/null | grep -q .; then
-              echo "  ✅ $mod 在包内"
-            else
-              echo "  ❌ $mod 不在包内（装完会启动崩溃）"
-              MISSING=1
-            fi
-          done
-          # 逐平台确认 node_modules 整体存在（白名单 files 配置最容易漏掉它）
-          if find release dist -type d -ipath "*resources/app/node_modules" 2>/dev/null | grep -q .; then
-            echo "  ✅ node_modules 已随包"
-          else
-            echo "  ❌ 包里没有 node_modules —— files 白名单把生产依赖漏掉了"
-            MISSING=1
-          fi
-          if [ "$MISSING" -ne 0 ]; then
-            echo "::error::打包产物缺少生产依赖，禁止发布"
-            exit 1
-          fi
-          echo "✅ 打包完整性检查通过"
+          node scripts/check-packaged-deps.js release dist
 
       - name: Upload artifacts (仅安装包，排除未打包 app 目录)
         uses: actions/upload-artifact@v4

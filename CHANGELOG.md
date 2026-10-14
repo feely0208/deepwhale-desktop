@@ -13,6 +13,33 @@
 >（App 内「本版更新内容」与官网同源）。本文件只记录对开发者有影响的变更；
 > 1.0.39~1.0.54 未逐条维护，**自 1.0.55 起恢复**。
 
+## [1.0.57] - 2026-10-15
+
+**紧急热修复：1.0.56 会让界面完全打不开**（用户实测：整页 `Failed to load plugins`）。
+
+### 根因
+`dsh-shell-web-preview/lib/client.js` 的 `factory` 在缺少 Electron 桥时会**提前 `return;`**
+（返回 undefined）。cordis 拿到 undefined 就判定"不是插件"并**整页失败** ——
+一个坏 bundle 让所有插件都加载不了，应用等于打不开。
+（浏览器打开 `127.0.0.1:3095` 时没有 `window.dsh` 桥 → 必中；Electron 窗口里有桥 →
+本机冒烟是绿的，所以问题只在真实浏览器/无桥宿主上暴露。修复本身 2026-10-15 04:47 已在工作区，
+但**没有进 v1.0.56 的构建** —— 这是这次事故的直接原因：修了没提交、提交了没进包。）
+
+### 修复
+- `shell-plugins/dsh-shell-web-preview/lib/client.js`：factory 现在一定会
+  `return module.exports`（原来的提前 return 移进 `apply()` 内部）。
+- **兜底（重要）**：`ensureBundledPlugins()` 在注入前自检每个插件的客户层 bundle，
+  不合格的**整个跳过**并把它从 profile 的 bundles 里摘掉 —— 以后一个坏插件最多自己不生效，
+  不会再拖垮整个界面（`clientBundleLoadable()`，无法读取时不拦）。
+- 新增离线守卫 `scripts/check-client-bundles.js`：所有 `*/lib/client.js` 必须能解析、
+  是 `__ModuleLoader__.load` 形态、factory 必须返回插件对象且导出 `apply`。
+  **用 v1.0.56 里那份坏文件当反例验证过会红**。已接进 release CI。
+
+### 发布侧处置
+- CDN 的 `latest*.yml` 与官网下载页**已回滚到 1.0.55**（避免更多用户装到 1.0.56）。
+- GitHub 上 `v1.0.56` 已标为 **Pre-release** 并取消 Latest（`v1.0.55` 重新成为 Latest）。
+- 用户侧的更新检查运行在壳（主进程）里、不依赖 Web 界面 —— 所以卡在 1.0.56 的用户仍能收到本次修复。
+
 ## [1.0.56] - 2026-10-14
 
 > 面向用户的说明见 `assets/whatsnew.json` 的 1.0.56 条目；这里只记对开发者有影响的变更。

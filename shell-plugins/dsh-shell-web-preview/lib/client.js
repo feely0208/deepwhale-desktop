@@ -31,142 +31,155 @@
 window.__ModuleLoader__.load({
   id: '@deepwhale-cn/dsh-shell-web-preview',
   factory: () => {
-    const bridge = window.dsh || {};
-    // 桥不在（例如非 Electron 宿主）→ 不介入，保持官方原样。
-    if (typeof bridge.probeFrameable !== 'function') return;
+    var module = { exports: {} };
+    var exports = module.exports;
+    Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
 
-    /** 同一个地址只探一次 */
-    const probes = new Map();
-    const attached = new WeakMap();
+    /** 不需要注入客户端服务：探测在主进程，这里只做界面兜底。 */
+    const inject = [];
 
-    function probe(url) {
-      if (probes.has(url)) return probes.get(url);
-      const p = bridge
-        .probeFrameable(url)
-        .catch(() => ({ frameable: true, unknown: true })); // 探测失败 → 不拦
-      probes.set(url, p);
-      return p;
-    }
+    function apply() {
+      const bridge = window.dsh || {};
+      // 桥不在（例如非 Electron 宿主）→ 不介入，保持官方原样。
+      if (typeof bridge.probeFrameable !== 'function') return;
 
-    const CSS = {
-      box: 'position:fixed;z-index:2147483000;display:none;box-sizing:border-box;'
-        + 'flex-direction:column;align-items:center;justify-content:center;gap:12px;'
-        + 'background:#0b1526;color:#e7f1ff;text-align:center;padding:24px;'
-        + 'font:14px/1.7 "PingFang SC","Microsoft YaHei","Segoe UI",sans-serif',
-      title: 'font-size:16px;font-weight:600',
-      desc: 'color:#9fb3cc;max-width:420px;font-size:13.5px',
-      btn: 'padding:9px 20px;border-radius:9px;border:1px solid rgba(120,180,255,.25);'
-        + 'background:#14A5B8;color:#04222b;font-weight:600;font-size:14px;cursor:pointer;'
-        + 'font-family:inherit',
-      hint: 'color:#6f8299;font-size:12px;max-width:420px;word-break:break-all',
-    };
+      /** 同一个地址只探一次 */
+      const probes = new Map();
+      const attached = new WeakMap();
 
-    function createOverlay(iframe) {
-      let url = '';
-      const box = document.createElement('div');
-      box.setAttribute('data-dsh-frame-blocked', '1');
-      box.style.cssText = CSS.box;
-
-      const title = document.createElement('div');
-      title.textContent = '这个网站不允许被内嵌预览';
-      title.style.cssText = CSS.title;
-
-      const desc = document.createElement('div');
-      desc.textContent = '它出于自身安全策略，拒绝了在应用内打开。'
-        + '换成浏览器访问就能正常显示。';
-      desc.style.cssText = CSS.desc;
-
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.textContent = '用浏览器打开';
-      btn.style.cssText = CSS.btn;
-      btn.addEventListener('click', () => {
-        if (url && typeof bridge.openExternal === 'function') bridge.openExternal(url);
-      });
-
-      const hint = document.createElement('div');
-      hint.style.cssText = CSS.hint;
-
-      box.appendChild(title);
-      box.appendChild(desc);
-      box.appendChild(btn);
-      box.appendChild(hint);
-      document.body.appendChild(box);
-
-      const rec = {
-        box, url: () => url,
-        setUrl: (u) => { url = u; hint.textContent = u; },
-        hide: () => { box.style.display = 'none'; },
-        show: () => { box.style.display = 'flex'; },
-        destroy: () => {
-          window.removeEventListener('scroll', rec.sync, true);
-          window.removeEventListener('resize', rec.sync);
-          box.remove();
-        },
-        sync: () => {
-          const r = iframe.getBoundingClientRect();
-          box.style.left = r.left + 'px';
-          box.style.top = r.top + 'px';
-          box.style.width = r.width + 'px';
-          box.style.height = r.height + 'px';
-        },
-      };
-      return rec;
-    }
-
-    function ensure(iframe) {
-      let rec = attached.get(iframe);
-      if (rec) return rec;
-      rec = createOverlay(iframe);
-      attached.set(iframe, rec);
-      // 用 capture 才能收到容器内部（非 window）的滚动
-      window.addEventListener('scroll', rec.sync, true);
-      window.addEventListener('resize', rec.sync);
-      return rec;
-    }
-
-    async function handle(iframe) {
-      const url = iframe.getAttribute('src') || iframe.src || '';
-      if (!/^https?:\/\//i.test(url)) return;
-      const verdict = await probe(url);
-      let rec = attached.get(iframe);
-      if (verdict && verdict.frameable === false) {
-        rec = ensure(iframe);
-        rec.setUrl(url);
-        rec.sync();
-        rec.show();
-      } else if (rec) {
-        rec.hide(); // 之前盖过、现在能内嵌（换地址了）→ 撤掉
+      function probe(url) {
+        if (probes.has(url)) return probes.get(url);
+        const p = bridge
+          .probeFrameable(url)
+          .catch(() => ({ frameable: true, unknown: true })); // 探测失败 → 不拦
+        probes.set(url, p);
+        return p;
       }
-    }
 
-    function watch(iframe) {
-      if (iframe.__dshWebPreviewWatched) return;
-      iframe.__dshWebPreviewWatched = true;
-      // 被拒绝时 Chromium 也会触发 load（装载的是错误页），所以这里挂 load 有效。
-      iframe.addEventListener('load', () => { void handle(iframe); });
-      void handle(iframe);
-    }
+      const CSS = {
+        box: 'position:fixed;z-index:2147483000;display:none;box-sizing:border-box;'
+          + 'flex-direction:column;align-items:center;justify-content:center;gap:12px;'
+          + 'background:#0b1526;color:#e7f1ff;text-align:center;padding:24px;'
+          + 'font:14px/1.7 "PingFang SC","Microsoft YaHei","Segoe UI",sans-serif',
+        title: 'font-size:16px;font-weight:600',
+        desc: 'color:#9fb3cc;max-width:420px;font-size:13.5px',
+        btn: 'padding:9px 20px;border-radius:9px;border:1px solid rgba(120,180,255,.25);'
+          + 'background:#14A5B8;color:#04222b;font-weight:600;font-size:14px;cursor:pointer;'
+          + 'font-family:inherit',
+        hint: 'color:#6f8299;font-size:12px;max-width:420px;word-break:break-all',
+      };
 
-    function scan(root) {
-      if (!root || root.nodeType !== 1) return;
-      if (root.tagName === 'IFRAME') watch(root);
-      else if (root.querySelectorAll) root.querySelectorAll('iframe').forEach(watch);
-    }
+      function createOverlay(iframe) {
+        let url = '';
+        const box = document.createElement('div');
+        box.setAttribute('data-dsh-frame-blocked', '1');
+        box.style.cssText = CSS.box;
 
-    document.querySelectorAll('iframe').forEach(watch);
+        const title = document.createElement('div');
+        title.textContent = '这个网站不允许被内嵌预览';
+        title.style.cssText = CSS.title;
 
-    // 官方是 SPA：iframe 出现/换地址都不刷新页面，所以靠 MutationObserver。
-    new MutationObserver((muts) => {
-      for (const m of muts) {
-        if (m.type === 'childList') {
-          m.addedNodes.forEach(scan);
-        } else if (m.type === 'attributes' && m.target.tagName === 'IFRAME') {
-          void handle(m.target);
+        const desc = document.createElement('div');
+        desc.textContent = '它出于自身安全策略，拒绝了在应用内打开。'
+          + '换成浏览器访问就能正常显示。';
+        desc.style.cssText = CSS.desc;
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.textContent = '用浏览器打开';
+        btn.style.cssText = CSS.btn;
+        btn.addEventListener('click', () => {
+          if (url && typeof bridge.openExternal === 'function') bridge.openExternal(url);
+        });
+
+        const hint = document.createElement('div');
+        hint.style.cssText = CSS.hint;
+
+        box.appendChild(title);
+        box.appendChild(desc);
+        box.appendChild(btn);
+        box.appendChild(hint);
+        document.body.appendChild(box);
+
+        const rec = {
+          box, url: () => url,
+          setUrl: (u) => { url = u; hint.textContent = u; },
+          hide: () => { box.style.display = 'none'; },
+          show: () => { box.style.display = 'flex'; },
+          destroy: () => {
+            window.removeEventListener('scroll', rec.sync, true);
+            window.removeEventListener('resize', rec.sync);
+            box.remove();
+          },
+          sync: () => {
+            const r = iframe.getBoundingClientRect();
+            box.style.left = r.left + 'px';
+            box.style.top = r.top + 'px';
+            box.style.width = r.width + 'px';
+            box.style.height = r.height + 'px';
+          },
+        };
+        return rec;
+      }
+
+      function ensure(iframe) {
+        let rec = attached.get(iframe);
+        if (rec) return rec;
+        rec = createOverlay(iframe);
+        attached.set(iframe, rec);
+        // 用 capture 才能收到容器内部（非 window）的滚动
+        window.addEventListener('scroll', rec.sync, true);
+        window.addEventListener('resize', rec.sync);
+        return rec;
+      }
+
+      async function handle(iframe) {
+        const url = iframe.getAttribute('src') || iframe.src || '';
+        if (!/^https?:\/\//i.test(url)) return;
+        const verdict = await probe(url);
+        let rec = attached.get(iframe);
+        if (verdict && verdict.frameable === false) {
+          rec = ensure(iframe);
+          rec.setUrl(url);
+          rec.sync();
+          rec.show();
+        } else if (rec) {
+          rec.hide(); // 之前盖过、现在能内嵌（换地址了）→ 撤掉
         }
       }
-    }).observe(document.documentElement, {
-      childList: true, subtree: true, attributes: true, attributeFilter: ['src'],
-    });
+
+      function watch(iframe) {
+        if (iframe.__dshWebPreviewWatched) return;
+        iframe.__dshWebPreviewWatched = true;
+        // 被拒绝时 Chromium 也会触发 load（装载的是错误页），所以这里挂 load 有效。
+        iframe.addEventListener('load', () => { void handle(iframe); });
+        void handle(iframe);
+      }
+
+      function scan(root) {
+        if (!root || root.nodeType !== 1) return;
+        if (root.tagName === 'IFRAME') watch(root);
+        else if (root.querySelectorAll) root.querySelectorAll('iframe').forEach(watch);
+      }
+
+      document.querySelectorAll('iframe').forEach(watch);
+
+      // 官方是 SPA：iframe 出现/换地址都不刷新页面，所以靠 MutationObserver。
+      new MutationObserver((muts) => {
+        for (const m of muts) {
+          if (m.type === 'childList') {
+            m.addedNodes.forEach(scan);
+          } else if (m.type === 'attributes' && m.target.tagName === 'IFRAME') {
+            void handle(m.target);
+          }
+        }
+      }).observe(document.documentElement, {
+        childList: true, subtree: true, attributes: true, attributeFilter: ['src'],
+      });
+    }
+
+    exports.inject = inject;
+    exports.apply = apply;
+    return module.exports;
   },
 });

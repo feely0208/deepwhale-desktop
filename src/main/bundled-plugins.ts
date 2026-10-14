@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import { profileDirOf } from './profile';
+import { writeFileAtomic } from './patch-heal';
 import * as path from 'path';
 import { DEV_REPO_ROOT } from './dsh-runtime';
 
@@ -216,6 +217,64 @@ function ensureProfileEntry(file: string, plugins: Array<{ name: string; dir: st
 }
 
 /**
+ * 客户端 bundle 是否"可加载"（2026-10-15 事故的兜底）。
+ *
+ * 事故：`dsh-shell-web-preview/lib/client.js` 的 `factory` 在缺少 Electron 桥时会提前
+ * `return;`（返回 undefined）→ cordis 报 `invalid plugin … received undefined` →
+ * **整页 Failed to load plugins**，应用等于打不开（用户实测：浏览器打开 3095 必崩）。
+ *
+ * 这里在注入**之前**做一次结构自检：不合格的插件**整个跳过**（不进 profile bundles），
+ * 宁可少一个插件，也不能让一个坏 bundle 把整个界面拖垮。
+ * 返回 true 表示"不拦"——包括"这个插件没有客户层 bundle"的情况。
+ */
+export function clientBundleLoadable(file: string): boolean {
+  try {
+    const src = fs.readFileSync(file, 'utf-8');
+    if (!src.includes('__ModuleLoader__.load')) return true; // 不是客户层 bundle，不拦
+    const factoryAt = src.indexOf('factory:');
+    if (factoryAt < 0) return false;
+    const tail = src.slice(factoryAt);
+    return /return\s+module\.exports\s*;/.test(tail) || /return\s+apply\s*;/.test(tail);
+  } catch {
+    return true; // 读不了就不在这里拦（缺文件由别的路径处理）
+  }
+}
+
+/** 把指定插件从 profile 的 dependencies/bundles 里摘掉（用于拦下坏插件后清残留） */
+function removeProfileEntries(file: string, names: string[]): boolean {
+  const current = readText(file);
+  if (current === null) return false;
+  let manifest: {
+    dependencies?: Record<string, string>;
+    dsh?: { profile?: { bundles?: string[] } };
+  };
+  try {
+    manifest = JSON.parse(current) as typeof manifest;
+  } catch {
+    return false;
+  }
+  const dependencies = { ...(manifest.dependencies ?? {}) };
+  const bundles = [...(manifest.dsh?.profile?.bundles ?? [])];
+  let changed = false;
+  for (const name of names) {
+    if (name in dependencies) {
+      delete dependencies[name];
+      changed = true;
+    }
+    const at = bundles.indexOf(name);
+    if (at >= 0) {
+      bundles.splice(at, 1);
+      changed = true;
+    }
+  }
+  if (!changed) return false;
+  manifest.dependencies = dependencies;
+  manifest.dsh = { ...(manifest.dsh ?? {}), profile: { ...(manifest.dsh?.profile ?? {}), bundles } };
+  writeFileAtomic(file, `${JSON.stringify(manifest, null, 2)}\n`);
+  return true;
+}
+
+/**
  * 幂等注入随包插件。
  *
  * @param home - 本应用专属的 DSH home。
@@ -224,9 +283,23 @@ function ensureProfileEntry(file: string, plugins: Array<{ name: string; dir: st
  */
 export function ensureBundledPlugins(home: string, payloadDir: string): BundledPluginsResult {
   // 载荷缺失就整体跳过：宁可少两个插件，也不要注入指向空目录的链接。
+  // ⚠️ 另外把"客户层 bundle 不合法"的插件也拒之门外（2026-10-15 事故）：
+  //    一个坏 bundle 会让整页 Failed to load plugins，比少一个插件严重得多。
+  const blocked: string[] = [];
   const available = BUNDLED_PLUGINS.filter((plugin) => {
     try {
-      return fs.existsSync(path.join(payloadDir, plugin.dir, 'cordis.patch.yml'));
+      const dir = path.join(payloadDir, plugin.dir);
+      if (!fs.existsSync(path.join(dir, 'cordis.patch.yml'))) return false;
+      const client = path.join(dir, 'lib', 'client.js');
+      if (fs.existsSync(client) && !clientBundleLoadable(client)) {
+        blocked.push(plugin.name);
+        console.error(
+          `[bundled] ⛔ 跳过插件 ${plugin.dir}：客户层 bundle 不合法（factory 没返回插件对象）` +
+            ' —— 注入它会让整个界面 Failed to load plugins',
+        );
+        return false;
+      }
+      return true;
     } catch {
       return false;
     }
@@ -259,6 +332,10 @@ export function ensureBundledPlugins(home: string, payloadDir: string): BundledP
         ) || changed;
     }
     changed = ensureProfileEntry(path.join(profileDir, 'package.json'), resolved) || changed;
+    // 老版本可能已经把坏插件注册进 profile 了 —— 必须摘掉，否则照样整页崩
+    if (blocked.length > 0) {
+      changed = removeProfileEntries(path.join(profileDir, 'package.json'), blocked) || changed;
+    }
   }
 
   return { changed, profilePending };

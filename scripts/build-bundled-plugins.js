@@ -235,6 +235,19 @@ async function main() {
   });
   console.log('[bundled-plugins]   → dsh-shell-video-preview（本地源码）');
 
+  // ── 闸门（2026-10-15 事故）：客户层 bundle 必须返回插件对象 ──────────────
+  //
+  // 为什么加在构建里：v1.0.56 发出去后用户打开是整页 `Failed to load plugins` ——
+  // 根因是 dsh-shell-web-preview 的 client.js factory 提前 bare return（返回 undefined）。
+  // 这个缺陷在开发态/带桥的 Electron 窗口里看不见，只有静态自检能拦。
+  {
+    const { execFileSync } = require('child_process');
+    execFileSync(process.execPath, [path.join(__dirname, 'check-client-bundles.js'), outDir], {
+      stdio: 'inherit',
+    });
+    console.log('[bundled-plugins]   → 客户层 bundle 自检通过');
+  }
+
   // ── 闸门：**清单里声明的每一个，载荷里都必须真的有** ──────────────────
   //
   // 为什么必须有这道闸门：`ensureBundledPlugins()` 是按"载荷目录里有没有

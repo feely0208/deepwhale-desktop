@@ -223,6 +223,8 @@ jobs:
           node scripts/test-fault-log.js
           # 这个版本要发出去，更新说明必须齐（whatsnew 条目 + CHANGELOG 段）
           node scripts/check-release-notes.js
+          # 客户层插件 bundle 必须返回插件对象（2026-10-15：一个坏 bundle 让整页崩）
+          node scripts/check-client-bundles.js shell-plugins bundled-plugins
 
       - name: Package (构建安装包，不发布)
         run: npm run dist -- --publish never ${{ matrix.args }}

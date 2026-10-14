@@ -22,7 +22,11 @@ const { execFileSync } = require('child_process');
 
 // ── 默认过滤：与官网 nginx 的约定保持一致 ─────────────────────────────
 // 桌面端 .zip 官网不提供（那是 electron-updater 在 macOS 上走 GitHub 用的），
-// 实测占同步总量的 29%。blockmap / latest*.yml 同理不需要落到官网。
+// 实测占同步总量的 29%。
+// ⚠️ 2026-10-14 更正：`latest*.yml` **必须**同步（更新清单，见 release.yml），
+//    `*.blockmap` **也要**同步 —— 差分更新靠它，缺了就会 403 退回全量下载。
+//    默认排除只是"给官网静态资源用"的保守默认；更新链路那条调用（release.yml）
+//    始终带 `--no-exclude` 并显式挑好文件。
 const DEFAULT_EXCLUDE = [
   /\.blockmap$/,
   // ⚠️ 2026-10-02 修：**不再排除 latest*.yml**。

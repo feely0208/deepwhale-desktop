@@ -61,6 +61,45 @@ try {
   asar = null;
 }
 
+/**
+ * 自己读 asar 的条目列表 —— **不依赖任何模块**（2026-10-14 Windows CI 失败后加的）。
+ *
+ * 为什么不用 `@electron/asar`：Windows 那次（run 38569021113）四平台里只有 Windows 报
+ * 「tree-kill / electron-updater / js-yaml 都不在包内」—— 说明 app.asar 找到了，
+ * 但依赖 `@electron/asar` 的那条路在那台机器上没走通（模块加载或行为差异），
+ * 而我把加载失败静默降级成了"查不到"→ 报了一个**看似合理其实错误**的结论。
+ * 打包守卫自己不能依赖第三方解析器：asar 的头格式是公开且极简的，
+ * 8 字节 pickle 头 + JSON 头（大小写在第 4 个 uint32），直接读就够了。
+ */
+function listAsarEntries(file) {
+  try {
+    const fd = fs.openSync(file, 'r');
+    try {
+      const head = Buffer.alloc(16);
+      fs.readSync(fd, head, 0, 16, 0);
+      const jsonSize = head.readUInt32LE(12);
+      if (jsonSize <= 0 || jsonSize > 64 * 1024 * 1024) return null;
+      const jsonBuf = Buffer.alloc(jsonSize);
+      fs.readSync(fd, jsonBuf, 0, jsonSize, 16);
+      const header = JSON.parse(jsonBuf.toString('utf8'));
+      const out = [];
+      const walk = (node, prefix) => {
+        for (const [name, child] of Object.entries(node.files || {})) {
+          const p = `${prefix}/${name}`;
+          if (child && child.files) walk(child, p);
+          else out.push(p);
+        }
+      };
+      walk(header, '');
+      return out;
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {
+    return null;
+  }
+}
+
 const problems = [];
 const found = { asarFiles: [], realNodeModules: [] };
 for (const root of roots) {
@@ -71,6 +110,13 @@ for (const root of roots) {
 
 if (found.asarFiles.length === 0 && found.realNodeModules.length === 0) {
   console.error('❌ 在 ' + roots.join(' / ') + ' 下既没找到 app.asar 也没找到 resources/app/node_modules');
+  for (const root of roots) {
+    try {
+      console.error('   ' + root + '/ 顶层：' + fs.readdirSync(root).slice(0, 12).join(', '));
+    } catch {
+      console.error('   ' + root + '/ 不存在或读不了');
+    }
+  }
   console.error('   —— 打包产物结构变了，请先确认 electron-builder 的输出位置（见 electron-builder.yml 的 directories.output）');
   process.exit(1);
 }
@@ -81,13 +127,26 @@ if (found.realNodeModules.length > 0) {
   console.log(`  找到 ${found.realNodeModules.length} 个真实 node_modules：${found.realNodeModules.map((f) => path.relative(process.cwd(), f)).join(', ')}`);
 }
 
-/** asar 里是否有 node_modules/<mod>/package.json */
+/**
+ * asar 里是否有 node_modules/<mod>/package.json。
+ * ⚠️ 解析失败必须**说出来**（写进 problems → 变成 CI 注释），
+ *    不能静默当成"这个依赖不在包里" —— 2026-10-14 Windows 那次就是被静默降级
+ *    报成"三个依赖都不在包内"，方向完全指错。
+ */
 function inAsar(mod) {
-  if (asar === null) return false;
+  const want = `/node_modules/${mod}/package.json`;
   for (const f of found.asarFiles) {
+    const entries = listAsarEntries(f);
+    if (entries !== null) {
+      if (entries.includes(want)) return true;
+      continue;
+    }
+    if (asar === null) {
+      problems.push(`无法解析 ${f} 的 asar 头（且 @electron/asar 不可用）—— 打包守卫自身失效，请人工确认`);
+      continue;
+    }
     try {
-      const entries = asar.listPackage(f);
-      if (entries.some((p) => p === `/node_modules/${mod}/package.json`)) return true;
+      if (asar.listPackage(f).includes(want)) return true;
     } catch (e) {
       problems.push(`读不了 ${f}: ${e.message}`);
     }

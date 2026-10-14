@@ -1,11 +1,16 @@
 #!/usr/bin/env node
 /**
- * 安装器配置守卫（2026-10-04）
+ * 安装器配置守卫（2026-10-04 建，2026-10-14 改判据）
  *
- * 为什么需要它：Windows 自动更新把用户安装搞没的那次事故，
- * 病根（oneClick:false + allowToChangeInstallationDirectory:true）**在待办里记了但没人拦**，
- * 结果自愈逻辑（依赖应用能启动）在下一次更严重的事故里完全失效。
- * 这个脚本把"不能再这样配"变成 CI 里会红的断言 —— 靠人记，靠不住。
+ * 它拦的是**同一类事故**：Windows 自动更新把用户的安装搞没。
+ *   · 2026-10-04 的形状：只开"向导可选目录"、不管更新目标 → 更新装到别的目录 +
+ *     旧安装被挪进 %TEMP%\old-install → 清一次临时目录，应用就"消失"。
+ *   · 当时的处置是退回 oneClick:true + 固定目录，代价是用户不能选目录（默认落
+ *     %LOCALAPPDATA%，没人找得到，还占系统盘）。
+ *   · 2026-10-14 用户要求把这个能力要回来 → 判据从"不许开"改成**"必须成对"**：
+ *     开了 allowToChangeInstallationDirectory，就必须能在 update-manager 里找到
+ *     win32 的 installDirectory 钉死；只开一半 = 直接红。
+ * 靠人记，靠不住 —— 所以这套关系必须在发布 CI 里可执行（npm run check:installer）。
  */
 const fs = require('fs');
 const path = require('path');
@@ -49,17 +54,39 @@ if (conf.appId !== FROZEN_APP_ID) {
 }
 
 const nsis = conf.nsis || {};
-if (nsis.oneClick !== true) {
+
+/**
+ * ── 2026-10-14：Windows 恢复「可自选安装目录」后的新不变量 ──
+ *
+ * 背景：2026-10-04 的事故是 `oneClick:false + allowToChangeInstallationDirectory:true`
+ * 单独出现 —— 能用**向导**装到任意目录，但**自动更新**仍走安装器默认目录 → 路径漂移、
+ * 旧安装被挪进 %TEMP%\old-install、清一次临时目录应用就"消失"。
+ *
+ * 现在允许开目录选择，是因为**更新的目标被钉死了**：
+ *   src/main/update-manager.ts 的 win32 分支设置 `installDirectory = dirname(exe)`，
+ *   NsisUpdater 会把它变成安装器的 `/D=<目录>`（electron-builder 的 NSIS 模板手动解析该参数），
+ *   更新于是永远装回"当前正在跑的目录"。
+ *
+ * 🔒 所以这里检查的是**成对关系**，不是单个值：
+ *    「可自选目录」开了 → 就必须能在 update-manager 里找到那个安装目录的钉死；
+ *    只开一半，或者只钉一半，都直接红（这正是 10-04 事故的形状）。
+ */
+if (nsis.oneClick !== false) {
   problems.push(
-    `nsis.oneClick = ${nsis.oneClick}（应为 true）\n` +
-      '  → 非一键安装（带向导）与 electron-updater 的静默自动更新不兼容，' +
-      '会把旧安装挪到 %TEMP%\\...\\old-install，%TEMP% 被清理后旧版本文件一并消失',
+    `nsis.oneClick = ${nsis.oneClick}（应为 false）\n` +
+      '  → 用户必须能看见并选择安装目录（默认落在 %LOCALAPPDATA% 里，没人找得到、还占系统盘）',
   );
 }
-if (nsis.allowToChangeInstallationDirectory === true) {
+if (nsis.allowToChangeInstallationDirectory !== true) {
   problems.push(
-    'nsis.allowToChangeInstallationDirectory = true\n' +
-      '  → 允许改安装目录会让自动更新后的路径漂移，必须为 false（固定默认目录）',
+    `nsis.allowToChangeInstallationDirectory = ${nsis.allowToChangeInstallationDirectory}（应为 true）\n` +
+      '  → 关掉它用户就只能装到默认目录（C 盘 AppData），这是用户明确要求修掉的问题',
+  );
+}
+if (nsis.allowElevation !== true) {
+  problems.push(
+    `nsis.allowElevation = ${nsis.allowElevation}（应为 true）\n` +
+      '  → 用户选到 Program Files 这类需要提权的目录时会失败（perMachine:false 下必须允许按需提权）',
   );
 }
 if (nsis.perMachine === true) {
@@ -69,10 +96,36 @@ if (nsis.deleteAppDataOnUninstall === true) {
   problems.push('nsis.deleteAppDataOnUninstall = true → 卸载会删用户数据（会话/密钥），必须为 false');
 }
 
+// ── 另一半：自动更新必须把安装目标钉在"当前正在运行的目录" ──
+// 静态检查（读源码文本），不是运行时验证：能在 CI 里拦住"只改了 yml 没改代码"。
+{
+  const updaterPath = path.join(__dirname, '..', 'src', 'main', 'update-manager.ts');
+  let updaterSrc = '';
+  try {
+    updaterSrc = fs.readFileSync(updaterPath, 'utf-8');
+  } catch {
+    problems.push(`读不到 ${updaterPath} —— 无法校验"更新安装目标已钉死"，守卫不能靠猜`);
+  }
+  if (updaterSrc !== '') {
+    const pinsWinDir = /process\.platform\s*===\s*'win32'/.test(updaterSrc) &&
+      /installDirectory\s*=/.test(updaterSrc);
+    if (!pinsWinDir) {
+      problems.push(
+        'src/main/update-manager.ts 里找不到 win32 分支的 `installDirectory = …`\n' +
+          '  → 光允许用户自选目录、不钉死更新目标 = 2026-10-04 那次「更新完应用不见了」的原形。\n' +
+          '  → 请在 UpdateManager.start() 里设：win32 时 installDirectory = dirname(app.getPath(\'exe\'))',
+      );
+    }
+  }
+}
+
 if (problems.length) {
   console.error('❌ 安装器配置不合规：\n');
   problems.forEach((p, i) => console.error(`  ${i + 1}. ${p}\n`));
   process.exitCode = 1;
 } else {
-  console.log('✅ 安装器配置合规：appId 未变 · oneClick=true · 固定目录 · 不删用户数据');
+  console.log(
+    '✅ 安装器配置合规：appId 未变 · 向导可选目录(oneClick=false + allowToChangeInstallationDirectory=true)' +
+      ' · 更新目标已钉死(installDirectory) · 不删用户数据',
+  );
 }

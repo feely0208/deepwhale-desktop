@@ -42,6 +42,7 @@ import type { UpdateState } from './update-manager';
 import { installCrashGuard, crashLogDir, appendCrashLog } from './crash-guard';
 import { repairWindowsShortcuts } from './windows-shortcut';
 import { healPatchFiles } from './patch-heal';
+import { healLegacyAgentPreset } from './preset-heal';
 import { registerLocalFilesIpc } from './localfiles';
 import { notesFor } from './whatsnew';
 import {
@@ -1209,6 +1210,18 @@ function registerIpc(): void {
     console.warn('[patch-heal] 自愈检查失败（不影响启动）:', e);
   }
 
+  // 旧 preset id 自愈（2026-10-14）：早期版本写进会话投影的 `legal` 在新花名册里不存在，
+  // Windows 升级用户会「新建会话建不了」。同样必须在拉起 DSH 之前改掉 —— DSH 起来的
+  // 那一刻就会按这个值去 roster 里找 preset。
+  try {
+    const presetHealed = healLegacyAgentPreset(legalModeHome(app.getPath('userData')));
+    if (presetHealed.healed.length) {
+      console.log('[preset-heal] 启动自愈完成：', presetHealed.healed.length, '个会话的 preset 已改写');
+    }
+  } catch (e) {
+    console.warn('[preset-heal] 自愈检查失败（不影响启动）:', e);
+  }
+
   // 关于面板（2026-10-05 用户：「后面不应该是 feely0208…权属应该是公司的」）：
   // 原来版权行来自 package.json 的 author（个人 GitHub 账号）→ 现在显式写成公司。
   // 1.0.54 计划：改用我们自己的品牌关于窗（辉光底 + 大肥鱼），见 1.0.54 待发布清单。
@@ -1238,6 +1251,15 @@ function registerIpc(): void {
     },
     onLater: () => {
       // 稍后：什么都不做（autoInstallOnAppQuit 已开启，退出时会装）
+    },
+    onDownloadNow: () => {
+      void updates?.downloadNow();
+    },
+    onStopDownload: () => {
+      updates?.stopDownload();
+    },
+    onSkipVersion: () => {
+      updates?.skipVersion();
     },
   });
   // 「这版改了什么」：给渲染层（设置页卡片）用
@@ -1366,10 +1388,17 @@ async function handleDshStartFailure(firstError: unknown): Promise<boolean> {
 
   for (;;) {
     const tail = service?.lastOutput() ?? '';
+    // 诊断行（2026-10-14）：这份日志是要用户发给我们看的，就必须自带能定性的字段 ——
+    // "等待就绪超时"这句话本身没有信息量（10-14 那两条失败里，DSH 其实已经把可服务的
+    // 地址打印出来了）。端口 / pid / 退出码 / 探测次数 / 是否见到地址行 / spawn 错误，全放进去。
+    const diag = service?.diagnostics?.() ?? '';
     const detail = [
       error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      diag ? `\n--- 诊断 ---\n${diag}` : '',
       tail ? `\n--- DSH 输出（末尾 20 行）---\n${tail}` : '',
     ].join('\n');
+    // 失败详情顺带进日志：用户点"查看日志"或反馈时，这两行是一手材料
+    console.error('[main] DSH 启动失败详情:', diag || '(无诊断)');
 
     // 记本地日志：每次都记，便于还原"重试了几次、每次什么原因"
     appendCrashLog({
@@ -1623,6 +1652,12 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
         }
       },
     });
+    // 子进程启动失败（命令写错 / Finder 启动找不到 npx 等）：这里必须有监听者 ——
+    // 一来把原因留在日志里，二来 ServiceManager 只在"有人听"时才 emit（EventEmitter 的
+    // `error` 事件没人听会直接抛，把主进程带走）。
+    service.on('error', (err) => {
+      console.error('[main] DSH 子进程启动错误（会由失败弹窗给出可操作选项）:', err);
+    });
     usage.start();
 
     // 先创建窗口并显示"正在启动 DSH"页面，DSH 在后台拉起——
@@ -1630,6 +1665,8 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
     mainWin = createMainWindow({
       port: store.get('port'),
       closeToTray: store.get('closeToTray'),
+      // 冒烟 + 隐藏开关：窗口不可见不可聚焦，但照常渲染与截图 —— 验证不打扰用户
+      hidden: SMOKE && process.env.DSH_DESKTOP_SMOKE_HIDDEN === '1',
       isQuitting: () => quitting,
       onPageReady,
       // 深链接（法律模式拉起律师端）失败时给出可操作提示，而不是静默无反应。
@@ -1923,6 +1960,16 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
           }
         },
        getWindow: () => (mainWin !== null && !mainWin.isDestroyed() ? mainWin : null),
+        // ★ 2026-10-14：发现新版本（还没下载）→ 立刻弹窗，让用户自己决定。
+        //   自动下载关掉之后，"发现"与"开始下载"分成两步；这一步是把选择权交给他：
+        //   「现在更新 / 停止更新 / 这个版本不再提醒」。
+        onUpdateAvailable: (version: string) => {
+          try {
+            void showUpdatePopup(version, { phase: 'available', percent: null });
+          } catch (e) {
+            console.warn('[update] 新版本弹窗失败（已忽略）:', e);
+          }
+        },
         // ★ 进度**采了必须显示出来**。
         //   原来这里没有接 onStateChange —— 下载进度被采到了、然后直接扔掉，
         //   用户点了「立即下载」之后只看得到一个弹窗，之后什么都没有。
@@ -2180,20 +2227,28 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
                   //    「.<hash>_overlay」（账号/设置全屏）与「.<hash>_onboardingOverlay」（引导层），
                   //    后者是大写 O。第一版用 indexOf('_overlay') 直接漏掉了引导层。
                   //    注意：这段在模板字符串里，注释里**不能出现反引号**。
-                  if (!sel || !/_overlay/i.test(sel)) continue;
+                  //    2026-10-14 扩了一类：右栏全屏（data-sidebar-right-panel=fullscreen）
+                  //    的面板自己没背景、它下面的列与预览 iframe 用这个 token 上色 ——
+                  //    只查 _overlay 的话，用户点 ⤢ 全屏时整片透底（"界面成一坨"）。
+                  if (!sel || !/(_overlay|data-sidebar-right-panel)/i.test(sel)) continue;
                   const bg = (r.style && r.style.getPropertyValue('background')) || '';
                   const bgi = (r.style && r.style.getPropertyValue('background-image')) || '';
                   if (/--dsw-alias-bg-base/.test(bg + ' ' + bgi)) basePainters.push({ sel: sel.slice(0, 80), bg: bg.slice(0, 80) });
                 }
               }
 
-              // 页面上真有这种浮层时，直接量它的实际底色
-              const live = [...document.querySelectorAll('[class*="_overlay"]')]
+              // 页面上真有这种面时，直接量它的实际底色。
+              // ⚠️ 2026-10-14：右栏全屏的面板是 position:absolute（不是 fixed），
+              //    所以这里两种定位都要收 —— 老写法只认 fixed，等于把新修的那类漏掉。
+              const live = [...document.querySelectorAll('[class*="_overlay"], [class*="_Overlay"], [data-sidebar-right-panel="fullscreen"]')]
                 .map((el) => {
                   const s = getComputedStyle(el);
-                  return { cls: String(el.className || '').slice(0, 60), bg: s.backgroundColor, pos: s.position };
+                  return { cls: String(el.className || el.getAttribute('data-sidebar-right-panel') || '').slice(0, 60), bg: s.backgroundColor, pos: s.position };
                 })
-                .filter((o) => o.pos === 'fixed' && o.bg && o.bg !== 'rgba(0, 0, 0, 0)');
+                .filter((o) => (o.pos === 'fixed' || o.pos === 'absolute') && o.bg && o.bg !== 'rgba(0, 0, 0, 0)');
+              // 这次冒烟到底有没有进入"右栏全屏"这个场景 —— 没进入就得如实说"未覆盖"，
+              // 不能把"没测到"当成"通过了"（我们在这上面栽过）。
+              const fullscreenPresent = document.querySelector('[data-sidebar-right-panel="fullscreen"]') !== null;
 
               // 关键探针：在**一个匹配 [class*="_overlay"] 的真实元素**上量 token。
               // 这正是原来那条断言想做但做错的事 —— 它用的类名匹配不到任何 CSS 规则，
@@ -2206,7 +2261,16 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
               const probeBg = getComputedStyle(probe).backgroundColor;
               probe.remove();
 
-              return JSON.stringify({ token, frameBg, basePainters, live, probeToken, probeBg });
+              // 右栏全屏子树里的 token（预览 iframe 靠它上色）—— 与上面同理，让探针真的命中。
+              const fsProbe = document.createElement('div');
+              fsProbe.setAttribute('data-sidebar-right-panel', 'fullscreen');
+              fsProbe.style.cssText = 'position:fixed;left:-9999px;top:0;width:4px;height:4px;';
+              document.body.appendChild(fsProbe);
+              const fsProbeToken = getComputedStyle(fsProbe).getPropertyValue('--dsw-alias-bg-base').trim();
+              const fsProbeBg = getComputedStyle(fsProbe).backgroundColor;
+              fsProbe.remove();
+
+              return JSON.stringify({ token, frameBg, basePainters, live, probeToken, probeBg, fsProbeToken, fsProbeBg, fullscreenPresent });
             })()`);
             console.log('[smoke] skin-token:', skinProbe);
             {
@@ -2216,6 +2280,9 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
                 basePainters?: { sel: string; bg: string }[];
                 live?: { cls: string; bg: string; pos: string }[];
                 probeToken?: string;
+                fsProbeToken?: string;
+                fsProbeBg?: string;
+                fullscreenPresent?: boolean;
               };
               // 皮肤底色按 1.0.47 标准（用户拍板）：**不对 token 本身做要求** ——
               // 47 的深色预设本来就是半透明底色，那是对的（辉光要靠它透出来）。
@@ -2259,6 +2326,28 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
                     ' 条；浮层子树内 token=' + String(sp.probeToken) +
                     '（正文层仍是 ' + sp.token + '，辉光不受影响）',
                 );
+              }
+
+              // ── 右栏全屏（2026-10-14 用户截图："最大化后界面成一坨"）──
+              // 断言"全屏面 + 全屏子树里的 token"都必须是实底；并**如实报告这次有没有覆盖到该场景**。
+              {
+                const fsAlpha = alphaOf(String(sp.fsProbeBg || ''));
+                const fsTokenAlpha = alphaOf(String(sp.fsProbeToken || ''));
+                if (fsAlpha < 1 || fsTokenAlpha < 1) {
+                  console.error(
+                    '[smoke] ❌ 右栏全屏不是实底：面板 bg=' + String(sp.fsProbeBg) +
+                      ' 子树 token=' + String(sp.fsProbeToken) +
+                      ' → 全屏时会透出下层会话正文"成一坨"',
+                  );
+                  process.exitCode = 1;
+                } else if (sp.fullscreenPresent === true) {
+                  console.log('[smoke] ✅ 右栏全屏：面板与子树 token 均为实底（本次实测到全屏状态）');
+                } else {
+                  console.log(
+                    '[smoke] ⚠️ 右栏全屏未覆盖：本次冒烟没有进入全屏（断言只验了 CSS 生效性，' +
+                      '真实全屏观感仍需人工过一眼）',
+                  );
+                }
               }
             }
 

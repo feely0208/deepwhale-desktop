@@ -34,20 +34,30 @@ files:
   # ⚠️ DSH 是**子进程 + ESM** 跑的，必须确认 Electron-as-Node 能从 asar 里 import ESM
   # （实测通过；普通 Node 不行，但我们用的是 Electron）。
   - dsh-runtime/**/*
-# ⚠️ 2026-10-02 改为 false：Office 预览（docx/xlsx/pptx）坏在 asar 上。
+# ── asar：2026-10-14 改回 true（用户要求：装得快、别占 C 盘）────────────────
 #
-#   libreoffice-kit 找引擎包用的是 require.resolve('<engine-pkg>/package.json')，
-#   拿到的是 **asar 逻辑路径**；Electron 在 ELECTRON_RUN_AS_NODE 模式下不做
-#   asar→unpacked 映射，于是 fs.statSync 返回 **0644（无执行位）**，
-#   引擎自检直接抛 `Installed LibreOfficeKit executable is not executable`，
-#   侧边栏只能显示「Office 预览不可用」，**日志里完全看不出原因**。
+# 2026-10-02 曾改成 false，当时的原因（原文保留在下面，别再踩一遍）：
+#   libreoffice-kit 用 require.resolve('<引擎包>/package.json') 找引擎，拿到的是
+#   **asar 逻辑路径**；Electron 在 ELECTRON_RUN_AS_NODE 下不做 asar→unpacked 映射，
+#   fs.statSync 出来没有执行位 → 引擎自检抛 `Installed LibreOfficeKit executable is not
+#   executable` → 侧边栏只显示「Office 预览不可用」，而日志里看不出原因。
 #
-#   实测：asar 路径 stat=644 ❌ ／ 真实路径 stat=755 ✅ ／ 真实目录下转换成功 ✅
-#   （asarUnpack 解决不了：解析出来仍是 asar 逻辑路径，已试过）
+# 现在为什么可以改回来（两条都已在**代码里**解决，不是"应该没事"）：
+#   ① 引擎不再直接从 asar 路径跑：`src/main/office-runtime.ts` 的 `materializeOfficeKit()`
+#      把 kit 连同依赖物化到 `<home>/office-runtime/kit/`（真实目录、带执行位），
+#      平台引擎包用软链指向 `app.asar.unpacked/...`（asarUnpack 里已列，见下）。
+#   ② 物化这一步**不能**用 fs.cpSync：2026-10-14 用合成 asar 在 Electron-as-Node 下实测,
+#      `fs.statSync` / `readFileSync` / `readdirSync` / 动态 import 都能读 asar，
+#      但 `fs.cpSync(asar 内路径 → 真实目录)` 会抛 `ENOENT, pkg not found in …/app.asar`。
+#      已改为 asar 安全的 `copyTree()`（readdir + readFile + writeFile）。
 #
-#   代价：安装/更新时多写约 26k 个文件（实测 +12 秒）、包体约 +15%。
-#   换来的是整个运行时按真实文件运行 —— 与开发态完全一致，原生引擎不再有暗坑。
-asar: false
+# 收益（yml 自己记录过的实测值）：散文件 26,444 个、写入 12.1 秒、495MB
+#   → 打进 asar：1 个文件、0.31 秒、431MB。Windows 上 Defender 逐个文件扫，
+#   这正是"安装拖到几分钟"的根因，也是用户抱怨占系统盘的一部分。
+#
+# ⚠️ 合入前必须跑**打包态冒烟**（CI 的 release/跟版流水线各一次）：Office 预览三件套、
+#    随包插件、13 个原生模块、语音转写都要确认没退化 —— 这类失败在开发态看不出来。
+asar: true
 npmRebuild: false
 # 原生模块不能从 asar 里 dlopen，必须解包成真实文件。
 # 实测整个运行时只有 13 个 .node，分布在下列包中；这里按包目录整体解包（比只解包
@@ -123,18 +133,36 @@ win:
   artifactName: DeepWhale-Desktop-${version}-${arch}-Setup.${ext}
 
 nsis:
-  # ⚠️ 2026-10-04 事故修复（Windows 用户自动更新后"整个应用消失"）：
-  #   原 oneClick:false + allowToChangeInstallationDirectory:true 是"带向导的安装器"，
-  #   与 electron-updater 的**静默自动更新**不兼容：更新会把旧安装挪到 %TEMP%\...\old-install，
-  #   新版本却装到另一个目录；一旦 %TEMP% 被系统/杀软清理，旧版本也没了 →
-  #   用户看到"连之前装好的版本都不见了"（数据在 %APPDATA%，不受影响）。
-  #   放大器：appId 曾改名（com.dsh.desktop → com.deepwhale.desktop）——NSIS 用 appId 拼
-  #   注册表键记安装目录，键一变就丢失"安装目录记忆"，永远回不到原目录。
-  #   → 改为 electron-builder 官方支持静默自动更新的形态：oneClick + 固定默认目录。
-  oneClick: true
+  # ── 2026-10-14 起：Windows 恢复「可自选安装目录」（用户要求：默认落 C 盘、
+  #    AppData 里没几个人找得到，还占系统盘）。为什么这次敢开，见下面两段。
+  #
+  # ⚠️ 先记住 2026-10-04 的事故（这次改动的约束来源）：
+  #   当时配的就是 oneClick:false + allowToChangeInstallationDirectory:true，结果
+  #   **自动更新后"整个应用消失"**：更新把旧安装挪到 %TEMP%\...\old-install，
+  #   新版本却装到**另一个目录**；%TEMP% 一被清理，旧版本也没了。
+  #   放大器是 appId 改过名 —— NSIS 用 appId 拼注册表键记安装目录，键一变就丢掉"目录记忆"。
+  #   → 当时的处置是退回 oneClick:true + 固定默认目录（把"目录漂移"这个病根压住了，
+  #     代价是用户再也不能选目录）。
+  #
+  # ✅ 现在为什么可以开：**更新的安装目标由我们自己钉死**，不再交给安装器的默认值。
+  #   electron-updater 的 NsisUpdater 支持 `installDirectory`，设了它就会给安装器加
+  #   `/D=<目录>`；而 electron-builder 的 NSIS 模板会**手动解析 `/D=`**
+  #   （templates/nsis/multiUser.nsh 的 GetDParameter），所以它在参数串里的位置不影响生效。
+  #   src/main/update-manager.ts 的 win32 分支已把该值设为 `dirname(app.getPath('exe'))`
+  #   = **当前正在运行的安装目录** → 更新永远装回原地：用户当初选 D 盘，就一直是 D 盘。
+  #   🔒 成对约束：`allowToChangeInstallationDirectory:true` 与「update-manager 里已钉
+  #      installDirectory」必须**同进同出**，由 scripts/check-installer-config.js 在
+  #      发布 CI 里强制（npm run check:installer）—— 谁单独改一边都会直接红。
+  oneClick: false
+  # 按用户安装（免管理员）；只有选到 Program Files 这类需要提权的目录时才提权。
   perMachine: false
-  allowElevation: false
-  allowToChangeInstallationDirectory: false
+  allowElevation: true
+  # ★ 用户可以自己选安装位置：**任意盘、任意目录**（不是"只能装 D 盘"）。
+  #   默认目录仍是 %LOCALAPPDATA%\Programs\deepwhale-desktop（C 盘用户目录，不动），
+  #   向导只是把路径**摆在眼前** —— 想换盘、换目录的直接改，不想改的一路下一步。
+  #   这是"找不到装在哪 / 占 C 盘"的正解。
+  allowToChangeInstallationDirectory: true
+  # 卸载绝不删用户数据（会话 / 密钥 / 插件都在 %APPDATA%）。
   deleteAppDataOnUninstall: false
   createDesktopShortcut: always
   createStartMenuShortcut: true

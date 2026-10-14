@@ -121,7 +121,55 @@ export function ensureWrapperNode(
 }
 
 /**
- * 往 profile patch 追加 office 两行（幂等）。
+ * 在【office 行块的范围里】把 node / cli / source 三个路径对齐到当前值。
+ *
+ * 纯函数、只做文本处理 —— 方便离线守卫直接测（见 scripts/test-office-row-heal.js）。
+ *
+ * 为什么要**三个都对齐**（2026-10-14 用户事故）：
+ *   Windows 升级用户报 `skill-office: Error: Invalid package …\resources\app.asar`
+ *   + `1 entry did not activate` → Word/Excel/PPT 三个技能**静默失效**。
+ *   根因：`cli:` 是 asar 时代（1.0.49 之前）写下的安装目录绝对路径；之后打进包的方式改成
+ *   `asar: false`，那个 app.asar 不复存在，而 Electron 的 fs 对含 app.asar 的路径直接抛
+ *   「Invalid package <归档根>」。旧代码**只在 `node:` 变化时才重写**，`cli:` 永远留着 →
+ *   老用户升级多少次都修不好。
+ *
+ * 范围限定：只在「出现 OFFICE_ROW_ID 的那一行」到「下一个顶层 `- ` 行」之间替换，
+ * 不能拿整份文件做 `^(\s*)cli:` —— 别人的块里也有同名 key。
+ */
+export function syncOfficeRowPaths(
+  text: string,
+  paths: { node: string; cli: string; source: string },
+): string {
+  const lines = text.split('\n');
+  const idIdx = lines.findIndex((l) => l.includes(OFFICE_ROW_ID));
+  if (idIdx < 0) return text;
+
+  let start = idIdx;
+  while (start > 0 && !/^-\s/.test(lines[start])) start -= 1; // 回退到本块顶层的 `- insert:`
+  let end = lines.length;
+  for (let i = idIdx + 1; i < lines.length; i += 1) {
+    if (/^-\s/.test(lines[i])) { end = i; break; }             // 下一个顶层块
+  }
+
+  const block = lines.slice(start, end).join('\n');
+  const setKey = (body: string, key: string, value: string): string => {
+    const quoted = JSON.stringify(value);
+    const re = new RegExp(`^(\\s*)${key}:(.*)$`, 'm');
+    if (re.test(body)) return body.replace(re, `$1${key}: ${quoted}`);
+    // 老格式里缺这个 key（理论上不会，但缺了就得补上 —— 否则这个能力仍然指向不存在的东西）
+    const configRe = /^(\s*)config:\s*$/m;
+    if (configRe.test(body)) return body.replace(configRe, `$1config:\n$1  ${key}: ${quoted}`);
+    return body;
+  };
+
+  const next =
+    setKey(setKey(setKey(block, 'node', paths.node), 'cli', paths.cli), 'source', paths.source);
+  if (next === block) return text; // 无需改动
+  return [...lines.slice(0, start), ...next.split('\n'), ...lines.slice(end)].join('\n');
+}
+
+/**
+ * 往 home 级 patch 写/修 office 两行（幂等，且会**自愈旧值**）。
  *
  * 与 legal-mode 一样自带一个独立的 `- insert:` 块，两者互不干扰。
  * 路径统一用 JSON 引号包裹 —— 既合法 YAML，又能容纳空格与反斜杠。
@@ -136,15 +184,10 @@ function ensureOfficePatchRows(
   // 不存在是常态（详见 legal-mode.ts 里同处说明）。
   const current = readText(file) ?? '';
   if (current.includes(OFFICE_ROW_ID)) {
-    // 行已存在 —— 但 `node:` 可能指向**旧位置**：老版本把包装脚本写在 App 包内
-    // （`<App>/Contents/Resources/office-runtime/bin/node`），而只读位置下那个文件
-    // 根本写不出来。路径变了就原地替换，否则老用户会一直踩这个坑。
-    const m = current.match(/^(\s*node:\s*)"([^"]*)"/m);
-    if (m && m[2] !== nodePath) {
-      const next = current.replace(/^(\s*node:\s*)"[^"]*"/m, `$1${JSON.stringify(nodePath)}`);
-      return writeIfChanged(file, next);
-    }
-    return false;
+    // 行已存在 → **三个路径都对齐到当前值**（历史教训：只对齐 node 会让 cli 里的
+    // asar 旧路径永远留着，office 技能对升级用户一直是哑的）。
+    const next = syncOfficeRowPaths(current, { node: nodePath, cli: cliPath, source: payloadDir });
+    return writeIfChanged(file, next);
   }
 
   const block = [
@@ -228,7 +271,7 @@ function materializeOfficeKit(
     if (!fs.existsSync(from)) return;
     try {
       fs.mkdirSync(path.dirname(to), { recursive: true });
-      fs.cpSync(from, to, { recursive: true, dereference: false, force: true });
+      copyTree(from, to);
     } catch (e) {
       console.warn('[office] 复制依赖失败:', name, e);
       return;
@@ -271,7 +314,8 @@ function materializeOfficeKit(
       } catch (e) {
         console.warn('[office] 引擎软链失败（退回复制）:', engine, e);
         try {
-          fs.cpSync(target, linkPath, { recursive: true, force: true });
+          // ⚠️ 这里也可能是 asar 源（引擎没解包时）→ 必须走 asar 安全的 copyTree，别用 fs.cpSync
+          copyTree(target, linkPath);
         } catch (e2) {
           console.warn('[office] 引擎复制也失败:', engine, e2);
         }
@@ -283,8 +327,56 @@ function materializeOfficeKit(
     return null;
   }
 
-  const realCli = path.join(kitRoot, ...cliRel);
+  // ⚠️ 必须落在 `node_modules/` 下（2026-10-14 修）：copyPackage 把包复制到
+  //    `<kit>/node_modules/<包名>`，而这里原来写成 `path.join(kitRoot, ...cliRel)`
+  //    —— 少了一层 `node_modules`，于是这个函数**永远返回 null**，物化结果被静默丢弃，
+  //    注入的 `cli` 一直是随包运行时里的那份（asar 时代就是 asar 里的路径）。
+  //    这正是「Office 三件套对升级用户静默失效」事故链条里被隐藏的一环：
+  //    物化明明成功了（kit 目录、.version、cli.js 都在），却从来没被用上。
+  const realCli = path.join(modulesDir, ...cliRel);
   return fs.existsSync(realCli) ? realCli : null;
+}
+
+/**
+ * 递归复制目录，**必须能在 asar 内工作**。
+ *
+ * 为什么不能用 `fs.cpSync`（2026-10-14 用合成 asar 在 Electron-as-Node 下实测）：
+ *   · `fs.statSync` / `fs.readFileSync` / `fs.readdirSync` / 动态 `import()` 读 asar 都正常；
+ *   · 但 `fs.cpSync(<asar 内路径> → 真实目录)` 直接抛
+ *     `ENOENT, pkg not found in …/app.asar` —— 它内部的路径解析不认 asar。
+ *   而 `materializeOfficeKit()` 正是要把 `libreoffice-kit` 及其依赖从随包运行时复制到
+ *   `<home>/office-runtime/kit/`（真实目录，Office 预览要用它）。所以运行时改回 asar 打包
+ *   之后，这一步只有"readdir + readFile + writeFile"这条自己写的路能走通；
+ *   不修的话表现是：物化失败 → office 行不注入 → **Office 三件套静默消失**。
+ *
+ * 源是真实目录时仍走 cpSync（快，且保留文件模式与软链），只在 asar 源上用自写实现。
+ */
+export function copyTree(from: string, to: string): void {
+  if (!from.includes('app.asar')) {
+    fs.cpSync(from, to, { recursive: true, dereference: false, force: true });
+    return;
+  }
+  fs.mkdirSync(to, { recursive: true });
+  for (const name of fs.readdirSync(from)) {
+    const src = path.join(from, name);
+    const dst = path.join(to, name);
+    let isDir = false;
+    try {
+      isDir = fs.statSync(src).isDirectory();
+    } catch {
+      continue; // 读不到的条目（asar 里的软链等）直接跳过
+    }
+    if (isDir) {
+      copyTree(src, dst);
+      continue;
+    }
+    try {
+      fs.writeFileSync(dst, fs.readFileSync(src));
+    } catch (e) {
+      // asar 里的 `.bin/*` 软链读不出来是正常的 —— 我们要的是库文件本身
+      console.warn('[office] 跳过一个 asar 里读不出来的条目:', src, e);
+    }
+  }
 }
 
 export function ensureOfficeSetup(
@@ -301,24 +393,41 @@ export function ensureOfficeSetup(
   if (runtimeNodeModulesDir === undefined) {
     return { changed: false, profilePending: false };
   }
-  const asarCliPath = path.join(
+  // 随包运行时里到底有没有这份 kit —— 没有就整体跳过（不写任何行）。
+  // 注意：这里只作"能力存在性"的判断，**不拿这个路径去注入**（它是 asar 逻辑路径，
+  // 注入进去就是 2026-10-14 那个事故；真正注入的是下面物化到真实目录的那份）。
+  const kitCliInRuntime = path.join(
     runtimeNodeModulesDir,
     '@deepseek-ai',
     'libreoffice-kit',
     'lib',
     'cli.js',
   );
-  if (!fs.existsSync(asarCliPath)) {
+  if (!fs.existsSync(kitCliInRuntime)) {
     return { changed: false, profilePending: false };
   }
-  // ⚠️ 必须用"物化到真实目录"的那份 cli（asar 里的引擎没有执行位 → 打包版必挂）。
-  //    物化失败才退回 asar 路径（开发态/异常情况下至少还有一次机会）。
+  // ⚠️ 必须用"物化到真实目录"的那份 cli。
+  //    历史坑：asar 里的引擎没有执行位 → 打包版必挂（`Installed LibreOfficeKit
+  //    executable is not executable`）；而 asar 时代留下的路径在 `asar: false` 之后
+  //    更是**根本不存在**，DSH 侧直接报 `Invalid package <归档根>`、该行激活失败
+  //    → 用户的 Word/Excel/PPT 技能静默失效（2026-10-14 Windows 用户日志）。
+  //
+  //    所以：**物化失败就不写这一行**（宁可干净地少一个能力，也不要往用户配置里写一个
+  //    指向不存在文件的绝对路径 —— 那种错最难查，用户看到的只是"Office 用不了"）。
   // ⚠️ 别在这里直接用 `app`：CI 的离线守卫脚本用**纯 node** 跑这个模块，
   //    那里 `import { app } from 'electron'` 拿到的是字符串、没有 getVersion
   //    → 2026-10-04 就是把 1.0.49 的 CI 打挂在这个 TypeError 上。
   const version =
     appVersion ?? (typeof app?.getVersion === 'function' ? app.getVersion() : 'dev');
-  const cliPath = materializeOfficeKit(home, runtimeNodeModulesDir, version) ?? asarCliPath;
+  const materialized = materializeOfficeKit(home, runtimeNodeModulesDir, version);
+  if (materialized === null) {
+    console.warn(
+      '[office] 转换栈物化失败（libreoffice-kit 没能落到真实目录）—— 本次不写 office 行，' +
+        '避免注入一条指向 asar/不存在文件的路径；下次启动会自动重试',
+    );
+    return { changed: false, profilePending: false };
+  }
+  const cliPath = materialized;
 
   let changed = false;
   // 包装脚本写到【用户数据目录】，不写 App 包内（理由见 ensureWrapperNode 注释）
@@ -332,6 +441,21 @@ export function ensureOfficeSetup(
     return { changed: false, profilePending: false };
   }
   changed = wrapper.changed || changed;
+
+  // ── 写盘之前，把三个要注入的绝对路径逐个验一遍（存在性）──
+  // 为什么值得多这一步：DSH 侧的失败形态是「1 entry did not activate」这种**软警告**，
+  // 用户只看到"Office 用不了"，看不出是路径问题；而且会被记进我们要用户反馈的故障日志里。
+  // 与其注入一条指向不存在文件的路径，不如这次不注入、下次再试。
+  for (const [label, p] of [
+    ['node', wrapper.file],
+    ['cli', cliPath],
+    ['source', payloadDir],
+  ] as Array<[string, string]>) {
+    if (!fs.existsSync(p)) {
+      console.warn(`[office] 注入路径不存在（${label}: ${p}）—— 本次不写 office 行`);
+      return { changed, profilePending: false };
+    }
+  }
 
   // 【home 级】patch —— 与 legal-mode 同理：`<home>` 是壳自己建的，可以在拉起 DSH
   // **之前**写好；而 `<home>/profiles/web/` 是 DSH 首次启动才建的，写在那儿必然太晚。

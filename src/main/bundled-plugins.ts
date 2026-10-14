@@ -47,6 +47,11 @@ const BUNDLED_PLUGINS: BundledPlugin[] = [
   // 官方把它挂在 `profileContext.name === 'desktop'` 条件下，而同一个条件还开着
   // 官方遥测与产品埋点 —— 所以我们不改 profile 名，只单独覆盖这一条 disabled。
   { name: '@deepwhale-cn/dsh-shell-web-preview', dir: 'dsh-shell-web-preview' },
+  // 聊天/侧栏里的视频与音频直接内嵌预览（2026-10-10 修完 7 处硬伤、隔离实例验过）。
+  // 官方预览插件只认 text/css/html/pdf —— 用户点 mp4 只看到「该格式文件暂时无法预览」。
+  // ⚠️ 2026-10-10 当时只做了插件与验证脚本，**漏了这一步（随包清单）与构建脚本里的拷贝段**，
+  //    于是用户装到的包里根本没有它 —— 1.0.56 补齐（两处同进同出，见 build-bundled-plugins.js）。
+  { name: '@deepwhale-cn/dsh-shell-video-preview', dir: 'dsh-shell-video-preview' },
   // ⛔ 品牌标记（空白会话顶部的青色大肥鱼）**不进包** —— 见文件末尾那条说明
   //    （2026-10-08 用户决定：保留 DSH 官方原生的品牌标记）。原来这里是它的声明，已摘掉。
   // 「深鲸画布」面板（2026-10-07，S3）：选模板 → 填参数 → 校验 → 预览 → 出横竖双版成片。

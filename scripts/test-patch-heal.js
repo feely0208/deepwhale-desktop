@@ -26,6 +26,11 @@ fs.writeFileSync(homePatch, 'insert:\u0000\u0000\n  - id: x\n', 'utf-8');
 // ② profile 级 patch：中间夹空字节
 const profPatch = path.join(home, 'profiles', 'deepwhale', 'cordis.patch.yml');
 fs.writeFileSync(profPatch, '# fine\n\u0000insert: []\n', 'utf-8');
+
+// ②b 截断的半截 ASCII YAML（2026-10-14 扩的判据：没有空字节，但解析不了）
+fs.mkdirSync(path.join(home, 'profiles', 'web'), { recursive: true });
+const truncated = path.join(home, 'profiles', 'web', 'cordis.patch.yml');
+fs.writeFileSync(truncated, '- insert:\n    - id: skill-office\n      config:\n        cli: "C:/x', 'utf-8');
 // ③ 正常文件：不应被改动
 const good = path.join(home, 'profiles', 'deepwhale', 'good.yml');
 fs.writeFileSync(good, 'insert: []\n', 'utf-8');
@@ -33,8 +38,8 @@ fs.writeFileSync(good, 'insert: []\n', 'utf-8');
 const res = healPatchFiles(home);
 const problems = [];
 if (res.checked < 2) problems.push(`只检查到 ${res.checked} 个文件（应 >=2）`);
-if (res.healed.length !== 2) problems.push(`修复了 ${res.healed.length} 个文件（应为 2）`);
-for (const f of [homePatch, profPatch]) {
+if (res.healed.length !== 3) problems.push(`修复了 ${res.healed.length} 个文件（应为 3：空字节×2 + 截断×1）`);
+for (const f of [homePatch, profPatch, truncated]) {
   const t = fs.readFileSync(f, 'utf-8');
   if (t.includes('\u0000')) problems.push(`${path.basename(f)} 仍有空字节`);
   if (t.trim().length === 0) problems.push(`${path.basename(f)} 被清空了（应为最小合法文件或保留可用内容）`);

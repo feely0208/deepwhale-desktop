@@ -39,11 +39,45 @@ export function writeFileAtomic(file: string, content: string): void {
   }
 }
 
+/**
+ * 这个 patch 文本能不能被 YAML 解析？—— 判"写坏了"的第二种依据（2026-10-14 加）。
+ *
+ * 为什么需要：原来只认空字节/控制字符。但**写坏不只有空字节这一种**：
+ * 自动更新中途杀进程、盘满、杀软拦截，都可能留下**截断的半截 ASCII 文件** ——
+ * 那种文件没有空字节，却让 DSH 解析失败、应用同样起不来。判据必须在"对方那边"：
+ * 真的拿解析器读一遍。
+ *
+ * ⚠️ 判据只取"解析**抛错**"这一条，**不看解析结果是不是数组**：
+ *    万一某个 DSH 版本的 patch 允许非数组形态，我们也不能把好文件重置掉。
+ *    （解析得出来 = 不碰；解析不出来 = 备份并重置。）
+ * js-yaml 是可选依赖：读不到就退回"只看控制字符"，绝不让自愈本身成为启动失败的原因。
+ */
+function yamlParseFails(text: string): boolean {
+  // 全是注释/空白的文件不用解析 —— DSH 自己就是这么当"空 patch"处理的
+  const withoutComments = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l !== '' && !l.startsWith('#'))
+    .join('\n');
+  if (withoutComments === '') return false;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const yaml = require('js-yaml') as { load?: (s: string) => unknown };
+    if (typeof yaml.load !== 'function') return false;
+    yaml.load(text);
+    return false;
+  } catch (e) {
+    // 解析器不在（打包裁剪等）→ 不当成坏
+    if (e instanceof Error && /Cannot find module/.test(e.message)) return false;
+    return true;
+  }
+}
+
 /** 我们认为"这个 patch 文件已经不可用"的判据 */
 function looksBroken(text: string): boolean {
-  if (text.includes('\u0000')) return true;                 // 空字节（本次事故）
+  if (text.includes('\u0000')) return true;                 // 空字节（2026-10-04 那类事故）
   if (/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(text)) return true; // 其它控制字符
-  return false;
+  return yamlParseFails(text);                              // 截断/半截的文本（2026-10-14 加）
 }
 
 export interface PatchHealResult {
@@ -86,7 +120,7 @@ export function healPatchFiles(home: string): PatchHealResult {
 
     const cleaned = text.replace(/\u0000/g, '');
     const usable = cleaned.trim().length > 0 && !looksBroken(cleaned);
-    const next = usable ? cleaned : '# repaired: 原文件包含空字节，已重置（详见同目录 .corrupt-* 备份）\n';
+    const next = usable ? cleaned : '# repaired: 原文件不可解析（空字节/截断/非法 YAML），已重置（详见同目录 .corrupt-* 备份）\n';
     try {
       fs.writeFileSync(`${file}.corrupt-${Date.now()}`, text, 'utf-8'); // 留证据
       writeFileAtomic(file, next);

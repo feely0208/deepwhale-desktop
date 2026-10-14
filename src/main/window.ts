@@ -15,6 +15,13 @@ export interface MainWindowOptions {
    * 不提供时仅打 console。
    */
   onOpenExternalFailed?: (url: string, error: unknown) => void;
+  /**
+   * 隐藏窗口（冒烟/自动化用，2026-10-14）：窗口不可见、不可聚焦、不进任务栏，
+   * 但仍照常渲染 —— 这样"验证"不会把窗口弹到正在工作的用户脸上。
+   * ⚠️ `show: false` 只是初始不显示；`index.ts` 后续的 `win.show()` 仍会执行，
+   *    所以同时用 `opacity: 0` + `focusable: false` 保证它始终看不见、抢不到焦点。
+   */
+  hidden?: boolean;
 }
 
 /** 主窗口：加载本地 DSH Web UI */
@@ -28,9 +35,21 @@ export function createMainWindow(options: MainWindowOptions): BrowserWindow {
     autoHideMenuBar: true,
     icon: path.join(__dirname, '../assets/icons/icon.png'),
     backgroundColor: '#0f1115',
+    // 「跑测试但不打扰人」（2026-10-14）：冒烟会开窗口 —— 而用户正在工作时被弹窗打断
+    // 是不可接受的（他的原话：「搞得我什么都做不成」）。这个开关把窗口做成
+    // **不可见、不可聚焦**：仍然照常渲染与截图（capturePage 抓的是页面表面，
+    // 与窗口透明度无关），但不会出现在桌面上、也不会抢焦点。
+    ...(options.hidden === true
+      ? { opacity: 0, focusable: false, skipTaskbar: true, show: false }
+      : {}),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
+      // 隐藏模式（冒烟）必须关掉后台节流：窗口不可见时 Chromium 会把 rAF / 定时器降到
+      // 1 次/秒，React 的渲染就永远"没完成" —— 实测表现是冒烟报
+      // 「页面 45 秒内没有稳定下来（侧栏「设置」始终不可点）」且 `document.querySelector('nav')`
+      // 为 null（sidebar-probe nCands=0）。那是**测试方式的副作用**，不是产品缺陷。
+      backgroundThrottling: options.hidden === true ? false : undefined,
       preload: path.join(__dirname, '../preload/preload.js'),
     },
   });

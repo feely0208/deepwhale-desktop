@@ -13,6 +13,48 @@
 >（App 内「本版更新内容」与官网同源）。本文件只记录对开发者有影响的变更；
 > 1.0.39~1.0.54 未逐条维护，**自 1.0.55 起恢复**。
 
+## [1.0.56] - 2026-10-14
+
+> 面向用户的说明见 `assets/whatsnew.json` 的 1.0.56 条目；这里只记对开发者有影响的变更。
+> 本轮的主线是**「从旧版升级上来的用户」**：三个长期潜伏的遗留问题都做了启动自愈，
+> 并且每一条都配了能红的离线守卫（见 §工程）。
+
+### 新增
+- **Windows 安装目录可自选**（`oneClick:false` + `allowToChangeInstallationDirectory:true` + `allowElevation:true`），
+  同时把自动更新的安装目标钉死在当前安装目录（`installDirectory = dirname(app.getPath('exe'))`）
+  —— 2026-10-04「更新后应用消失」的正解，见 `scripts/check-installer-config.js` 的成对约束。
+- **更新由用户掌控**：`autoDownload=false` + 带 `CancellationToken` 的下载；
+  弹窗新增「现在更新 / 停止更新 / 这个版本不再提醒」，跳过记录持久化到 `<userData>/update-skip.json`。
+- **聊天与侧栏的视频/音频内嵌预览插件进随包清单**（`shell-plugins/dsh-shell-video-preview`，2026-10-10 只做了插件与验证，漏了声明与拷贝）。
+- 故障日志带 `版本 / 平台 / 安装目录`，并对 `token=` / `prefill_token=` / `Authorization` 打码。
+
+### 修复
+- **升级用户 Word/Excel/PPT 文档能力静默失效**：`dsh-home` 里 office 行的 `cli:` 仍是 asar 时代路径
+  （`asar: false` 之后该路径不存在，DSH 报 `Invalid package <归档根>` + `1 entry did not activate`）。
+  `ensureOfficePatchRows` 原先只对齐 `node:` —— 现在 `node/cli/source` 三者都按当前值重写。
+  **连带挖出一个真 bug**：`materializeOfficeKit()` 末尾 `path.join(kitRoot, ...cliRel)` 少了一层 `node_modules`
+  → 该函数永远返回 null，物化结果被静默丢弃（所以注入的一直是随包运行时那份）。
+- **右侧栏全屏透底/叠字**：我们的皮肤把 `--dsw-alias-bg-base` 打薄，而 1.0.55 的做实只覆盖 `[class*="_overlay"]`；
+  框架列与文档预览 iframe 不在里面。现在按 DSH 的稳定属性 `[data-sidebar-right-panel='fullscreen']` 做实
+  （面板本身 + 子树 token），停靠态仍保持半透明。
+- **「新建会话建不了」**：旧版写进会话投影的 preset id `legal` 在新花名册里不存在。
+  新增 `src/main/preset-heal.ts`，启动时把 `<home>/storages/session_projcache/sessions/*.json` 里的
+  `record.rows.agentPreset.val` 从 `legal` 改写成 `legal-mode`（原子写 + `.legal-bak` 备份）。
+- **启动失败误报与无信息**：`dsh web:` 行成为第二条就绪信号；失败文案按 bundled/自定义命令分叉并带诊断。
+  修掉两个真 bug：① `child.on('exit')` 把 `this.child` 置 null，导致"提前退出"永远判不到；
+  ② `emit('error')` 没有监听者会直接抛（壳里从来没监听）→ 现在有人听才 emit，spawn 错误也进输出尾巴。
+- **patch 自愈判据扩大**：从"只认空字节/控制字符"扩到"YAML 解析抛错"（截断的半截 ASCII 文件同样让应用起不来）。
+
+### 工程
+- **运行时打包改回 asar**（`asar: true`）：本机打包实测文件数 **17,925 → 4,109（-77%）**、`app.asar` 单文件 184.9MB。
+  前提是两条：引擎/kit 在 `asarUnpack` 里解包；`office-runtime.ts` 的物化改走 asar 安全的 `copyTree()`
+  （实测 `fs.cpSync` 读不了 asar：`statSync/readFileSync/readdirSync/import` 都行，唯独它抛 ENOENT）。
+- 新增离线守卫（全部接进 release CI，且每个都做过反例验证）：
+  `test-office-row-heal` · `test-service-readiness` · `test-preset-heal` · `test-asar-copy` ·
+  `test-fault-log` · `check-shell-plugins-shipped` · `check-update-cancel` · `check-skin-fullscreen` ·
+  `check-asar-packaging`；`check-installer-config` 的判据从"不许开目录选择"改成"必须成对"。
+- 冒烟皮肤探针扩到右栏全屏，并如实报告"本次有没有真的进入全屏"（没进入就说未覆盖，不把没测到当通过）。
+
 ## [1.0.55] - 2026-10-08
 
 ### 新增

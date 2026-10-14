@@ -95,6 +95,17 @@ export class ServiceManager extends EventEmitter {
   private stopping = false;
   private port: number;
   private recentOutput: string[] = [];
+  /** 是否已看到 DSH 自己打印的 `dsh web: http://…` 那行（= 它宣布"可服务"） */
+  private sawBanner = false;
+  /** 探测过几次（写进失败详情，替代"只能猜"） */
+  private probeAttempts = 0;
+  /** spawn 失败（ENOENT/EACCES 之类）—— 这种失败不该让用户等满整个超时 */
+  private spawnError: Error | null = null;
+  /**
+   * 最近一次子进程退出码。**必须单独记**：`child.on('exit')` 会把 `this.child` 置 null，
+   * 于是"提前退出"这件事在 `this.child.exitCode` 上永远读不到（老代码的隐性 bug）。
+   */
+  private lastExitCode: number | null = null;
 
   constructor(private command: string, private options: ServiceOptions) {
     super();
@@ -107,24 +118,103 @@ export class ServiceManager extends EventEmitter {
 
   /**
    * 确保 DSH Web UI 就绪。已运行则直接返回；否则拉起并轮询等待。
-   * @throws 超时未就绪时抛出，由调用方决定是否弹错误提示
+   * @throws 超时/提前退出/spawn 失败时抛出，由调用方决定是否弹错误提示
    */
   async ensureReady(): Promise<void> {
     if (this.stopping) throw new Error('正在停止，无法启动服务');
     const ready = await this.isPortReady();
     if (ready) return; // 复用已有实例
 
+    // ⚠️ 重试/二次启动前，先把上一个子进程收掉（2026-10-14 用户日志的形状）：
+    //    原来这里直接 spawn，于是"重试"会在**同一个端口上再拉一个 DSH** ——
+    //    后一个绑不上端口，前一个还在慢慢启动，日志里就会出现
+    //    "URL 已经打印出来了、壳却报启动超时"这种自相矛盾的现场。
+    await this.reapChildIfRunning();
+
+    this.sawBanner = false;
+    this.spawnError = null;
+    this.lastExitCode = null;
+    this.probeAttempts = 0;
     this.spawn();
-    const timeoutMs = this.options.timeoutMs ?? 60_000;
+
+    // 首次冷启动要过一遍杀软扫描（Windows 上尤其慢），60s 偏紧；90s 是"慢但还没死"的量级。
+    const timeoutMs = this.options.timeoutMs ?? 90_000;
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
-      if (this.child && this.child.exitCode !== null) {
-        throw new Error(`DSH 进程提前退出（exit code ${this.child.exitCode}）`);
+      // ⚠️ 这两个值由**异步回调**写入（child 的 error / exit 事件），
+      //    TS 的控制流分析看不到那层写入，会把字段窄化成 null → 这里显式断言。
+      const spawnErr = this.spawnError as Error | null;
+      if (spawnErr !== null) {
+        throw new Error(`无法启动 DSH：${spawnErr.message}`);
       }
+      // ⚠️ 必须以 `lastExitCode` 判"提前退出"：`child.on('exit')` 会把 `this.child` 置 null，
+      //    用 `this.child.exitCode` 判就**永远判不到**（这正是老代码里那句
+      //    「DSH 进程提前退出」从来没生效过、只能干等满超时的原因）。
+      const exitCode = this.lastExitCode as number | null;
+      if (exitCode !== null) {
+        throw new Error(`DSH 进程提前退出（exit code ${exitCode}）`);
+      }
+      this.probeAttempts += 1;
       if (await this.isPortReady()) return;
+      // 第二条就绪信号：DSH 已经打印了 `dsh web: http://…`（它宣布可服务的那一刻）。
+      // 2026-10-14 的日志里，这一行明明打出来了、壳却还在报"等待就绪超时" ——
+      // 因为壳只有"端口探测"一条判据。这里给它补几次确认的机会就返回。
+      if (this.sawBanner) {
+        for (let i = 0; i < 4; i += 1) {
+          if (await this.isPortReady()) return;
+          await sleep(300);
+        }
+      }
       await sleep(500);
     }
-    throw new Error('等待 DSH Web UI 就绪超时（请确认 Node/npx 已安装，或检查自定义命令）');
+    throw new Error(this.timeoutMessage());
+  }
+
+  /** 失败详情的诊断行（端口 / pid / 退出码 / 探测次数 / 是否见到 URL 行 / spawn 错误） */
+  diagnostics(): string {
+    const exitCode = this.lastExitCode as number | null;
+    const spawnErr = this.spawnError as Error | null;
+    return [
+      `端口 ${this.port}`,
+      `pid ${this.child?.pid ?? '无'}`,
+      `退出码 ${exitCode ?? '未退出'}`,
+      `探测 ${this.probeAttempts} 次`,
+      `见到 dsh web 地址行：${this.sawBanner ? '是' : '否'}`,
+      spawnErr !== null ? `spawn 错误：${spawnErr.message}` : '',
+    ]
+      .filter((s) => s !== '')
+      .join(' · ');
+  }
+
+  private timeoutMessage(): string {
+    // 文案分叉：随包运行时根本不需要 Node/npx，照抄那句只会把人带偏
+    const head =
+      this.options.bundledBin !== undefined
+        ? 'DSH 服务启动超时：随包运行时已拉起，但端口始终没有应答'
+        : 'DSH 服务启动超时（自定义启动命令）：请确认命令可执行、Node/npx 已安装';
+    return `${head}。${this.diagnostics()}`;
+  }
+
+  /**
+   * 收掉当前子进程（**不改 `stopping`**，因此之后还能再启动）。
+   * 与 `stop()` 的区别：那是"整机停止、不再启动"，这是"重试前清场"。
+   */
+  private async reapChildIfRunning(): Promise<void> {
+    const pid = this.child?.pid;
+    if (pid === undefined || this.child?.exitCode !== null) {
+      this.child = null;
+      return;
+    }
+    await killTree(pid, 'SIGTERM');
+    const deadline = Date.now() + 3000;
+    while (Date.now() < deadline) {
+      if (this.child?.exitCode != null) break;
+      await sleep(200);
+    }
+    if (this.child !== null && this.child.exitCode === null) {
+      await killTree(pid, 'SIGKILL');
+    }
+    this.child = null;
   }
 
   /** 停止并回收进程树（幂等） */
@@ -257,17 +347,28 @@ export class ServiceManager extends EventEmitter {
     child.stderr?.on('data', (chunk: Buffer) => this.handleOutput(chunk));
     child.on('exit', (code) => {
       console.log(`[service] DSH 进程退出（code ${code}）`);
+      // 先记退出码再置空 child —— 否则"提前退出"这条判据永远读不到（见 lastExitCode 的说明）
+      this.lastExitCode = code;
       this.child = null;
       this.options.onExit?.(code);
       this.emit('exit', code);
     });
     child.on('error', (err) => {
+      // ⚠️ 必须记进 recentOutput：以前只 console.error，于是"DSH 启动失败"弹窗里的
+      //    输出尾巴是**空的**（2026-10-04 09:54:55 那条日志就是），用户和我们都没线索。
+      this.spawnError = err;
+      this.recentOutput.push(`[spawn error] ${err.message}`);
       console.error(
         '[service] 启动 DSH 失败:',
         err,
         '（若从访达/Finder 启动找不到 npx，请在 settings.json 把 command 改为绝对路径，如 /usr/local/bin/npx @deepseek-ai/dsh web）'
       );
-      this.emit('error', err);
+      // ⚠️ 必须在有监听者时才 emit：EventEmitter 的 `error` 事件**没有监听者会直接抛**
+      //    （`Unhandled 'error' event`）→ 主进程崩掉。而这条路径正是"用户把启动命令写错 /
+      //    Finder 启动找不到 npx"的现场，2026-10-14 实测：壳里没有任何 `service.on('error')`。
+      //    失败信息本身已经通过 spawnError + recentOutput 交给 ensureReady 与失败弹窗了，
+      //    这里只做"有人要才发"。
+      if (this.listenerCount('error') > 0) this.emit('error', err);
     });
   }
 
@@ -276,6 +377,9 @@ export class ServiceManager extends EventEmitter {
     for (const line of text.split(/\r?\n/)) {
       const trimmed = line.trim();
       if (!trimmed) continue;
+      // DSH 打印 `dsh web: http://127.0.0.1:<port>/?token=…` 的那一刻，服务已经能应答 ——
+      // 把这行当**第二条就绪信号**（见 ensureReady 里的说明）。
+      if (/^dsh web:\s*https?:\/\//.test(trimmed)) this.sawBanner = true;
       this.recentOutput.push(trimmed);
       if (this.recentOutput.length > 50) this.recentOutput.shift();
       this.options.onLogLine?.(trimmed);

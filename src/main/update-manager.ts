@@ -57,6 +57,14 @@ export interface UpdateManagerOptions {
    */
   onDownloadStart?: () => void;
   /**
+   * 发现新版本、**还没开始下载**时回调一次（2026-10-14 起 Win/Linux 走这条路）。
+   *
+   * 为什么要单独一个：自动下载关掉之后，"发现新版本"与"开始下载"变成两件事 ——
+   * 弹窗要在**发现的那一刻**就弹出来，让用户看到「现在更新 / 这个版本不再提醒」，
+   * 而不是像以前那样"先悄悄下、下完才告诉他有新版本"。
+   */
+  onUpdateAvailable?: (version: string) => void;
+  /**
    * 是否启用自动检查。默认仅打包态启用。
    * 显式传 true 可在开发态测试（但 electron-updater 在未打包时不可用）。
    */
@@ -123,11 +131,16 @@ function macNeedsManualUpdate(): boolean {
 export class UpdateManager {
   private readonly getWindow: () => BrowserWindow | null;
   private readonly onStateChange: ((state: UpdateState) => void) | undefined;
+  private readonly onUpdateAvailable: ((version: string) => void) | undefined;
   private readonly onDownloadStart: (() => void) | undefined;
   /** 本次下载是否已经通知过（避免每个百分比都弹一次） */
   private downloadNotified = false;
   /** 正在下载时的取消令牌（用户点「取消更新」用它真正中断下载） */
   private downloadToken: CancellationToken | null = null;
+  /** 用户主动取消了本次下载（用于把 electron-updater 抛出的取消错误与真失败区分开） */
+  private cancelRequested = false;
+  /** 用户选了「这个版本不再提醒」的版本号（持久化，重启后依然不打扰） */
+  private skippedVersion: string | null = null;
 
   private readonly enabled: boolean;
   private state: UpdateState = { phase: 'idle' };
@@ -144,6 +157,7 @@ export class UpdateManager {
     this.getWindow = options.getWindow;
     this.onStateChange = options.onStateChange;
     this.onDownloadStart = options.onDownloadStart;
+    this.onUpdateAvailable = options.onUpdateAvailable;
     this.enabled = options.enabled ?? app.isPackaged;
   }
 
@@ -153,6 +167,23 @@ export class UpdateManager {
       return;
     }
     this.wireEvents();
+
+    // ── Windows 自动更新：把安装目标钉死在「当前正在运行的安装目录」──
+    //
+    // 为什么必须钉（2026-10-04 事故的正解）：一旦允许用户自选安装目录，更新若走安装器的
+    // 默认目录，就会把新版装到另一个位置、旧安装被挪进 %TEMP%\old-install，
+    // 用户看到的就是「更新完应用不见了」。NsisUpdater 支持 installDirectory，设了它就会给
+    // 安装器加 `/D=<目录>`（electron-builder 的 NSIS 模板会手动解析该参数），
+    // 于是"装到哪"由我们自己决定，与用户当初选的目录保持一致。
+    //
+    // ⚠️ 这句与 electron-builder.yml 的 `allowToChangeInstallationDirectory: true` 是
+    //    **成对约束**：scripts/check-installer-config.js 在发布 CI 里强制两者同进同出
+    //    （npm run check:installer）。谁单独改一边，那个守卫直接红。
+    if (process.platform === 'win32') {
+      (autoUpdater as unknown as { installDirectory?: string }).installDirectory = path.dirname(
+        app.getPath('exe'),
+      );
+    }
 
     // 更新源是自建 CDN（dl.deepwhale.org.cn）——原注释写成"本仓库的 GitHub Releases"，早已不是，2026-10-02 更正。
     //
@@ -165,7 +196,18 @@ export class UpdateManager {
     //   （autoDownload=false + 我们自己带 CancellationToken 下载，这样「取消」能真正中断）。
     //   但那需要同时接上弹窗里的「现在更新」按钮，否则会出现"永远下不了更新"。
     //   因此本版**保持原行为**，完整实现放到 1.0.54 一起做（见 1.0.54 待发布清单）。
-    autoUpdater.autoDownload = !macNeedsManualUpdate();
+    // 用户此前选过「这个版本不再提醒」→ 读回来，别再打扰（用户原话："很多人是不想更新的"）
+    this.loadSkippedVersion();
+
+    // ── 2026-10-14：不再让 electron-updater 自己偷偷下 ─────────────────────
+    //
+    // 用户实测（Win 1.0.54 → 1.0.55）：弹窗里点「取消」只关了窗口，主界面进度条继续走 ——
+    // 下载根本没停。原因是 `autoDownload = true` 时下载由 electron-updater 自己在后台做，
+    // **第三方没有任何取消接口**（只有 `downloadUpdate(token)` 那条路支持取消）。
+    // 现在改成：先问「现在更新 / 这个版本不再提醒」，用户点了才带 CancellationToken 下载，
+    // 于是「停止更新」是真的能停（见 stopDownload / downloadNow）。
+    // macOS 一向走自己的手动下载分支，不受影响。
+    autoUpdater.autoDownload = false;
     // 用户选择"稍后"时，退出应用顺带安装，避免反复打扰。
     // macOS 上不能这么做：那里根本装不上（Squirrel 的签名校验过不去，见 macNeedsManualUpdate），
     // 开着它只会在退出时白折腾一次，所以按平台关掉。
@@ -212,6 +254,113 @@ export class UpdateManager {
 
   getState(): UpdateState {
     return this.state;
+  }
+
+  /** 用户点了「这个版本不再提醒」的版本号（null = 没跳过任何版本） */
+  getSkippedVersion(): string | null {
+    return this.skippedVersion;
+  }
+
+  /**
+   * 用户点了「现在更新」：带 CancellationToken 开始下载。
+   *
+   * 这是 autoDownload=false 之后唯一的下载入口 —— 好处是**取消真的能取消**
+   * （electron-updater 只在这条路上支持取消）。
+   */
+  async downloadNow(): Promise<void> {
+    if (this.state.phase === 'downloading' || this.state.phase === 'downloaded') return;
+    const version = (this.state as { version?: string }).version ?? '';
+    if (version !== '' && version === this.skippedVersion) return;
+
+    this.cancelRequested = false;
+    this.downloadToken = new CancellationToken();
+    this.setState({ phase: 'downloading', message: '正在下载新版本…' });
+    try {
+      await autoUpdater.downloadUpdate(this.downloadToken);
+    } catch (error) {
+      if (this.cancelRequested) {
+        console.log('[update] 用户停止了下载（不是失败）');
+        return;
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('[update] 下载失败:', error);
+      this.setState({ phase: 'error', message });
+    } finally {
+      this.downloadToken = null;
+      this.cancelRequested = false;
+    }
+  }
+
+  /**
+   * 用户点了「停止更新」：真正中断下载。
+   *
+   * 之前这个按钮根本不存在（弹窗只有「稍后」+「立即重启」），而"点取消却继续下载"
+   * 就是这个缺口的用户可见表现。停完回到 available —— 用户随时可以再点「现在更新」。
+   */
+  stopDownload(): void {
+    const token = this.downloadToken;
+    // 只有"确实在下载"才置取消标记 —— 否则会把之后一次真的下载错误误判成"用户取消"
+    this.cancelRequested = token !== null;
+    try {
+      token?.cancel();
+    } catch (e) {
+      console.warn('[update] 取消令牌失败（继续按已停止处理）:', e);
+    }
+    this.downloadToken = null;
+    // 任务栏/Dock 上的进度条必须一起清掉，否则"停了但还在走"
+    try {
+      for (const w of BrowserWindow.getAllWindows()) w.setProgressBar(-1);
+    } catch {
+      /* 忽略 */
+    }
+    const version = (this.state as { version?: string }).version;
+    this.setState({
+      phase: version === undefined ? 'idle' : 'available',
+      ...(version === undefined ? {} : { version }),
+      message: '已停止下载，可稍后再更新',
+    });
+  }
+
+  /**
+   * 用户点了「这个版本不再提醒」：记下来（持久化），以后不再为这一版弹窗/下载。
+   *
+   * 用户原话：「很多人是不想更新的」—— 那就必须有一条真的不再打扰的出路，
+   * 而不是每次检查都问一遍。
+   */
+  skipVersion(): void {
+    const version = (this.state as { version?: string }).version;
+    if (version === undefined) return;
+    this.stopDownload();
+    this.skippedVersion = version;
+    this.persistSkippedVersion(version);
+    console.log(`[update] 用户选择跳过版本 ${version}（不再自动提示/下载）`);
+    this.setState({ phase: 'idle', message: `已跳过 ${version}` });
+  }
+
+  /** 跳过记录落盘的位置（与 settings 同一个 userData 目录） */
+  private skipFile(): string {
+    return path.join(app.getPath('userData'), 'update-skip.json');
+  }
+
+  private loadSkippedVersion(): void {
+    try {
+      const raw = fs.readFileSync(this.skipFile(), 'utf-8');
+      const doc = JSON.parse(raw) as { skipped?: unknown };
+      if (typeof doc.skipped === 'string' && doc.skipped !== '') {
+        this.skippedVersion = doc.skipped;
+        console.log(`[update] 已跳过版本 ${doc.skipped}（用户此前选择"不再提醒"）`);
+      }
+    } catch {
+      // 没有文件 / 读不动：都当作"没跳过"
+    }
+  }
+
+  private persistSkippedVersion(version: string): void {
+    try {
+      fs.writeFileSync(this.skipFile(), JSON.stringify({ skipped: version, at: new Date().toISOString() }), 'utf-8');
+    } catch (e) {
+      console.warn('[update] 跳过版本落盘失败（本次仍生效）:', e);
+    }
   }
 
   /**
@@ -397,6 +546,12 @@ export class UpdateManager {
         return;
       }
       // 自动检查/下载期间的错误只记日志，不打扰用户
+      // ⚠️ 用户主动「停止更新」时 electron-updater 也会走到这儿（取消表现为失败）——
+      //    那不是错误，别再报一次、也不要把状态打回 error（否则界面像"停止失败"）。
+      if (this.cancelRequested) {
+        console.log('[update] 下载被用户取消（不是错误）:', error.message);
+        return;
+      }
       console.error('[update] 更新出错:', error);
       this.setState({ phase: 'error', message: error.message });
       this.prompting = false;
@@ -514,19 +669,28 @@ export class UpdateManager {
         return;
       }
 
-      // ⚠️ 2026-10-02 改：**Windows / Linux 自动在后台下载**，不再弹「是否现在下载」。
+      // ── Windows / Linux：先问，再下（2026-10-14 改）─────────────────────────
       //
-      // 为什么：我们的用户大多是不懂技术的执业律师。对他们讲"新版本、新插件、MCP"
-      // 是鸡同鸭讲 —— 他们只关心"我不用管，重启一下就好了"。
-      // 原来那一步询问是纯负担：他既不知道 1.0.39 是什么，也不知道要不要现在下。
-      // 现在：后台静静下好（进度显示在托盘提示与任务栏进度条上、不打断使用），
-      // 下完只问一次「立即重启 / 退出时自动安装」—— 全程他只需要点一下。
-      // macOS 不走这条路（见上面的 macNeedsManualUpdate 分支）。
-      // autoDownload = true 时 electron-updater **已经在下载了**，这里不再调 downloadUpdate()，
-      // 只把状态摆出来给界面用（进度由 download-progress 推过来，下完由 update-downloaded 收尾）。
-      // 1.0.54 计划：这里将改为先问「现在更新 / 稍后」（配合 autoDownload=false 与取消令牌）。
-      // 本版保持原行为：Windows/Linux 后台自动下载，macOS 走手动分支。
-      this.setState({ phase: 'downloading', percent: 0, message: '正在后台下载新版本…' });
+      // 原来这里是"后台静静下好，下完只问一次重启"——出发点是用户不懂技术。
+      // 但用户实测反馈了两件事：①「点了取消，进度条还在走」②「很多人是不想更新的」。
+      // 所以改成：发现新版本 → 弹窗给「现在更新 / 停止更新 / 这个版本不再提醒」，
+      // 点了才带 CancellationToken 下载（这样停止是真停），不想更新可以真正跳过。
+      // 代价是用户要多点一下 —— 换来的是"更新这件事由他掌控"。
+      if (info.version === this.skippedVersion) {
+        console.log(`[update] 新版本 ${info.version} 已被用户标记"不再提醒"，跳过`);
+        this.setState({ phase: 'idle', message: `已跳过 ${info.version}` });
+        return;
+      }
+      this.setState({
+        phase: 'available',
+        version: info.version,
+        message: `发现新版本 ${info.version}，可随时更新`,
+      });
+      try {
+        this.onUpdateAvailable?.(info.version);
+      } catch (e) {
+        console.warn('[update] 新版本提示回调失败（已忽略）:', e);
+      }
     } finally {
       this.prompting = false;
     }

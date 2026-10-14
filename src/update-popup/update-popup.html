@@ -43,8 +43,17 @@
         </section>
 
         <footer class="foot">
-          <button class="ghost" id="btn-later">稍后</button>
-          <button class="primary" id="btn-restart" disabled>下载中…</button>
+          <!-- 2026-10-14：更新由用户掌控 —— 发现新版本时先给「现在更新」，
+               下载中可以「停止更新」（真停，不是只关窗），不想更新可以「这个版本不再提醒」。 -->
+          <div class="foot-alt">
+            <button class="ghost" id="btn-stop" hidden>停止更新</button>
+            <button class="ghost" id="btn-skip" hidden>这个版本不再提醒</button>
+            <button class="ghost" id="btn-later">稍后</button>
+          </div>
+          <div class="foot-main">
+            <button class="primary" id="btn-update" hidden>现在更新</button>
+            <button class="primary" id="btn-restart" disabled>下载中…</button>
+          </div>
         </footer>
         <div class="fineprint" id="fineprint">深鲸桌面 · 本地运行 · 不上传你的文件</div>
       </div>

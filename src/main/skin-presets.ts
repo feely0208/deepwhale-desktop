@@ -301,6 +301,22 @@ export function presetBackgroundCss(preset: string): string | null {
              —— 那恰好是用户 2026-10-01 提过的方向（「设置里面看有点透底」）。 */
       [class*="_overlay"], [class*="_Overlay"] { --dsw-alias-bg-base: #ffffff !important; }
 
+      /* ⚠️ 右侧栏「全屏」也必须是不透明的（2026-10-14 用户截图：最大化后界面"成一坨"）。
+         病根与上一段同类，但我们**漏掉了这一类面**：
+           · 全屏面板自己是布局容器，**没有任何背景**（position:absolute;top/bottom/right）；
+           · 它下面的列与预览面用 var(--dsw-alias-bg-base) 上色 ——
+             dsh-client-ui-layout 的 .…_frame / [data-platform=darwin] .…_centerCol /
+             [data-platform=darwin] .…_rightbarCol / [data-windows-titlebar] .…_centerCol、
+             文档预览 iframe 与浏览器侧栏的 .…_frame；
+           · 而 1.0.55 的做实只写了 [class*="_overlay"] → 框架列与预览 iframe **不在里面**，
+             全屏时底下会话正文整片透上来（浅色更像"一片白"）。
+         选择器用 DSH 自己的稳定属性 data-sidebar-right-panel="fullscreen"（面板 div 自己带），
+         不碰哈希类名；也**不改主界面的 token** —— 辉光在停靠（push）状态下照旧透出来。 */
+      [data-sidebar-right-panel='fullscreen'] {
+        background: #ffffff !important;
+        --dsw-alias-bg-base: #ffffff !important;
+      }
+
       /* ── 深色 ── */
       body[data-ds-dark-theme] {${glowBackgroundCss('dark')}
         /* 正文底半实：辉光透一点、文字压得住（全透会让辉光糊到文字上） */
@@ -320,6 +336,11 @@ export function presetBackgroundCss(preset: string): string | null {
          这样全屏时不会透出底下的会话文字。见上面浅色那段的说明。 */
       body[data-ds-dark-theme] [class*="_overlay"],
       body[data-ds-dark-theme] [class*="_Overlay"] { --dsw-alias-bg-base: #0b1018 !important; }
+      /* 深色同理：右栏全屏的面板与它内部用该 token 的面都做实（取值 = 本预设正文底 rgb(11,16,24)） */
+      body[data-ds-dark-theme] [data-sidebar-right-panel='fullscreen'] {
+        background: #0b1018 !important;
+        --dsw-alias-bg-base: #0b1018 !important;
+      }
     `;
 }
 

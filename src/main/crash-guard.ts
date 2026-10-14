@@ -62,17 +62,70 @@ export function crashLogPath(): string {
   return path.join(crashLogDir(), 'fault.log');
 }
 
-/** 在"查看日志"里展示给用户的一行格式 */
-function formatEntry(entry: CrashLogEntry): string {
+/**
+ * 把日志里的凭据打码（2026-10-14 加）。
+ *
+ * 为什么必须做：DSH 的访问地址长这样
+ *   `dsh web: http://127.0.0.1:3095/?token=lzhWxG3uN7xuLuZKGNffPMKh7JJjjqPlwNr9Gh6OBJA`
+ * 而它就出现在我们**要用户发给我们**的故障日志里（2026-10-14 那位 Windows 用户的
+ * fault.log 里就有两条带 token 的 URL，还有 `prefill_token=`）——
+ * 用户把日志发出来 = 把本机凭据一起发了。日志可以共享，凭据不行。
+ */
+export function redactSecrets(text: string): string {
+  return String(text)
+    .replace(/([?&]token=)[A-Za-z0-9_\-+/=.]+/gi, '$1<已打码>')
+    .replace(/(prefill_token=)[A-Za-z0-9_\-+/=.]+/gi, '$1<已打码>')
+    .replace(/(authorization:\s*bearer\s+)[A-Za-z0-9_\-+/=.]+/gi, '$1<已打码>');
+}
+
+/** 运行环境事实（版本 / 平台 / 安装目录）—— 每条日志都带上，否则跨版本回溯只能靠猜 */
+export function envFacts(): { version: string; platform: string; installDir: string } {
+  const anyApp = app as unknown as
+    | { getVersion?: () => string; getPath?: (name: 'exe') => string }
+    | undefined;
+  let version = 'unknown';
+  let installDir = 'unknown';
+  try {
+    version = typeof anyApp?.getVersion === 'function' ? anyApp.getVersion() : 'unknown';
+  } catch {
+    /* 非 Electron 环境（离线守卫脚本直接 require 本模块）*/
+  }
+  try {
+    installDir =
+      typeof anyApp?.getPath === 'function' ? path.dirname(anyApp.getPath('exe')) : 'unknown';
+  } catch {
+    /* 同上 */
+  }
+  return { version, platform: `${process.platform} ${process.arch}`, installDir };
+}
+
+/** 在"查看日志"里展示给用户的一段格式（含环境事实 + 凭据打码） */
+export function formatEntry(entry: CrashLogEntry): string {
+  const env = envFacts();
   return [
     '────────────────────────────────────────',
     `时间：${entry.at}`,
     `类别：${entry.kind}`,
     `概要：${entry.summary}`,
+    `版本：${env.version}　平台：${env.platform}`,
+    `安装目录：${env.installDir}`,
     '详情：',
-    entry.detail,
+    redactSecrets(entry.detail),
     '',
   ].join('\n');
+}
+
+/**
+ * 这个未处理拒绝是不是"导航被抢占"（ERR_ABORTED / (-3) loading）？
+ *
+ * 是的话**不记入故障日志**：它是正常的导航中止（同一时刻两次 loadURL 的结果），
+ * 不是缺陷。2026-10-14 那份用户日志里 5 条 unhandledRejection 全是这个 ——
+ * 把噪音写进"要给用户看的故障日志"，等于让真正的故障被淹没。
+ */
+export function isBenignNavigationAbort(reason: unknown): boolean {
+  const text =
+    reason instanceof Error ? `${reason.name}: ${reason.message}` : String(reason ?? '');
+  return /ERR_ABORTED/i.test(text) || /\(-3\)\s*loading/i.test(text);
 }
 
 /** 截断过大的日志，保留后半段（最新内容更重要） */
@@ -91,8 +144,10 @@ function trimIfTooLarge(file: string): void {
 
 /** 追加一条故障日志（本地） */
 export function appendCrashLog(entry: CrashLogEntry): void {
-  const file = crashLogPath();
+  // ⚠️ 连"算出日志路径"也要在 try 里：`app.getPath()` 在某些异常启动状态下会抛，
+  //    而这条路径是**崩溃处理链**的一部分 —— 记不下日志可以接受，把异常再抛出去不行。
   try {
+    const file = crashLogPath();
     fs.appendFileSync(file, formatEntry(entry), 'utf-8');
     trimIfTooLarge(file);
   } catch (error) {
@@ -167,7 +222,14 @@ export function installCrashGuard(options: CrashGuardOptions): void {
   });
 
   process.on('unhandledRejection', (reason) => {
-    // 未处理的 Promise 拒绝通常不致命，只记录，不打扰用户
+    // 未处理的 Promise 拒绝通常不致命，只记录，不打扰用户。
+    // ⚠️ 但"导航被抢占"（ERR_ABORTED / (-3) loading）不是缺陷 —— 它是同一时刻两次
+    //    loadURL 的正常结果（2026-10-14 用户日志里 5 条里全是它）。写进故障日志只会
+    //    把真故障淹没，用户发给我们看时也多一堆噪音。
+    if (isBenignNavigationAbort(reason)) {
+      console.warn('[crash-guard] 忽略一次正常的导航中止（ERR_ABORTED）');
+      return;
+    }
     record('unhandledRejection', '存在未处理的异步错误', reason);
   });
 

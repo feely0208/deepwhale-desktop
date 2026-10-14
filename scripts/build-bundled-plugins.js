@@ -217,6 +217,24 @@ async function main() {
   fs.cpSync(localWebPreviewPlugin, path.join(outDir, 'dsh-shell-web-preview'), { recursive: true });
   console.log('[bundled-plugins]   → dsh-shell-web-preview（本地源码）');
 
+  // 聊天/侧栏里的视频与音频内嵌预览（2026-10-14 补上这一环）。
+  // 为什么当初会漏：2026-10-10 修完插件的 7 处硬伤、在隔离实例里验过，但**没进随包清单、
+  // 也没进这个拷贝段** → 用户装到的包里没有它，等于没发（这就是"本机能用、用户没有"的分裂）。
+  // 与 src/main/bundled-plugins.ts 的声明**必须同进同出**：少一边会被下面的闸门拦下。
+  const localVideoPreviewPlugin = path.join(
+    __dirname,
+    '..',
+    'shell-plugins',
+    'dsh-shell-video-preview',
+  );
+  if (!fs.existsSync(path.join(localVideoPreviewPlugin, 'cordis.patch.yml'))) {
+    throw new Error(`缺少本地插件源码：${localVideoPreviewPlugin}（应随仓库提交，不是构建产物）`);
+  }
+  fs.cpSync(localVideoPreviewPlugin, path.join(outDir, 'dsh-shell-video-preview'), {
+    recursive: true,
+  });
+  console.log('[bundled-plugins]   → dsh-shell-video-preview（本地源码）');
+
   // ── 闸门：**清单里声明的每一个，载荷里都必须真的有** ──────────────────
   //
   // 为什么必须有这道闸门：`ensureBundledPlugins()` 是按"载荷目录里有没有

@@ -203,6 +203,26 @@ jobs:
           node scripts/check-legal-preset-roster.js
           # patch 文件损坏自愈（Windows 更新中途杀进程 → 空字节 → DSH 起不来）
           node scripts/test-patch-heal.js
+          # office 行的路径自愈（asar 时代写下的 cli: → 升级用户 Office 三件套静默失效）
+          node scripts/test-office-row-heal.js
+          # 写好并验过的壳插件必须真的进包（视频预览插件曾"源码在、没人声明"= 等于没发）
+          node scripts/check-shell-plugins-shipped.js
+          # DSH 起没起来的判据：地址行是第二信号 / 提前退出与 spawn 失败要立刻报 / 重试不留孤儿
+          node scripts/test-service-readiness.js
+          # 旧 preset id 自愈（早期写的 legal → 现行 legal-mode，升级用户"新建会话建不了"）
+          node scripts/test-preset-heal.js
+          # 更新必须能被用户停下（点取消却继续下载的接线回归）
+          node scripts/check-update-cancel.js
+          # 右栏全屏不能透底/白屏，同时不能把主界面辉光做没（2026-10-14 用户截图）
+          node scripts/check-skin-fullscreen.js
+          # asar 化之后，从 asar 里复制包必须走得通（Office 物化靠它）
+          node scripts/test-asar-copy.js
+          # asar 这一对约束：引擎/kit 必须解包 + 物化必须用 asar 安全的 copyTree
+          node scripts/check-asar-packaging.js
+          # 故障日志要能当证据：凭据打码 + 每条带版本/平台/安装目录 + 导航中止不记账
+          node scripts/test-fault-log.js
+          # 这个版本要发出去，更新说明必须齐（whatsnew 条目 + CHANGELOG 段）
+          node scripts/check-release-notes.js
 
       - name: Package (构建安装包，不发布)
         run: npm run dist -- --publish never ${{ matrix.args }}

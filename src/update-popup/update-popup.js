@@ -63,13 +63,31 @@
     renderItems(msg.items, msg.version);
   }
 
+  /** 按阶段决定哪些按钮出现（2026-10-14：更新由用户掌控） */
+  function showButtons(which) {
+    var byId = { update: 'btn-update', stop: 'btn-stop', skip: 'btn-skip', later: 'btn-later', restart: 'btn-restart' };
+    Object.keys(byId).forEach(function (k) {
+      var el = $(byId[k]);
+      if (!el) return;
+      el.hidden = which.indexOf(k) === -1;
+    });
+  }
+
   function applyState(st) {
     var phase = st && st.phase ? st.phase : 'idle';
     var pct = st && typeof st.percent === 'number' ? st.percent : null;
+    var msg = st && st.message ? st.message : '';
     var bar = document.querySelector('.bar');
     var progress = $('progress-wrap');
 
-    if (phase === 'downloaded') {
+    if (phase === 'available') {
+      // 发现新版本、还没下载：把选择权交给用户
+      progress.hidden = true;
+      $('eyebrow').textContent = '发现新版本';
+      $('status').textContent = msg || '可以现在更新，也可以稍后再说。';
+      $('subtitle').textContent = '更新由你决定：下载完成后才需要重启。';
+      showButtons(['update', 'skip', 'later']);
+    } else if (phase === 'downloaded') {
       progress.hidden = false;
       bar.classList.remove('indet');
       $('fill').style.width = '100%';
@@ -77,31 +95,37 @@
       $('speed').textContent = '';
       $('status').textContent = '下载完成，重启应用后生效。';
       $('eyebrow').textContent = '下载完成';
+      showButtons(['restart', 'later']);
       var b = $('btn-restart');
       b.disabled = false;
       b.textContent = '立即重启';
     } else if (phase === 'downloading') {
       progress.hidden = false;
-      var later2 = $('btn-later');
-      if (later2) later2.hidden = false;
       bar.classList.toggle('indet', pct === null);
       $('fill').style.width = (pct === null ? 0 : pct) + '%';
       $('pct').textContent = pct === null ? '—' : pct + '%';
       $('speed').textContent = pct === null ? '' : '已下载';
-      $('status').textContent = pct === null ? '正在连接更新源…' : '正在下载安装包，可继续使用，不打断当前工作。';
+      $('status').textContent =
+        pct === null ? '正在连接更新源…' : '正在下载安装包，可继续使用；不想更新就点「停止更新」。';
       $('eyebrow').textContent = '正在下载更新';
+      showButtons(['stop']);
       var b2 = $('btn-restart');
       b2.disabled = true;
       b2.textContent = '下载中…';
+    } else if (phase === 'error') {
+      progress.hidden = true;
+      $('eyebrow').textContent = '更新未完成';
+      $('status').textContent = msg || '下载没有完成，可以重试。';
+      showButtons(['update', 'skip', 'later']);
+      $('btn-update').textContent = '重试更新';
     } else {
       // 手动打开（帮助菜单）或更新已结束：只显示说明
       progress.hidden = true;
       $('eyebrow').textContent = '深鲸桌面更新';     // 别和下面「本版更新内容」重复
+      showButtons(['restart']);
       var b3 = $('btn-restart');
       b3.disabled = false;
       b3.textContent = '知道了';
-      var later = $('btn-later');
-      if (later) later.hidden = true;                // 「稍后」只在真下载时有意义
     }
   }
 
@@ -120,6 +144,10 @@
   }
   $('btn-restart').addEventListener('click', function () { send('restart'); });
   $('btn-later').addEventListener('click', function () { send('later'); });
+  // 2026-10-14：更新由用户掌控的三个动作
+  $('btn-update').addEventListener('click', function () { send('download'); });
+  $('btn-stop').addEventListener('click', function () { send('stop'); });
+  $('btn-skip').addEventListener('click', function () { send('skip'); });
   // —— 拖拽（保底实现，不依赖 -webkit-app-region）——
   // 用户实测：首次自动弹出的窗口用 CSS 拖拽区拖不动，再次打开的那个却可以 →
   // 干脆自己实现：按下头部（非按钮）→ 跟着鼠标设置窗位。

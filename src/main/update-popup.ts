@@ -208,6 +208,12 @@ export function closeUpdatePopup(): void {
 export interface UpdatePopupActions {
   onRestart: () => void;
   onLater: () => void;
+  /** 「现在更新」：开始下载（autoDownload=false 后唯一的下载入口） */
+  onDownloadNow?: () => void;
+  /** 「停止更新」：真正中断下载（2026-10-14 新增 —— 原来没有这条路） */
+  onStopDownload?: () => void;
+  /** 「这个版本不再提醒」：持久化跳过，之后不再为这一版弹窗 */
+  onSkipVersion?: () => void;
 }
 
 export function registerUpdatePopupIpc(actions: UpdatePopupActions): void {
@@ -230,6 +236,15 @@ export function registerUpdatePopupIpc(actions: UpdatePopupActions): void {
     } else if (action === 'later') {
       closeUpdatePopup();
       actions.onLater();
+    } else if (action === 'download') {
+      // ⚠️ **不关窗**：用户要看着进度（这一版的下载是"他点的"）
+      actions.onDownloadNow?.();
+    } else if (action === 'stop') {
+      // 同理不关窗：停下来之后要让他看到"已停止，可稍后再更新"
+      actions.onStopDownload?.();
+    } else if (action === 'skip') {
+      closeUpdatePopup();
+      actions.onSkipVersion?.();
     } else {
       closeUpdatePopup();
     }

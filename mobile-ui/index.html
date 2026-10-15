@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>深鲸 Mobile</title>
+<!--
+  深鲸 Mobile · 移动端界面骨架（手机端 1.1.0 · M1）
+  ─────────────────────────────────────────────────────────────────────
+  一次开发三端复用：iOS/Android 走 Capacitor 壳、鸿蒙走 ArkTS WebView 壳，
+  三端都用这一套"为手机设计"的界面（不再是把桌面网页塞进手机）。
+
+  按钮排布规则（**验收首位**，由 scripts/check-mobile-ui-layout.js 断言）：
+    1. 主操作（发送）固定在输入区**右下角**、≥48×48，始终在拇指热区（屏幕下方 40%）；
+    2. 同一行内的按钮**等高**（36px）、垂直居中（同一 y 中心 ±2px）；
+    3. 任何按钮文字**不许换行**（一行放不下就整行换成可横向滚动的 chip 行）；
+    4. 任何点按目标**不小于 44×44**（用 padding 撑开，视觉可以更小）；
+    5. 页面**不允许横向溢出**（scrollWidth ≤ clientWidth）；
+    6. 底部条/输入区必须垫 **safe-area**（刘海、home indicator、Android 手势条）。
+-->
+<style>
+  :root{
+    --bg:#0f1115; --panel:#161a21; --panel-2:#1b2029; --line:rgba(255,255,255,.08);
+    --fg:#e6e8ea; --fg-dim:#9aa4ad; --accent:#2ea6d6; --accent-press:#2589b3;
+    --danger:#e5534b; --ok:#3fb950;
+    --r-sm:8px; --r-md:12px; --r-lg:16px;
+    /* 触控尺寸：视觉可以小，热区不能小 */
+    --tap-min:44px; --btn-h:44px; --btn-h-primary:48px;
+    --safe-b:env(safe-area-inset-bottom,0px);
+    --safe-t:env(safe-area-inset-top,0px);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);
+    font:15px/1.5 -apple-system,system-ui,"PingFang SC","Noto Sans CJK SC",sans-serif;
+    -webkit-text-size-adjust:100%}
+  body{display:flex;flex-direction:column;overflow-x:hidden}
+  /* 手机端：整体宽度受控，桌面预览时居中成手机形状 */
+  .app{width:100%;max-width:520px;margin:0 auto;flex:1;display:flex;flex-direction:column;
+    min-height:0;padding-top:var(--safe-t)}
+
+  /* ── 顶部：工作区 chip + 连接状态 + 设置 ───────────────────────── */
+  .top{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line);
+    background:var(--panel);flex-wrap:nowrap}
+  .ws{display:inline-flex;align-items:center;gap:6px;height:var(--tap-min);padding:0 14px;
+    border:1px solid var(--line);border-radius:999px;background:var(--panel-2);font-size:13px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:46vw;flex:0 1 auto}
+  .dot{width:6px;height:6px;border-radius:50%;background:var(--ok);flex:0 0 auto}
+  .grow{flex:1 1 auto}
+  .icon-btn{width:var(--tap-min);height:var(--tap-min);display:inline-flex;align-items:center;
+    justify-content:center;border:0;background:transparent;color:var(--fg);border-radius:var(--r-sm);flex:0 0 auto}
+
+  /* ── 内容区 ─────────────────────────────────────────────────── */
+  .scroll{flex:1 1 auto;overflow-y:auto;overscroll-behavior:contain;min-height:0}
+  .pad{padding:12px}
+
+  /* 会话列表 */
+  .search{display:flex;align-items:center;gap:8px;height:40px;padding:0 12px;margin:12px;
+    border:1px solid var(--line);border-radius:var(--r-md);background:var(--panel);color:var(--fg-dim)}
+  .row-btn{display:flex;width:100%;align-items:center;gap:10px;min-height:56px;padding:10px 14px;
+    background:transparent;border:0;border-bottom:1px solid var(--line);color:var(--fg);text-align:left}
+  .row-btn .t{flex:1 1 auto;min-width:0}
+  .row-btn .title{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:15px}
+  .row-btn .sub{display:block;color:var(--fg-dim);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row-btn .time{color:var(--fg-dim);font-size:12px;flex:0 0 auto}
+  .new-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;height:var(--btn-h-primary);
+    margin:0 12px 12px;width:calc(100% - 24px);border:1px solid var(--line);border-radius:var(--r-md);
+    background:var(--panel);color:var(--fg);font-size:15px}
+
+  /* 会话页 */
+  .tabs{display:flex;gap:6px;padding:10px 12px}
+  .tab{flex:1 1 0;height:var(--btn-h);border:1px solid var(--line);border-radius:999px;
+    background:var(--panel);color:var(--fg-dim);font-size:13px;white-space:nowrap;min-width:0}
+  .tab[aria-selected="true"]{background:var(--panel-2);color:var(--fg);border-color:rgba(255,255,255,.16)}
+  .msg{margin:10px 12px;padding:10px 12px;border-radius:var(--r-md);background:var(--panel);
+    border:1px solid var(--line);word-break:break-word}
+  .msg.me{background:#15303c;border-color:transparent;margin-left:44px}
+  .meta{color:var(--fg-dim);font-size:12px;display:flex;gap:8px;flex-wrap:wrap}
+  pre{margin:8px 0 0;padding:10px;background:#0b0e13;border-radius:var(--r-sm);overflow-x:auto;font-size:12px}
+
+  /* 审批卡：两个按钮**等宽等高**（断言项） */
+  .approval{margin:10px 12px;padding:12px;border-radius:var(--r-md);border:1px solid rgba(229,83,75,.4);
+    background:rgba(229,83,75,.08)}
+  .approval .acts{display:flex;gap:10px;margin-top:10px}
+  .btn{height:var(--btn-h);padding:0 14px;border-radius:var(--r-sm);border:1px solid var(--line);
+    background:var(--panel-2);color:var(--fg);font-size:14px;white-space:nowrap;display:inline-flex;
+    align-items:center;justify-content:center;gap:6px}
+  .btn.grow{flex:1 1 0;min-width:0}
+  .btn.danger{border-color:rgba(229,83,75,.5);color:#ffb4b0;background:transparent}
+  /* 每个操作组里**最多一个主操作**：允许是主（实心），拒绝是次（描边） */
+  .btn.primary{background:var(--accent);border-color:transparent;color:#04222f;font-weight:600}
+
+  /* ── 底部输入区（主操作固定在右下） ───────────────────────────── */
+  .composer{border-top:1px solid var(--line);background:var(--panel);padding:8px 12px 8px}
+  .chips{display:flex;gap:8px;overflow-x:auto;padding-bottom:8px;scrollbar-width:none}
+  .chips::-webkit-scrollbar{display:none}
+  /* 触控尺寸直接落在元素上（44px）：不要用 ::after 撑热区 ——
+     父行是横向滚动容器（overflow-x:auto），会把负 inset 的伪元素裁掉（实测热区只剩 37px）。 */
+  .chip{height:var(--tap-min);padding:0 14px;border-radius:999px;border:1px solid var(--line);
+    background:var(--panel-2);color:var(--fg-dim);font-size:13px;white-space:nowrap;
+    display:inline-flex;align-items:center;gap:6px;flex:0 0 auto}
+  .input-row{display:flex;align-items:flex-end;gap:10px}
+  textarea{flex:1 1 auto;min-width:0;min-height:var(--btn-h-primary);max-height:120px;resize:none;
+    padding:10px 12px;border-radius:var(--r-md);border:1px solid var(--line);background:var(--panel-2);
+    color:var(--fg);font:inherit;font-size:14px}
+  .send{flex:0 0 auto;width:var(--btn-h-primary);height:var(--btn-h-primary);border-radius:50%;
+    border:0;background:var(--accent);color:#04222f;display:inline-flex;align-items:center;
+    justify-content:center;font-size:18px}
+  /* 与主操作同高（48）：同一行里「＋」和「发送」必须等高、居中对齐（断言项） */
+  .icon-44{width:var(--btn-h-primary);height:var(--btn-h-primary);flex:0 0 auto;border-radius:var(--r-sm);
+    border:1px solid var(--line);background:var(--panel-2);color:var(--fg-dim);
+    display:inline-flex;align-items:center;justify-content:center}
+
+  /* ── 底部标签栏（等宽 + safe-area） ─────────────────────────── */
+  .tabbar{display:flex;border-top:1px solid var(--line);background:var(--panel);
+    padding-bottom:var(--safe-b)}
+  .tabbar button{flex:1 1 0;min-width:0;height:56px;border:0;background:transparent;color:var(--fg-dim);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:11px;
+    white-space:nowrap}
+  .tabbar button[aria-current="page"]{color:var(--accent)}
+  .tabbar .ic{width:22px;height:22px;display:block}
+  /* 图标统一描边（**全局**）：只写在 .tabbar 里会让顶部图标继承默认 fill=none? 不 ——
+     实测顶部图标因没有这条规则被填成黑块（截图可见），所以规则必须对所有 .ic 生效。 */
+  .ic path,.ic circle,.ic rect{fill:none;stroke:currentColor;stroke-width:1.7;
+    stroke-linecap:round;stroke-linejoin:round}
+  /* chip 行右侧渐隐：提示"还能横向滚"（没有它，最后一个 chip 被裁掉像是坏了） */
+  .chips-wrap{position:relative}
+  .chips-wrap::after{content:"";position:absolute;top:0;right:0;bottom:8px;width:28px;pointer-events:none;
+    background:linear-gradient(to right,rgba(22,26,33,0),var(--panel))}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- 顶部 -->
+  <header class="top">
+    <button class="ws" id="ws-chip"><span class="dot"></span>未分组 · 本机</button>
+    <span class="grow"></span>
+    <button class="icon-btn" id="btn-refresh" aria-label="刷新"><svg class="ic" viewBox="0 0 24 24" width="20" height="20"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg></button>
+    <button class="icon-btn" id="btn-settings" aria-label="设置"><svg class="ic" viewBox="0 0 24 24" width="20" height="20"><circle cx="12" cy="12" r="3"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"/></svg></button>
+  </header>
+
+  <!-- 会话列表页 -->
+  <main class="scroll" id="page-list">
+    <div class="search">🔍 搜索会话内容</div>
+    <button class="new-btn" id="btn-new">＋ 新建会话</button>
+    <button class="row-btn" data-id="s1">
+      <span class="t"><span class="title">创建每日新闻定时推送任务</span><span class="sub">session-7929b8cc</span></span>
+      <span class="time">3 分钟前</span>
+    </button>
+    <button class="row-btn" data-id="s2">
+      <span class="t"><span class="title">服务器介绍</span><span class="sub">session-2f5899d4</span></span>
+      <span class="time">7 分钟前</span>
+    </button>
+    <button class="row-btn" data-id="s3">
+      <span class="t"><span class="title">验证活动页布局</span><span class="sub">session-d7609b3a</span></span>
+      <span class="time">2 周前</span>
+    </button>
+  </main>
+
+  <!-- 会话页（默认隐藏，供断言/联调切换） -->
+  <main class="scroll" id="page-chat" hidden>
+    <div class="tabs"><button class="icon-btn" id="btn-back" aria-label="返回"><svg class="ic" viewBox="0 0 24 24" width="20" height="20"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <button class="tab" id="tab-chat" aria-selected="true">对话</button>
+      <button class="tab" id="tab-trace" aria-selected="false">轨迹</button>
+    </div>
+    <div class="msg me">给我创建一个定时任务，明早 8 点推送当天科技与财经新闻。</div>
+    <div class="msg">
+      <div>定时任务已创建 ✅</div>
+      <pre>| 触发时间 | 2026-10-16 08:00 (Asia/Shanghai) |
+| 任务名   | 每日科技+财经新闻早报 |</pre>
+      <div class="meta"><span>耗时 3 秒</span><span>2 项上下文</span><span>1 次工具调用</span></div>
+    </div>
+    <div class="approval" id="approval-card">
+      <div>Agent 请求执行 <b>bash</b>：<code>rm -rf build/</code></div>
+      <div class="acts">
+        <button class="btn grow danger" id="btn-deny">拒绝</button>
+        <button class="btn grow primary" id="btn-allow">允许</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- 输入区 + 标签栏 -->
+  <div class="composer">
+    <div class="chips-wrap"><div class="chips" id="chips">
+      <button class="chip" id="chip-attach">📎 附件</button>
+      <button class="chip" id="chip-ws">未分组</button>
+      <button class="chip" id="chip-model">DeepSeek-V4</button>
+      <button class="chip" id="chip-effort">High</button>
+    </div></div>
+    <div class="input-row">
+      <button class="icon-44" id="btn-plus" aria-label="更多"><svg class="ic" viewBox="0 0 24 24" width="20" height="20"><path d="M12 5v14M5 12h14"/></svg></button>
+      <textarea id="input" rows="1" placeholder="描述你想要构建的内容"></textarea>
+      <button class="send" id="btn-send" aria-label="发送"><svg class="ic" viewBox="0 0 24 24" width="20" height="20"><path d="M5 4l14 8-14 8z" fill="currentColor" stroke="none"/></svg></button>
+    </div>
+  </div>
+  <nav class="tabbar">
+    <button id="nav-chat" aria-current="page"><svg class="ic" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H7l-4 3V12a8 8 0 0 1 8-8h2a8 8 0 0 1 8 8Z"/></svg>会话</button>
+    <button id="nav-tasks"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/></svg>任务</button>
+    <button id="nav-plugins"><svg class="ic" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><path d="M16.5 13v7M13 16.5h7"/></svg>插件</button>
+    <button id="nav-me"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/></svg>我的</button>
+  </nav>
+</div>
+<script>
+  // 仅用于骨架/断言联调：切换两个主页面
+  window.__dshMobile = {
+    showPage(name){
+      document.getElementById('page-list').hidden = name !== 'list';
+      document.getElementById('page-chat').hidden = name !== 'chat';
+      document.querySelectorAll('.tabbar button').forEach((b)=>b.removeAttribute('aria-current'));
+      document.getElementById(name === 'list' ? 'nav-chat' : 'nav-chat').setAttribute('aria-current','page');
+    },
+  };
+  document.getElementById('nav-chat').addEventListener('click',()=>window.__dshMobile.showPage('chat'));
+  document.getElementById('nav-me').addEventListener('click',()=>window.__dshMobile.showPage('list'));
+</script>
+</body>
+</html>

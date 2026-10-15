@@ -22,7 +22,7 @@
  */
 'use strict';
 
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, nativeTheme } = require('electron');
 const fs = require('fs');
 const path = require('path');
 
@@ -142,6 +142,10 @@ async function run() {
   await win.loadFile(PAGE);
   await wait(300);
 
+  // 辉光是**深/浅两套**配色，两套都要验（只验深色会漏掉浅色下的对比度问题）
+  for (const theme of ['dark', 'light']) {
+  nativeTheme.themeSource = theme;
+  await wait(120);
   for (const d of DEVICES) {
     win.setContentSize(d.w, d.h);
     await wait(260);
@@ -184,7 +188,7 @@ async function run() {
       await win.webContents.executeJavaScript(`window.__dshMobile.showPage('${page}')`);
       await wait(150);
       const shot = await win.webContents.capturePage();
-      fs.writeFileSync(path.join(OUT, `${d.name}-${page}-${d.w}x${d.h}.png`), shot.toPNG());
+      fs.writeFileSync(path.join(OUT, `${theme}-${d.name}-${page}-${d.w}x${d.h}.png`), shot.toPNG());
     }
 
     for (const { page, m } of perPage) {
@@ -239,7 +243,8 @@ async function run() {
         }
       }
     }
-    console.log(`  ✓ ${d.name} ${d.w}×${d.h} 已量（列表页 + 会话页）`);
+    console.log(`  ✓ ${theme}/${d.name} ${d.w}×${d.h} 已量（列表页 + 会话页）`);
+  }
   }
   win.destroy();
 
@@ -250,7 +255,7 @@ async function run() {
     console.error(`\n截图见 ${OUT}/`);
     return 1;
   }
-  console.log(`\n✅ 手机端排版断言全部通过（${DEVICES.length} 机型 × 2 页面）· 截图见 ${OUT}/`);
+  console.log(`\n✅ 手机端排版断言全部通过（2 主题 × ${DEVICES.length} 机型 × 2 页面）· 截图见 ${OUT}/`);
   return 0;
 }
 

@@ -19,113 +19,175 @@
     6. 底部条/输入区必须垫 **safe-area**（刘海、home indicator、Android 手势条）。
 -->
 <style>
+  /* ═══════════════════════════════════════════════════════════════════
+     辉光视觉：**直接复用桌面端皮肤预设的 token**（src/main/skin-presets.ts）
+     ───────────────────────────────────────────────────────────────────
+     桌面那套是用户认可的（"桌面端的辉光效果好些"），所以手机端不再自创，
+     而是同一套配方：三团 closest-side 径向光 + 固定定位 + 26s 漂移 + 深/浅两套色。
+       深底 #0b1018 · 浅底 #eaf1fb
+       暗色光 rgb(46,92,168) / rgb(82,146,214) / rgb(124,186,240)
+       亮色光 rgb(160,197,241) / rgb(132,178,234) / rgb(190,218,248)
+       尺寸 660×660 / 900×600 / 520×520（**像素**，不是百分比 —— 百分比会把光摊薄）
+       动画 dsh-skin-drift 26s ease-in-out infinite alternate（respects reduced-motion）
+     ═══════════════════════════════════════════════════════════════════ */
   :root{
-    --bg:#0f1115; --panel:#161a21; --panel-2:#1b2029; --line:rgba(255,255,255,.08);
-    --fg:#e6e8ea; --fg-dim:#9aa4ad; --accent:#2ea6d6; --accent-press:#2589b3;
-    --danger:#e5534b; --ok:#3fb950;
-    --r-sm:8px; --r-md:12px; --r-lg:16px;
-    /* 触控尺寸：视觉可以小，热区不能小 */
+    --r-sm:10px; --r-md:14px; --r-lg:18px;
     --tap-min:44px; --btn-h:44px; --btn-h-primary:48px;
     --safe-b:env(safe-area-inset-bottom,0px);
     --safe-t:env(safe-area-inset-top,0px);
+    --accent:#4a8ac4; --accent-deep:#2d5f9e;
+    --danger:#e5534b; --ok:#3fb950;
+    --glow:0 10px 28px rgba(74,138,196,.45), 0 2px 8px rgba(45,95,158,.35);
   }
+
+  /* 深色（默认）：中性偏蓝的近黑底 + 三团光 */
+  html,body{
+    margin:0;height:100%;
+    background-color:#0b1018;
+    background-image:
+      radial-gradient(circle closest-side at center, rgba(46,92,168,.90) 0%, rgba(46,92,168,.72) 25%, rgba(46,92,168,.432) 50%, rgba(46,92,168,.171) 75%, rgba(46,92,168,0) 100%),
+      radial-gradient(circle closest-side at center, rgba(82,146,214,1.0) 0%, rgba(82,146,214,.80) 25%, rgba(82,146,214,.480) 50%, rgba(82,146,214,.190) 75%, rgba(82,146,214,0) 100%),
+      radial-gradient(circle closest-side at center, rgba(124,186,240,.80) 0%, rgba(124,186,240,.64) 25%, rgba(124,186,240,.384) 50%, rgba(124,186,240,.152) 75%, rgba(124,186,240,0) 100%);
+    background-size:660px 660px, 900px 600px, 520px 520px;
+    background-repeat:no-repeat;
+    background-position:calc(10vw - 80px) calc(100% + 60px), calc(50vw - 450px) calc(100% + 40px), calc(90vw - 460px) calc(100% + 70px);
+    background-attachment:fixed;
+    animation:dsh-skin-drift 26s ease-in-out infinite alternate;
+    color:#e8ecf2;
+    font:15px/1.55 -apple-system,system-ui,"PingFang SC","Noto Sans CJK SC",sans-serif;
+    -webkit-text-size-adjust:100%;
+  }
+  /* 浅色：同配方换色 */
+  @media (prefers-color-scheme: light){
+    html,body{
+      background-color:#eaf1fb;
+      background-image:
+        radial-gradient(circle closest-side at center, rgba(160,197,241,.90) 0%, rgba(160,197,241,.72) 25%, rgba(160,197,241,.432) 50%, rgba(160,197,241,.171) 75%, rgba(160,197,241,0) 100%),
+        radial-gradient(circle closest-side at center, rgba(132,178,234,.95) 0%, rgba(132,178,234,.76) 25%, rgba(132,178,234,.456) 50%, rgba(132,178,234,.181) 75%, rgba(132,178,234,0) 100%),
+        radial-gradient(circle closest-side at center, rgba(190,218,248,.80) 0%, rgba(190,218,248,.64) 25%, rgba(190,218,248,.384) 50%, rgba(190,218,248,.152) 75%, rgba(190,218,248,0) 100%);
+      color:#16202c;
+    }
+  }
+  @keyframes dsh-skin-drift{
+    from{background-position:calc(10vw - 80px) calc(100% + 60px), calc(50vw - 450px) calc(100% + 40px), calc(90vw - 460px) calc(100% + 70px)}
+    to{background-position:calc(10vw - 44px) calc(100% + 74px), calc(50vw - 512px) calc(100% + 54px), calc(90vw - 424px) calc(100% + 58px)}
+  }
+  @media (prefers-reduced-motion: reduce){ html,body{animation:none} }
+
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);
-    font:15px/1.5 -apple-system,system-ui,"PingFang SC","Noto Sans CJK SC",sans-serif;
-    -webkit-text-size-adjust:100%}
+  /* 按钮基底：**必须显式给底色** —— 漏掉就会渲染成浏览器默认的白底（实测"新建会话"变白块） */
+  button{font:inherit;color:inherit;background:rgba(255,255,255,.06);
+    border:1px solid rgba(255,255,255,.10);cursor:pointer}
+  @media (prefers-color-scheme: light){ button{background:rgba(255,255,255,.62);border-color:rgba(20,40,70,.10)} }
   body{display:flex;flex-direction:column;overflow-x:hidden}
-  /* 手机端：整体宽度受控，桌面预览时居中成手机形状 */
+  /* 自上而下压暗：把辉光留在下方，顶部留出层次（手机竖屏比桌面窗口高得多） */
+  body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+    background:linear-gradient(to bottom, rgba(11,16,24,.88) 0%, rgba(11,16,24,.45) 38%, rgba(11,16,24,0) 72%)}
+  @media (prefers-color-scheme: light){
+    body::before{background:linear-gradient(to bottom, rgba(234,241,251,.92) 0%, rgba(234,241,251,.5) 38%, rgba(234,241,251,0) 72%)}
+  }
+  .app{position:relative;z-index:1}
   .app{width:100%;max-width:520px;margin:0 auto;flex:1;display:flex;flex-direction:column;
     min-height:0;padding-top:var(--safe-t)}
 
-  /* ── 顶部：工作区 chip + 连接状态 + 设置 ───────────────────────── */
-  .top{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line);
-    background:var(--panel);flex-wrap:nowrap}
-  .ws{display:inline-flex;align-items:center;gap:6px;height:var(--tap-min);padding:0 14px;
-    border:1px solid var(--line);border-radius:999px;background:var(--panel-2);font-size:13px;
-    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:46vw;flex:0 1 auto}
-  .dot{width:6px;height:6px;border-radius:50%;background:var(--ok);flex:0 0 auto}
+  /* ── 玻璃面板（辉光透出来，而不是盖死） ─────────────────────── */
+  .glass{background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.10);
+    -webkit-backdrop-filter:blur(16px) saturate(1.15);backdrop-filter:blur(16px) saturate(1.15)}
+  @media (prefers-color-scheme: light){
+    .glass{background:rgba(255,255,255,.62);border-color:rgba(20,40,70,.10)}
+  }
+
+  /* ── 顶部 ───────────────────────────────────────────────────── */
+  .top{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid rgba(255,255,255,.07);
+    background:rgba(12,17,25,.55);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);flex-wrap:nowrap}
+  @media (prefers-color-scheme: light){ .top{background:rgba(255,255,255,.55);border-bottom-color:rgba(20,40,70,.08)} }
+  .ws{display:inline-flex;align-items:center;gap:7px;height:var(--tap-min);padding:0 14px;
+    border:1px solid rgba(255,255,255,.12);border-radius:999px;background:rgba(255,255,255,.06);
+    font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:48vw;flex:0 1 auto}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);flex:0 0 auto;
+    box-shadow:0 0 10px rgba(63,185,80,.9)}
   .grow{flex:1 1 auto}
   .icon-btn{width:var(--tap-min);height:var(--tap-min);display:inline-flex;align-items:center;
-    justify-content:center;border:0;background:transparent;color:var(--fg);border-radius:var(--r-sm);flex:0 0 auto}
+    justify-content:center;border:0;background:transparent;color:inherit;border-radius:var(--r-sm);flex:0 0 auto}
 
-  /* ── 内容区 ─────────────────────────────────────────────────── */
+  /* ── 内容 ───────────────────────────────────────────────────── */
   .scroll{flex:1 1 auto;overflow-y:auto;overscroll-behavior:contain;min-height:0}
-  .pad{padding:12px}
+  .search{display:flex;align-items:center;gap:9px;height:44px;padding:0 14px;margin:14px;
+    border-radius:var(--r-md);font-size:14px;opacity:.9}
 
   /* 会话列表 */
-  .search{display:flex;align-items:center;gap:8px;height:40px;padding:0 12px;margin:12px;
-    border:1px solid var(--line);border-radius:var(--r-md);background:var(--panel);color:var(--fg-dim)}
-  .row-btn{display:flex;width:100%;align-items:center;gap:10px;min-height:56px;padding:10px 14px;
-    background:transparent;border:0;border-bottom:1px solid var(--line);color:var(--fg);text-align:left}
+  .new-btn{display:flex;align-items:center;justify-content:center;gap:8px;height:var(--btn-h-primary);
+    margin:0 14px 14px;width:calc(100% - 28px);border-radius:var(--r-md);color:inherit;font-size:15px;font-weight:600}
+  .row-btn{display:flex;width:100%;align-items:center;gap:10px;min-height:64px;padding:12px 16px;
+    background:transparent;border:0;border-bottom:1px solid rgba(255,255,255,.06);color:inherit;text-align:left}
+  @media (prefers-color-scheme: light){ .row-btn{border-bottom-color:rgba(20,40,70,.07)} }
   .row-btn .t{flex:1 1 auto;min-width:0}
-  .row-btn .title{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:15px}
-  .row-btn .sub{display:block;color:var(--fg-dim);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .row-btn .time{color:var(--fg-dim);font-size:12px;flex:0 0 auto}
-  .new-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;height:var(--btn-h-primary);
-    margin:0 12px 12px;width:calc(100% - 24px);border:1px solid var(--line);border-radius:var(--r-md);
-    background:var(--panel);color:var(--fg);font-size:15px}
+  .row-btn .title{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:15.5px;font-weight:500}
+  .row-btn .sub{display:block;font-size:12px;opacity:.55;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+  .row-btn .time{font-size:12px;opacity:.5;flex:0 0 auto}
 
   /* 会话页 */
-  .tabs{display:flex;gap:6px;padding:10px 12px}
-  .tab{flex:1 1 0;height:var(--btn-h);border:1px solid var(--line);border-radius:999px;
-    background:var(--panel);color:var(--fg-dim);font-size:13px;white-space:nowrap;min-width:0}
-  .tab[aria-selected="true"]{background:var(--panel-2);color:var(--fg);border-color:rgba(255,255,255,.16)}
-  .msg{margin:10px 12px;padding:10px 12px;border-radius:var(--r-md);background:var(--panel);
-    border:1px solid var(--line);word-break:break-word}
-  .msg.me{background:#15303c;border-color:transparent;margin-left:44px}
-  .meta{color:var(--fg-dim);font-size:12px;display:flex;gap:8px;flex-wrap:wrap}
-  pre{margin:8px 0 0;padding:10px;background:#0b0e13;border-radius:var(--r-sm);overflow-x:auto;font-size:12px}
+  .tabs{display:flex;align-items:center;gap:8px;padding:12px 14px}
+  .tab{flex:1 1 0;height:var(--btn-h);border-radius:999px;background:rgba(255,255,255,.05);
+    border:1px solid rgba(255,255,255,.10);color:inherit;font-size:14px;white-space:nowrap;min-width:0;opacity:.72}
+  .tab[aria-selected="true"]{opacity:1;font-weight:600;border-color:rgba(124,186,240,.45);
+    background:rgba(124,186,240,.14);box-shadow:0 0 18px rgba(82,146,214,.25) inset}
+  .msg{margin:12px 14px;padding:12px 14px;border-radius:var(--r-md);word-break:break-word;
+    background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.09)}
+  .msg.me{background:linear-gradient(160deg, rgba(74,138,196,.30), rgba(45,95,158,.22));
+    border-color:rgba(124,186,240,.35);margin-left:46px}
+  .meta{font-size:12px;opacity:.6;display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
+  pre{margin:10px 0 0;padding:11px 12px;border-radius:var(--r-sm);overflow-x:auto;font-size:12.5px;
+    background:rgba(6,10,16,.62);border:1px solid rgba(255,255,255,.07);line-height:1.6}
 
-  /* 审批卡：两个按钮**等宽等高**（断言项） */
-  .approval{margin:10px 12px;padding:12px;border-radius:var(--r-md);border:1px solid rgba(229,83,75,.4);
-    background:rgba(229,83,75,.08)}
-  .approval .acts{display:flex;gap:10px;margin-top:10px}
-  .btn{height:var(--btn-h);padding:0 14px;border-radius:var(--r-sm);border:1px solid var(--line);
-    background:var(--panel-2);color:var(--fg);font-size:14px;white-space:nowrap;display:inline-flex;
+  /* 审批卡：拒绝=描边危险色，允许=辉光主操作 */
+  .approval{margin:12px 14px;padding:14px;border-radius:var(--r-md);
+    border:1px solid rgba(229,83,75,.32);background:linear-gradient(160deg, rgba(229,83,75,.10), rgba(229,83,75,.03))}
+  .approval .acts{display:flex;gap:12px;margin-top:12px}
+  .btn{height:var(--btn-h);padding:0 16px;border-radius:var(--r-sm);border:1px solid rgba(255,255,255,.14);
+    background:rgba(255,255,255,.06);color:inherit;font-size:14.5px;white-space:nowrap;display:inline-flex;
     align-items:center;justify-content:center;gap:6px}
   .btn.grow{flex:1 1 0;min-width:0}
-  .btn.danger{border-color:rgba(229,83,75,.5);color:#ffb4b0;background:transparent}
-  /* 每个操作组里**最多一个主操作**：允许是主（实心），拒绝是次（描边） */
-  .btn.primary{background:var(--accent);border-color:transparent;color:#04222f;font-weight:600}
+  .btn.danger{border-color:rgba(229,83,75,.55);color:#ffb9b4;background:transparent}
+  .btn.primary{border-color:transparent;color:#f2f8ff;font-weight:600;
+    background:linear-gradient(180deg,#5c9ad4,#2d5f9e);box-shadow:var(--glow)}
 
-  /* ── 底部输入区（主操作固定在右下） ───────────────────────────── */
-  .composer{border-top:1px solid var(--line);background:var(--panel);padding:8px 12px 8px}
-  .chips{display:flex;gap:8px;overflow-x:auto;padding-bottom:8px;scrollbar-width:none}
-  .chips::-webkit-scrollbar{display:none}
-  /* 触控尺寸直接落在元素上（44px）：不要用 ::after 撑热区 ——
-     父行是横向滚动容器（overflow-x:auto），会把负 inset 的伪元素裁掉（实测热区只剩 37px）。 */
-  .chip{height:var(--tap-min);padding:0 14px;border-radius:999px;border:1px solid var(--line);
-    background:var(--panel-2);color:var(--fg-dim);font-size:13px;white-space:nowrap;
-    display:inline-flex;align-items:center;gap:6px;flex:0 0 auto}
-  .input-row{display:flex;align-items:flex-end;gap:10px}
+  /* ── 输入区 ─────────────────────────────────────────────────── */
+  .composer{border-top:1px solid rgba(255,255,255,.08);background:rgba(12,17,25,.58);
+    -webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);padding:10px 14px}
+  @media (prefers-color-scheme: light){ .composer{background:rgba(255,255,255,.60);border-top-color:rgba(20,40,70,.08)} }
+  .chips-wrap{position:relative}
+  /* chip 行**换行**而不是横向滚动：滚动 + 右缘渐隐在玻璃层上会变成一块难看的深色方块（实测） */
+  .chips{display:flex;flex-wrap:wrap;gap:9px;padding-bottom:10px}
+  .chip{height:var(--tap-min);padding:0 15px;border-radius:999px;background:rgba(255,255,255,.06);
+    border:1px solid rgba(255,255,255,.11);color:inherit;font-size:13.5px;white-space:nowrap;
+    display:inline-flex;align-items:center;gap:6px;flex:0 0 auto;opacity:.88}
+  .input-row{display:flex;align-items:flex-end;gap:12px}
   textarea{flex:1 1 auto;min-width:0;min-height:var(--btn-h-primary);max-height:120px;resize:none;
-    padding:10px 12px;border-radius:var(--r-md);border:1px solid var(--line);background:var(--panel-2);
-    color:var(--fg);font:inherit;font-size:14px}
+    padding:12px 14px;border-radius:var(--r-md);border:1px solid rgba(255,255,255,.10);
+    background:rgba(255,255,255,.05);color:inherit;font:inherit;font-size:15px}
+  textarea::placeholder{color:currentColor;opacity:.42}
   .send{flex:0 0 auto;width:var(--btn-h-primary);height:var(--btn-h-primary);border-radius:50%;
-    border:0;background:var(--accent);color:#04222f;display:inline-flex;align-items:center;
-    justify-content:center;font-size:18px}
-  /* 与主操作同高（48）：同一行里「＋」和「发送」必须等高、居中对齐（断言项） */
+    border:0;color:#f4f9ff;display:inline-flex;align-items:center;justify-content:center;
+    background:linear-gradient(180deg,#5c9ad4,#2d5f9e);box-shadow:var(--glow)}
   .icon-44{width:var(--btn-h-primary);height:var(--btn-h-primary);flex:0 0 auto;border-radius:var(--r-sm);
-    border:1px solid var(--line);background:var(--panel-2);color:var(--fg-dim);
+    border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.05);color:inherit;
     display:inline-flex;align-items:center;justify-content:center}
 
-  /* ── 底部标签栏（等宽 + safe-area） ─────────────────────────── */
-  .tabbar{display:flex;border-top:1px solid var(--line);background:var(--panel);
+  /* ── 底部标签栏 ─────────────────────────────────────────────── */
+  .tabbar{display:flex;border-top:1px solid rgba(255,255,255,.08);
+    background:rgba(12,17,25,.62);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);
     padding-bottom:var(--safe-b)}
-  .tabbar button{flex:1 1 0;min-width:0;height:56px;border:0;background:transparent;color:var(--fg-dim);
-    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:11px;
-    white-space:nowrap}
-  .tabbar button[aria-current="page"]{color:var(--accent)}
+  @media (prefers-color-scheme: light){ .tabbar{background:rgba(255,255,255,.62);border-top-color:rgba(20,40,70,.08)} }
+  .tabbar button{flex:1 1 0;min-width:0;height:58px;border:0;background:transparent;color:inherit;
+    opacity:.62;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+    font-size:11px;white-space:nowrap}
+  .tabbar button[aria-current="page"]{opacity:1;color:#9ecbf5}
   .tabbar .ic{width:22px;height:22px;display:block}
-  /* 图标统一描边（**全局**）：只写在 .tabbar 里会让顶部图标继承默认 fill=none? 不 ——
-     实测顶部图标因没有这条规则被填成黑块（截图可见），所以规则必须对所有 .ic 生效。 */
+
+  /* 图标统一描边（**全局**）：只写在 .tabbar 里会让顶部图标被填成黑块（实测） */
   .ic path,.ic circle,.ic rect{fill:none;stroke:currentColor;stroke-width:1.7;
     stroke-linecap:round;stroke-linejoin:round}
-  /* chip 行右侧渐隐：提示"还能横向滚"（没有它，最后一个 chip 被裁掉像是坏了） */
-  .chips-wrap{position:relative}
-  .chips-wrap::after{content:"";position:absolute;top:0;right:0;bottom:8px;width:28px;pointer-events:none;
-    background:linear-gradient(to right,rgba(22,26,33,0),var(--panel))}
 </style>
 </head>
 <body>

@@ -56,6 +56,8 @@
     "check:office-preview": "node scripts/check-office-preview-packaged.js",
     "check:update-popup": "node scripts/check-update-popup-layout.js",
     "check:updater-differential": "node scripts/check-updater-differential.js",
+    "check:installer-close": "node scripts/check-installer-close-app.js",
+    "check:whatsnew-entry": "node scripts/check-whatsnew-entry.js",
     "smoke:isolated": "node scripts/smoke-isolated.js"
   },
   "dependencies": {

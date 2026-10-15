@@ -75,6 +75,10 @@ export function buildMenuTemplate(a: TrayMenuActions): MenuItemConstructorOption
     { label: '诊断与关于…', click: () => a.onShowDiagnostics?.() },
     { label: '手机连接…', click: () => a.onMobileConnect?.() },
     { type: 'separator' },
+    // ⚠️ 2026-10-15（用户实测）：**托盘菜单过去没有这一项**。Windows/Linux 的应用菜单被
+    //    `autoHideMenuBar: true` 藏着（要按 Alt 才出），托盘右键是用户唯一够得着的地方 ——
+    //    缺了它，win 版用户"找不到本版更新内容"。放在「检查更新」旁边，语义相邻。
+    { label: '本版更新内容…', click: () => a.onShowWhatsNew?.() },
     { label: '检查更新…', click: () => a.onCheckUpdate?.() },
     // 进度条只在"正在下载更新"时出现 —— 升到最新版后用户根本没机会看它长什么样。
     // 这一项让用户随时能预览（走同一条 shell:update-state 通路，纯假数据）。

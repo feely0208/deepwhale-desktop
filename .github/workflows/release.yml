@@ -294,6 +294,10 @@ jobs:
           # node_modules 在 app.asar **里面**，原来那句
           # `find release dist -type d -ipath "*resources/app/node_modules/$mod"`
           # 在四个平台同时报红（Release run 38567857212）。脚本同时认"真实目录"与"asar 条目"。
+          # 「本版更新内容」在 Windows/Linux 必须有够得着的入口（不能只靠会被隐藏的菜单栏）
+          node scripts/check-whatsnew-entry.js
+          # 安装器必须能自己关掉运行中的旧版（托盘应用 + 默认温和关闭 = 用户被要求手动关）
+          node scripts/check-installer-close-app.js
           echo "---- 检查打包产物里的生产依赖（electron-builder 输出目录是 release/，见 electron-builder.yml）----"
           node scripts/check-packaged-deps.js release dist
 

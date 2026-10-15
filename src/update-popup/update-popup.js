@@ -122,6 +122,10 @@
       // 手动打开（帮助菜单）或更新已结束：只显示说明
       progress.hidden = true;
       $('eyebrow').textContent = '深鲸桌面更新';     // 别和下面「本版更新内容」重复
+      // ⚠️ 2026-10-15：这里原来不清 status，导致"手动打开"时会残留上一阶段的文案
+      //    （实测：上一次失败过的话，手动打开的窗口底下写着「网络中断」）。
+      $('status').textContent = '';
+      $('subtitle').textContent = '';
       showButtons(['restart']);
       var b3 = $('btn-restart');
       b3.disabled = false;

@@ -45,12 +45,15 @@
         <footer class="foot">
           <!-- 2026-10-14：更新由用户掌控 —— 发现新版本时先给「现在更新」，
                下载中可以「停止更新」（真停，不是只关窗），不想更新可以「这个版本不再提醒」。 -->
-          <div class="foot-alt">
+          <!-- ⚠️ 2026-10-15：**必须是一行**（原来拆成上下两行：左上一排次要按钮、
+               右下一排主按钮，实测「发现新版本」屏主按钮孤零零在右下，两行高度还差 2px）。
+               现在：左槽只放"中断类"动作（停止更新），右槽右对齐放其余，主按钮永远在最右。 -->
+          <div class="foot-left">
             <button class="ghost" id="btn-stop" hidden>停止更新</button>
+          </div>
+          <div class="foot-right">
             <button class="ghost" id="btn-skip" hidden>这个版本不再提醒</button>
             <button class="ghost" id="btn-later">稍后</button>
-          </div>
-          <div class="foot-main">
             <button class="primary" id="btn-update" hidden>现在更新</button>
             <button class="primary" id="btn-restart" disabled>下载中…</button>
           </div>

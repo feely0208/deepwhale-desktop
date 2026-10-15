@@ -270,6 +270,16 @@ jobs:
           # 这条在真实产物上调 createConverter + 真转一个 docx，坏包上必红（已实测）。
           node scripts/check-office-preview-packaged.js
 
+      - name: 能力基线 · 更新弹窗按钮排版（渲染后按坐标断言，只在 macOS 跑一次）
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          # 2026-10-15 用户指出「按钮排列一点都不严谨」：实测旧版 footer 拆成两行 →
+          # 主按钮孤零零落在第二行右下、两行高度差 2px。这条断言**真渲染**五个阶段，
+          # 按"实际画出来的按钮 + 坐标"判定（不看 DOM 属性 —— 按属性判会漏掉
+          # display 覆盖 [hidden] 导致"五个按钮全画出来"这类问题）。
+          node scripts/check-update-popup-layout.js
+
       - name: 打包完整性守卫（生产依赖必须真的进包）
         shell: bash
         run: |

@@ -109,6 +109,20 @@ for (const root of roots) {
 }
 
 if (found.asarFiles.length === 0 && found.realNodeModules.length === 0) {
+  // ⚠️ 2026-10-15：本机常常没有打包产物（clean 掉了），此时这条断言**没有意义**，
+  //    报红就是"假红"——而假红会让人习惯性忽略红（我们为此专门立过纪律）。
+  //    CI 里它跑在 `npm run dist` 之后，产物必然存在；本机没有就明确跳过。
+  const hasArtifacts = roots.some((r) => {
+    try {
+      return fs.readdirSync(r).some((n) => n.endsWith('.app') || n.endsWith('unpacked') || n.endsWith('.asar'));
+    } catch {
+      return false;
+    }
+  });
+  if (!hasArtifacts) {
+    console.log('⚠️ 跳过：本机没有打包产物（release/ 或 dist/）—— 本项只在打包后才有意义（CI 里必跑）');
+    process.exit(0);
+  }
   console.error('❌ 在 ' + roots.join(' / ') + ' 下既没找到 app.asar 也没找到 resources/app/node_modules');
   for (const root of roots) {
     try {

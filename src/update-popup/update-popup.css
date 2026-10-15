@@ -168,14 +168,25 @@ h1 { margin: 2px 0 0; font-size: 20px; line-height: 1.25; letter-spacing: 0.2px;
 .empty { font-size: 13px; color: var(--ink-faint); padding: 14px 0; }
 
 /* 底部 */
-/* 底部：主按钮一行（现在更新 / 立即重启），次要动作一行（停止更新 / 不再提醒 / 稍后） */
-.foot { margin-top: 14px; }
-.foot-main { display: flex; gap: 10px; justify-content: flex-end; }
-.foot-alt { display: flex; gap: 10px; justify-content: flex-start; align-items: center; margin-top: 8px; }
+/* 2026-10-15 重排：footer 是**一行**，左槽中断类动作、右槽右对齐确认类动作。
+   原来两行（.foot-main/.foot-alt）实测：主按钮掉到第二行右下、两行高度差 2px、
+   左右两端各贴一边 —— 观感"不严谨"就是这三条来的。 */
+.foot { display: flex; align-items: center; gap: 12px; min-height: 40px; margin-top: 10px; }
+.foot-left { display: flex; align-items: center; gap: 10px; }
+.foot-right { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+/* ⚠️ 高度必须是**固定值**：原来靠 padding 撑，实测两行分别是 39px / 37px（差 2px，肉眼可辨）。
+   现在统一 height:36px + line-height:36px，所有按钮共用一条基线。 */
 button.ghost, button.primary {
-  font-size: 13px; font-weight: 600; border-radius: 10px; padding: 9px 16px; cursor: pointer;
+  font-size: 13px; font-weight: 600; border-radius: 10px; cursor: pointer;
+  height: 36px; line-height: 1; padding: 0 16px; display: inline-flex;
+  align-items: center; justify-content: center; white-space: nowrap;
   transition: transform 0.12s ease, box-shadow 0.2s ease, background 0.2s ease;
 }
+button.primary { min-width: 96px; }
+/* ⚠️ 2026-10-15：上面写了 display:inline-flex，会**盖掉浏览器对 [hidden] 的 display:none**
+   —— 结果"该藏的按钮全画出来了"（实测截图里五个按钮同时出现，而按 hidden 属性过滤的
+   探针完全看不出来）。凡是自己定义了 display 的按钮，必须显式补回这条。 */
+button.ghost[hidden], button.primary[hidden] { display: none; }
 button.ghost { background: transparent; color: var(--ink-dim); border: 1px solid var(--stroke); }
 button.ghost:hover { color: var(--ink); background: rgba(127, 227, 240, 0.08); }
 button.primary {

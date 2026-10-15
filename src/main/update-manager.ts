@@ -208,6 +208,19 @@ export class UpdateManager {
     // 于是「停止更新」是真的能停（见 stopDownload / downloadNow）。
     // macOS 一向走自己的手动下载分支，不受影响。
     autoUpdater.autoDownload = false;
+    // ⚠️ 2026-10-15（Windows 用户实测「80% 以后越来越慢、卡在 95%」）：
+    //    **必须关掉差分下载**。原因是我们的 CDN（华为 CDN / openresty）**不支持多段 range**：
+    //      发 `Range: bytes=0-999,2000-2999,…` 它返回 **200 + 整个文件**，
+    //      但响应头里却带着 `Accept-Ranges: bytes`。
+    //    electron-updater 的判据（multipleRangeDownloader.js: checkIsRangesSupported）是
+    //      "状态码 200 时只要 Accept-Ranges 在，就认为分片受支持" → 继续按 multipart 解析，
+    //      而拿到的其实是整包裸数据 → DataSplitter 永远凑不齐分片 → **越下越慢**。
+    //    为什么以前没这毛病：**以前 CDN 上根本没有 blockmap**（403）→ 差分前缀就失败 →
+    //      自动退回全量下载（快）。2026-10-14 我给 CDN 补了 blockmap（P1-3），
+    //      等于把这条坏路打开了 —— 所以"以前很快、今天开始慢"。
+    //    关掉之后：一律全量单连接下载（实测 44 MB/s）。等哪天 CDN 真支持多段 range，
+    //      再由 scripts/check-updater-differential.js 的一致性断言提醒我们放开。
+    autoUpdater.disableDifferentialDownload = true;
     // 用户选择"稍后"时，退出应用顺带安装，避免反复打扰。
     // macOS 上不能这么做：那里根本装不上（Squirrel 的签名校验过不去，见 macNeedsManualUpdate），
     // 开着它只会在退出时白折腾一次，所以按平台关掉。

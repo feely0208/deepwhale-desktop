@@ -55,6 +55,7 @@
     "check:client-bundles": "node scripts/check-client-bundles.js",
     "check:office-preview": "node scripts/check-office-preview-packaged.js",
     "check:update-popup": "node scripts/check-update-popup-layout.js",
+    "check:updater-differential": "node scripts/check-updater-differential.js",
     "smoke:isolated": "node scripts/smoke-isolated.js"
   },
   "dependencies": {

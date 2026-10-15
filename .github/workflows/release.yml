@@ -280,6 +280,13 @@ jobs:
           # display 覆盖 [hidden] 导致"五个按钮全画出来"这类问题）。
           node scripts/check-update-popup-layout.js
 
+      - name: 能力一致性 · CDN 多段 range 与客户端差分开关必须匹配（P0-2）
+        shell: bash
+        run: |
+          # 2026-10-15 事故：把 blockmap 传上 CDN 后，Windows 更新退化成"越下越慢"。
+          # 这条断言真去请求一次多段 range，再读我们的代码，两者不一致就红。
+          node scripts/check-updater-differential.js
+
       - name: 打包完整性守卫（生产依赖必须真的进包）
         shell: bash
         run: |
@@ -443,11 +450,16 @@ jobs:
           for f in dist-assets/DeepWhale-Desktop-*; do
             [ -f "$f" ] || continue
             case "$f" in
-              # ⚠️ 2026-10-14：**blockmap 必须传**（原来这里 continue 掉，就是 P1-3 的根因）。
-              #    electron-updater 做差分更新时会去取 <安装包>.blockmap；CDN 上没有它
-              #    → 403（OBS 对不存在的 key 就是 403，不是 404）→ 退回**全量下载**。
-              #    对用户就是"每次更新下 290MB"，也正是我们这次要治的"更新慢/耗流量"。
-              #    它们只有几百 KB，传上去成本可忽略。
+              # ⚠️ 2026-10-15 更正（同一天内反转，教训记在这）：**blockmap 不能传**。
+              #    10-14 我为了"开启差分更新"把 blockmap 传了上去（P1-3），结果把一条坏路打开了：
+              #    我们的 CDN 不支持多段 range（发多段 Range 返回 200 + 整包，却带着
+              #    Accept-Ranges: bytes）→ electron-updater 以为支持、按 multipart 解析整包裸数据
+              #    → **Windows 用户更新时"80% 之后越下越慢、卡在 95%"**（2026-10-15 实测上报）。
+              #    以前没这毛病，正是因为 CDN 上没有 blockmap → 差分前缀失败 → 自动全量下载（快）。
+              #    所以现在：① 客户端关掉差分（update-manager.ts 的 disableDifferentialDownload）；
+              #    ② 发布不再上传 blockmap。等 CDN 真支持多段 range 时，
+              #    `scripts/check-updater-differential.js` 的一致性断言会提醒我们放开这两处。
+              *.blockmap) continue;;
               # ⚠️ 2026-10-03 修：**mac 的两个 zip 必须传**。
               #    原来这里把 .zip 一并跳过，理由是"官网不提供该格式" —— 但 electron-updater
               #    在 macOS 上读的正是 latest-mac.yml 里指的 zip：CDN 上没有它，

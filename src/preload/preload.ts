@@ -92,6 +92,11 @@ contextBridge.exposeInMainWorld('dsh', {
   // 起因：Windows 用户托盘图标不可见时，「检查更新」「退出」只放在托盘菜单里 → 无路可走。
   checkUpdate: () => ipcRenderer.invoke('shell:check-update'),
   quitApp: () => ipcRenderer.invoke('shell:quit'),
+  // ---- 设置页「本版更新内容」（2026-10-15）----
+  // 起因：Windows/Linux 的应用菜单被 autoHideMenuBar 藏着，托盘右键是唯一入口，
+  // 用户实测「win 版找不到本版更新内容」。按用户方案：设置页「检查更新」旁加一个按钮，
+  // **只在非 macOS 注入**（mac 顶部菜单栏一眼就有，不需要）。
+  showWhatsNew: () => ipcRenderer.invoke('shell:show-whatsnew'),
   onUpdateState: (cb: (state: unknown) => void) => {
     const listener = (_e: unknown, state: unknown): void => cb(state);
     ipcRenderer.on('shell:update-state', listener);

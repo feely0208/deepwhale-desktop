@@ -1072,6 +1072,17 @@ function registerIpc(): void {
     await updates?.checkNow();
     return { ok: true };
   });
+  // 设置页「本版更新内容」按钮（仅非 macOS）：复用与菜单/托盘完全相同的实现
+  ipcMain.handle('shell:show-whatsnew', async (): Promise<{ ok: boolean }> => {
+    try {
+      const ver = String(app.getVersion() || '').replace(/^v/, '');
+      await showWhatsNewWindow(ver);
+      return { ok: true };
+    } catch (e) {
+      console.error('[whatsnew] 打开本版更新内容失败:', e);
+      return { ok: false };
+    }
+  });
   ipcMain.handle('shell:quit', async (): Promise<{ ok: boolean }> => {
     if (mainWin && !mainWin.isDestroyed()) {
       const { response } = await dialog.showMessageBox(mainWin, {

@@ -448,6 +448,15 @@
     box.appendChild(mkBtn('检查更新', 'dsh-ext-check-update', function () {
       if (window.dsh && window.dsh.checkUpdate) window.dsh.checkUpdate();
     }));
+    // 「本版更新内容」：**只在非 macOS** 注入（2026-10-15 用户口径）。
+    // 起因：Windows/Linux 的应用菜单被 autoHideMenuBar 藏着（要按 Alt 才出），
+    // 托盘右键是当时唯一入口 —— 用户实测「win 版找不到本版更新内容」。
+    // mac 顶部系统菜单栏一眼就有，不必重复放一个。
+    if (window.__dshShellPlatform && window.__dshShellPlatform !== 'darwin') {
+      box.appendChild(mkBtn('本版更新内容', 'dsh-ext-whatsnew', function () {
+        if (window.dsh && window.dsh.showWhatsNew) window.dsh.showWhatsNew();
+      }));
+    }
     box.appendChild(mkBtn('彻底退出后台', 'dsh-ext-quit-app', function () {
       if (window.dsh && window.dsh.quitApp) window.dsh.quitApp();
     }));

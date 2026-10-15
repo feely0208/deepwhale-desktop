@@ -62,6 +62,35 @@ if (body === null) {
 }
 
 // ⚠️ 代码里是 `a.onShowWhatsNew?.()` 写法：正则要把可选链容进来（否则恒为 0）
+// ── 设置页入口（2026-10-15 用户方案：设置页「检查更新」旁加一个按钮，**只给 Win/Linux**）──
+const EXT = path.join(REPO, 'src', 'settings', 'settings-ext.js');
+const PRELOAD = path.join(REPO, 'src', 'preload', 'preload.ts');
+const MAIN = path.join(REPO, 'src', 'main', 'index.ts');
+const extSrc = fs.existsSync(EXT) ? fs.readFileSync(EXT, 'utf-8') : '';
+const preSrc = fs.existsSync(PRELOAD) ? fs.readFileSync(PRELOAD, 'utf-8') : '';
+const mainSrc = fs.existsSync(MAIN) ? fs.readFileSync(MAIN, 'utf-8') : '';
+
+if (!/本版更新内容/.test(extSrc) || !/showWhatsNew/.test(extSrc)) {
+  problems.push(
+    '设置页没有「本版更新内容」按钮（settings-ext.js）\n' +
+      '       → Windows/Linux 用户少了一个**不看菜单也能找到**的入口（用户 2026-10-15 的方案）。',
+  );
+}
+if (/本版更新内容/.test(extSrc) && !/__dshShellPlatform[\s\S]{0,80}darwin/.test(extSrc)) {
+  problems.push(
+    '设置页那个按钮没有做**平台门控**（`window.__dshShellPlatform !== \'darwin\'`）\n' +
+      '       → mac 顶部菜单栏一眼就有，用户明确要求「只针对 win 和 linux，mac 不需要」，别重复放。',
+  );
+}
+if (!/showWhatsNew\s*:/.test(preSrc)) {
+  problems.push('preload 没有暴露 `showWhatsNew` 桥（设置页按钮点了没反应）');
+}
+// ⚠️ 必须匹配到 `ipcMain.handle('shell:show-whatsnew'`：只用 /shell:show-whatsnew/ 会被
+//    `shell:show-whatsnew-DISABLED` 这类改名蒙对（实测反例没红）
+if (!/ipcMain\.handle\(\s*'shell:show-whatsnew'/.test(mainSrc)) {
+  problems.push('主进程没有处理 `shell:show-whatsnew`（设置页按钮点了没反应）');
+}
+
 const registrations = (src.match(/onShowWhatsNew\??\.?\(\)/g) || []).length;
 if (registrations < 2) {
   problems.push(

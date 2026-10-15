@@ -53,7 +53,10 @@ export async function injectSettingsExtension(win: BrowserWindow): Promise<void>
     // 只显示 DSH 运行时版本，用户想知道壳是几版得翻安装包，很别扭。
     const shellVersion = resolveShellVersion();
     await win.webContents.executeJavaScript(
-      `window.__dshShellVersion = ${JSON.stringify(shellVersion)};`,
+      // 连同平台一起交进去：非 macOS 才在设置页注入「本版更新内容」按钮
+      // （mac 顶部系统菜单栏一眼就有，设置页不必再放一个 —— 用户 2026-10-15 的口径）。
+      `window.__dshShellVersion = ${JSON.stringify(shellVersion)};` +
+        `window.__dshShellPlatform = ${JSON.stringify(process.platform)};`,
     );
     const js = fs.readFileSync(path.join(__dirname, '../settings/settings-ext.js'), 'utf-8');
     await win.webContents.executeJavaScript(js);

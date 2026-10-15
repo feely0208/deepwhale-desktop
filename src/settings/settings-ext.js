@@ -389,15 +389,48 @@
       if (el.children.length > 0) continue;
       var t = (el.textContent || '').trim();
       if (t.indexOf('当前版本') !== 0) continue;
-      var sep = document.createElement('span');
-      sep.textContent = '　·　';
-      sep.style.opacity = '.5';
-      var tag = document.createElement('span');
-      tag.id = 'dsh-ext-shell-version';
-      tag.textContent = 'DeepWhale Desktop ' + v;
-      el.appendChild(sep);
-      el.appendChild(tag);
-      appendShellActions(el); // 见下方：检查更新 / 彻底退出后台 / 下载进度
+      var host = el.parentElement;
+      if (!host) return;
+      // ⚠️ 2026-10-15（用户方案）：把"版本号一行 + 按钮另起一行"改成**一行**：
+      //    左边两行文本块（运行时版本 / 壳版本），右边三个按钮，两边都 32px 高、垂直居中。
+      //    ⚠️ 血的教训（同一天踩的）：**绝不能给祖先容器设 display:flex** —— 我第一版把
+      //    `host.style.cssText` 改成 flex，结果设置页整页被压成竖列（截图可见）。
+      //    现在只做两件事：① 新建**我们自己的**行节点；② 把官方那一行**隐藏**掉（文本我们重画）。
+      var row = document.createElement('div');
+      row.id = 'dsh-ext-version-row';
+      row.style.cssText =
+        'display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:32px;width:100%;flex-wrap:nowrap;';
+      var left = document.createElement('div');
+      left.id = 'dsh-ext-version-col';
+      left.style.cssText =
+        'display:flex;flex-direction:column;justify-content:center;line-height:16px;font-size:12px;min-width:0;';
+      var line1 = document.createElement('div');
+      line1.textContent = (el.textContent || '').trim();
+      line1.style.cssText = 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+      var line2 = document.createElement('div');
+      line2.id = 'dsh-ext-shell-version';
+      line2.textContent = 'DeepWhale Desktop ' + v;
+      line2.style.cssText = 'opacity:.75;white-space:nowrap;';
+      left.appendChild(line1);
+      left.appendChild(line2);
+      row.appendChild(left);
+      host.insertBefore(row, el);
+      el.style.display = 'none'; // 官方那一行不再显示（内容已由 line1 重画）
+      appendShellActions(row); // 见下方：检查更新 / 本版更新内容 / 彻底退出后台 / 下载进度
+      // 自检：注入后若行宽过窄或高度异常（说明外层结构不是预期的行容器），回滚成
+      // "官方原样 + 按钮跟在后面"的保守形态 —— 宁可回到两行，也不能把设置页布局搞坏。
+      setTimeout(function () {{
+        try {{
+          var r = row.getBoundingClientRect();
+          if (r.width < 200 || r.height > 60) {{
+            el.style.display = '';
+            row.remove();
+            appendShellActions(el.parentElement || host);
+            console.warn('[settings-ext] 版本行一行布局自检未通过，已回滚（w=' + Math.round(r.width) + ',h=' + Math.round(r.height) + '）');
+          }}
+        }} catch (e) {{ /* 自检失败不影响设置页 */ }}
+      }}, 300);
+      return;
       return;
     }
   }
@@ -416,7 +449,9 @@
     if (!host || host.querySelector('#dsh-ext-shell-actions')) return;
     var box = document.createElement('span');
     box.id = 'dsh-ext-shell-actions';
-    box.style.cssText = 'display:inline-flex;align-items:center;gap:8px;margin-left:auto;padding-left:16px;';
+    // 高度与左侧两行文本块一致（16px × 2 = 32px），保证一行内严格对齐；
+    // 靠父级的 space-between 推到最右，不再用 margin-left:auto（那会在窄容器里换行）
+    box.style.cssText = 'display:inline-flex;align-items:center;gap:8px;height:32px;';
 
     // 下载进度（默认隐藏；download-progress 事件到达才显示）
     var bar = document.createElement('span');
@@ -439,7 +474,7 @@
       b.type = 'button';
       b.id = id;
       b.textContent = text;
-      b.style.cssText = 'font:inherit;font-size:12px;padding:3px 10px;border-radius:6px;cursor:pointer;border:1px solid rgba(128,128,128,.35);background:transparent;color:inherit;white-space:nowrap;';
+      b.style.cssText = 'font:inherit;font-size:12px;height:32px;padding:0 12px;border-radius:6px;cursor:pointer;border:1px solid rgba(128,128,128,.35);background:transparent;color:inherit;white-space:nowrap;display:inline-flex;align-items:center;';
       b.addEventListener('click', function () {
         try { action(); } catch (e) { /* 不让按钮异常影响设置页 */ }
       });

@@ -2148,6 +2148,49 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
                     return true;
                   })()`);
                   await new Promise((r) => setTimeout(r, 500));
+                  // ⚠️ 2026-10-15：截图前先把「版本 / 检查更新 / 本版更新内容 / 彻底退出后台」那一行
+                  //    滚进可视区，并顺手把三个按钮的**坐标与同级文本**打出来 —— 用户问的是
+                  //    「按钮在哪、要不要调」，坐标比截图更能回答；设置页是**嵌套滚动容器**，
+                  //    只调 window.scrollTo 或 scrollIntoView 都无效（实测：截图字节数与滚动前完全一样）。
+                  try {
+                    const geom = await mainWin!.webContents.executeJavaScript(`(function () {
+                      const ids = ['dsh-ext-check-update', 'dsh-ext-whatsnew', 'dsh-ext-quit-app', 'dsh-ext-version-col', 'dsh-ext-shell-version'];
+                      const out = { buttons: [], scrolled: [] };
+                      const anchor = document.getElementById(ids[0]) || document.getElementById(ids[1]);
+                      if (anchor) {
+                        // 向上把所有可滚动祖先滚到底
+                        let n = anchor.parentElement;
+                        while (n) {
+                          const st = getComputedStyle(n);
+                          if (/(auto|scroll)/.test(st.overflowY) && n.scrollHeight > n.clientHeight + 4) {
+                            n.scrollTop = n.scrollHeight;
+                            out.scrolled.push((n.className || n.tagName || '').toString().slice(0, 40));
+                          }
+                          n = n.parentElement;
+                        }
+                        window.scrollTo(0, document.body.scrollHeight);
+                      }
+                      for (const id of ids) {
+                        const el = document.getElementById(id);
+                        if (!el) { out.buttons.push({ id: id, missing: true }); continue; }
+                        const r = el.getBoundingClientRect();
+                        out.buttons.push({ id: id, text: (el.textContent || '').trim(),
+                          x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) });
+                      }
+                      const box = document.getElementById('dsh-ext-check-update');
+                      if (box && box.parentElement) {
+                        out.row = Array.from(box.parentElement.children).map(function (c) {
+                          const r = c.getBoundingClientRect();
+                          return ((c.textContent || '').trim() || c.tagName) + '@y=' + Math.round(r.y);
+                        });
+                      }
+                      return JSON.stringify(out);
+                    })()`);
+                    console.log('[smoke] 设置页按钮坐标:', geom);
+                    await new Promise((r) => setTimeout(r, 600));
+                  } catch (e10) {
+                    console.warn('[smoke] 截图前滚动/量坐标失败:', e10);
+                  }
                   const shot = await mainWin!.webContents.capturePage();
                   fs.mkdirSync('/tmp/dsh-privacy-shot', { recursive: true });
                   fs.writeFileSync('/tmp/dsh-privacy-shot/general.png', shot.toPNG());

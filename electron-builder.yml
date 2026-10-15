@@ -164,6 +164,13 @@ nsis:
   #   🔒 成对约束：`allowToChangeInstallationDirectory:true` 与「update-manager 里已钉
   #      installDirectory」必须**同进同出**，由 scripts/check-installer-config.js 在
   #      发布 CI 里强制（npm run check:installer）—— 谁单独改一边都会直接红。
+  # ⚠️ 2026-10-15：安装器要能**自己**关掉正在运行的旧版本。我们的应用关窗是"最小化到托盘"
+  #    （见 src/main/window.ts），安装器默认的温和关闭会被忽略 → 用户看到
+  #    「DeepWhale Desktop 无法关闭。请手动关闭它，然后单击重试以继续」。
+  #    build/installer.nsh 覆盖了官方钩子 customCheckAppRunning：先温和、再 taskkill /F /T
+  #    强杀整棵进程树（含它拉起的 DSH 子进程，否则文件被占、安装会卡住）。
+  #    守卫：scripts/check-installer-close-app.js（缺文件/缺宏/缺 /T 都会红）。
+  include: build/installer.nsh
   oneClick: false
   # 按用户安装（免管理员）；只有选到 Program Files 这类需要提权的目录时才提权。
   perMachine: false

@@ -34,16 +34,51 @@ if (conf.asar !== true) {
   );
 }
 
-// ② 引擎/kit 必须在 asarUnpack 里
-const unpack = Array.isArray(conf.asarUnpack) ? conf.asarUnpack : [];
-const hasKit = unpack.some((s) => String(s).includes('dsh-runtime/node_modules/@deepseek-ai/libreoffice-kit/**'));
-const hasEngine = unpack.some((s) => String(s).includes('dsh-runtime/node_modules/@deepseek-ai/libreoffice-kit-*/**'));
-if (!hasKit) problems.push('asarUnpack 缺少 libreoffice-kit/**（Office 预览的 JS 侧）');
-if (!hasEngine) {
+// ② LibreOffice kit **不许进 asar**（2026-10-15 P0-0 事故后的新不变量）
+//
+// 之前这里断言的是"kit 在 asarUnpack 里"——那是**机制**，而且事实证明它保证不了**能力**：
+// asar 里的路径 `stat` 一律报 0644（归档头不带执行位），kit 的自检是
+// `stat(path).mode & 0o111`（libreoffice-kit/lib/index.js）→ 打包态必败，
+// 用户看到的只有「Office 预览不可用」。所以现在要求：kit 两个包**根本不进 asar**，
+// 走 extraResources 发真实目录，DSH 侧用 NODE_PATH 解析。
+// （能力本身由 scripts/check-office-preview-packaged.js 在**打包产物**上真跑一遍来断言。）
+const files = Array.isArray(conf.files) ? conf.files.map(String) : [];
+// ⚠️ 精确匹配：`kit-*` 那条以 `kit` 结尾的前缀开头，用 includes 会被它蒙对（实测反例不红）
+const excludedEngine = files.includes('!dsh-runtime/node_modules/@deepseek-ai/libreoffice-kit-*');
+const excludedJsKit = files.includes('!dsh-runtime/node_modules/@deepseek-ai/libreoffice-kit');
+if (!excludedEngine) {
   problems.push(
-    'asarUnpack 缺少 libreoffice-kit-*/**（平台引擎）\n' +
-      '  → asar 里的文件模式是 0644 没有执行位，引擎自检会抛\n' +
-      '    `Installed LibreOfficeKit executable is not executable`，界面只说"Office 预览不可用"。',
+    'electron-builder.yml 的 files 没把**平台引擎包** `libreoffice-kit-*` 排除出 asar\n' +
+      '  → 走 asar 的路径 stat 恒为 0644，引擎自检 `mode & 0o111` 必败 → 用户看到「Office 预览不可用」（1.0.56/57 的真实故障）。',
+  );
+}
+if (excludedJsKit) {
+  problems.push(
+    'files 把 JS 侧 `libreoffice-kit` 也排除了 —— **它必须留在 asar 里**\n' +
+      '  → 它的依赖闭包（fontkit 等）在运行时 node_modules 里，搬出去会 import 失败（实测：转换报 Cannot find package fontkit）。',
+  );
+}
+const extra = Array.isArray(conf.extraResources) ? conf.extraResources : [];
+const shipsEngine = extra.some(
+  (e) => typeof e === 'object' && e && String(e.to || '').includes('office-kit'),
+);
+if (!shipsEngine) {
+  problems.push('extraResources 里没有把平台引擎以**真实目录**随包（to: office-kit/@deepseek-ai）');
+}
+if (Array.isArray(conf.asarUnpack) &&
+    conf.asarUnpack.some((u) => String(u).includes('libreoffice-kit'))) {
+  problems.push(
+    'asarUnpack 里还留着 libreoffice-kit* —— 已改成"引擎不进 asar"，这两条是旧机制的残留，必须删掉\n' +
+      '  （留着会让人误以为"解包就够了"，而这正是 1.0.56 假绿的来源）',
+  );
+}
+
+// ②b DSH 子进程必须能解析到真实目录：NODE_PATH 指向物化后的 kit
+const svc = fs.readFileSync(path.join(root, 'src', 'main', 'service-manager.ts'), 'utf-8');
+if (!/env\.NODE_PATH\s*=/.test(svc)) {
+  problems.push(
+    'service-manager.ts 没有给随包 DSH 设 NODE_PATH\n' +
+      '  → kit 不在 asar 里之后，DSH 的 office-to-pdf 将解析不到它（P0-0 修复的一半）。',
   );
 }
 
@@ -67,6 +102,6 @@ if (problems.length) {
   process.exitCode = 1;
 } else {
   console.log(
-    '✅ asar 打包守卫通过（asar=true · 引擎与 kit 已解包 · 物化走 asar 安全的 copyTree）',
+    '✅ asar 打包守卫通过（asar=true · 平台引擎不进 asar 走 extraResources · JS kit 留在 asar · DSH 侧 NODE_PATH 已接 · 物化走 asar 安全的 copyTree）',
   );
 }

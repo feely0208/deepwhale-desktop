@@ -292,16 +292,22 @@ function materializeOfficeKit(
     copyPackage('@deepseek-ai/libreoffice-kit');
     // 2) 平台引擎包：软链到解包目录（那里才有执行位）
     let engines: string[] = [];
+    // 打包态：引擎在 extraResources 的真实目录里（asar 外面那份）。
+    // runtimeNodeModulesDir 打包时是 `<Resources>/app.asar/dsh-runtime/node_modules`
+    // → 往上三层就是 `<Resources>`；开发态算出来是仓库根，那个 office-kit 不存在，自动退回。
+    const resourcesDir = path.dirname(path.dirname(path.dirname(runtimeNodeModulesDir)));
+    const packagedScope = path.join(resourcesDir, 'office-kit', '@deepseek-ai');
+    const engineScope = fs.existsSync(packagedScope) ? packagedScope : srcScope;
     try {
       engines = fs
-        .readdirSync(srcScope)
+        .readdirSync(engineScope)
         .filter((n) => n.startsWith('libreoffice-kit-') && n !== 'libreoffice-kit');
     } catch {
       engines = [];
     }
     for (const engine of engines) {
       const linkPath = path.join(scopedDir, engine);
-      const asarPath = path.join(srcScope, engine);
+      const asarPath = path.join(engineScope, engine);
       // asar 内部路径 → 对应的解包真实路径
       const unpacked = asarPath.includes('app.asar' + path.sep)
         ? asarPath.replace('app.asar' + path.sep, 'app.asar.unpacked' + path.sep)
@@ -393,11 +399,18 @@ export function ensureOfficeSetup(
   if (runtimeNodeModulesDir === undefined) {
     return { changed: false, profilePending: false };
   }
-  // 随包运行时里到底有没有这份 kit —— 没有就整体跳过（不写任何行）。
-  // 注意：这里只作"能力存在性"的判断，**不拿这个路径去注入**（它是 asar 逻辑路径，
-  // 注入进去就是 2026-10-14 那个事故；真正注入的是下面物化到真实目录的那份）。
+  // ⚠️ 2026-10-15（P0-0）打包策略（见 electron-builder.yml）：
+  //    · JS 侧 `libreoffice-kit` **留在 asar 里**（它的依赖闭包 fontkit 等在运行时
+  //      node_modules 里，搬出去会 import 失败 —— 实测踩到）；
+  //    · **平台引擎包** `libreoffice-kit-*` 不进 asar，走 extraResources 发真实目录
+  //      （asar 里 stat 恒为 0644，引擎自检 `mode & 0o111` 必败）。
+  //    所以：JS 闭包从运行时目录拷；引擎从下面这个真实目录取（打包态）。
+  const kitSourceDir = runtimeNodeModulesDir;
+
+  // 这份 kit 到底在不在 —— 没有就整体跳过（不写任何行）。
+  // 注意：这里只作"能力存在性"的判断，**不拿这个路径去注入**（注入的是物化到真实目录的那份）。
   const kitCliInRuntime = path.join(
-    runtimeNodeModulesDir,
+    kitSourceDir,
     '@deepseek-ai',
     'libreoffice-kit',
     'lib',
@@ -419,7 +432,7 @@ export function ensureOfficeSetup(
   //    → 2026-10-04 就是把 1.0.49 的 CI 打挂在这个 TypeError 上。
   const version =
     appVersion ?? (typeof app?.getVersion === 'function' ? app.getVersion() : 'dev');
-  const materialized = materializeOfficeKit(home, runtimeNodeModulesDir, version);
+  const materialized = materializeOfficeKit(home, kitSourceDir, version);
   if (materialized === null) {
     console.warn(
       '[office] 转换栈物化失败（libreoffice-kit 没能落到真实目录）—— 本次不写 office 行，' +

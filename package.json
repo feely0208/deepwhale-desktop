@@ -53,6 +53,7 @@
     "test:fault-log": "node scripts/test-fault-log.js",
     "check:release-notes": "node scripts/check-release-notes.js",
     "check:client-bundles": "node scripts/check-client-bundles.js",
+    "check:office-preview": "node scripts/check-office-preview-packaged.js",
     "smoke:isolated": "node scripts/smoke-isolated.js"
   },
   "dependencies": {

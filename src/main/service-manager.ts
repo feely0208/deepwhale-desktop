@@ -311,6 +311,25 @@ export class ServiceManager extends EventEmitter {
    */
   private spawnBundled(env: NodeJS.ProcessEnv, bin: string): void {
     env.ELECTRON_RUN_AS_NODE = '1';
+    // ⚠️ 2026-10-15（P0-0）：LibreOffice kit **不在 app.asar 里**（见 electron-builder.yml
+    //    的 files 排除 + extraResources）。DSH 的 `office-to-pdf` 服务会在进程内
+    //    `require('@deepseek-ai/libreoffice-kit')`；若命中 asar 里的副本，路径 stat 会报
+    //    0644（归档头无执行位），kit 的自检 `mode & 0o111` 必败 → 用户看到
+    //    「Office 预览不可用」。这里把物化到真实目录的那份挂到 NODE_PATH 上，
+    //    让解析落到真身（0755）。NODE_PATH 是 Node 官方的兜底搜索路径，不改变其它解析顺序。
+    const dshHomeForKit = this.options.env?.DSH_HOME;
+    if (typeof dshHomeForKit === 'string' && dshHomeForKit.length > 0) {
+      const kitModules = path.join(dshHomeForKit, 'office-runtime', 'kit', 'node_modules');
+      try {
+        if (fs.existsSync(path.join(kitModules, '@deepseek-ai', 'libreoffice-kit'))) {
+          env.NODE_PATH = env.NODE_PATH
+            ? `${kitModules}${path.delimiter}${env.NODE_PATH}`
+            : kitModules;
+        }
+      } catch {
+        // 路径探测失败不影响启动：最多是 Office 预览退化
+      }
+    }
     // `--expose-internals` 必须放在 Electron 自己的参数位（脚本路径之前）：
     // dsh-base 的 cordis.patch.yml 里 `hmr` 行在 web profile 下会被激活，而
     // cordis-plugin-hmr 的构造器要求 `ctx.loader.internal`，该属性只有当

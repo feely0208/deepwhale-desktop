@@ -245,18 +245,8 @@
   <main class="scroll" id="page-list">
     <div class="search">🔍 搜索会话内容</div>
     <button class="new-btn" id="btn-new">＋ 新建会话</button>
-    <button class="row-btn" data-id="s1">
-      <span class="t"><span class="title">创建每日新闻定时推送任务</span><span class="sub">session-7929b8cc</span></span>
-      <span class="time">3 分钟前</span>
-    </button>
-    <button class="row-btn" data-id="s2">
-      <span class="t"><span class="title">服务器介绍</span><span class="sub">session-2f5899d4</span></span>
-      <span class="time">7 分钟前</span>
-    </button>
-    <button class="row-btn" data-id="s3">
-      <span class="t"><span class="title">验证活动页布局</span><span class="sub">session-d7609b3a</span></span>
-      <span class="time">2 周前</span>
-    </button>
+    <!-- 会话行由 app.js 渲染：离线(file://)用 MOCK，在线用真接口 —— 不放静态演示行，
+         否则真数据模式下会拿它冒充真实会话（实测导致 E2E 假绿） -->
   </main>
 
   <!-- 会话页（默认隐藏，供断言/联调切换） -->

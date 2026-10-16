@@ -3,30 +3,89 @@
   "$id": "https://spec.deepwhale.org.cn/canvas/packs/video/node-text.schema.json",
   "title": "video / text 节点 props",
   "type": "object",
-  "required": ["text", "font", "size"],
+  "required": [
+    "text",
+    "font",
+    "size"
+  ],
   "additionalProperties": false,
   "properties": {
-    "text": { "type": "string", "maxLength": 2000 },
-    "font": { "type": "string", "description": "字体 ID，必须命中领域包 fonts 白名单" },
-    "size": { "type": "number", "exclusiveMinimum": 0, "maximum": 400 },
-    "weight": { "enum": [300, 400, 500, 600, 700, 900] },
-    "color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
-    "align": { "enum": ["left", "center", "right"] },
-    "lineHeight": { "type": "number", "exclusiveMinimum": 0.5, "maximum": 3 },
-    "letterSpacing": { "type": "number", "minimum": -20, "maximum": 100 },
-    "maxLines": { "type": "integer", "minimum": 1, "maximum": 20 },
-    "outline": { "type": "number", "minimum": 0, "maximum": 20 },
+    "text": {
+      "type": "string",
+      "maxLength": 2000
+    },
+    "font": {
+      "type": "string",
+      "description": "字体 ID，必须命中领域包 fonts 白名单"
+    },
+    "size": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 400
+    },
+    "weight": {
+      "enum": [
+        300,
+        400,
+        500,
+        600,
+        700,
+        900
+      ]
+    },
+    "color": {
+      "type": "string",
+      "pattern": "^#[0-9a-fA-F]{6}$"
+    },
+    "align": {
+      "enum": [
+        "left",
+        "center",
+        "right"
+      ]
+    },
+    "lineHeight": {
+      "type": "number",
+      "exclusiveMinimum": 0.5,
+      "maximum": 3
+    },
+    "letterSpacing": {
+      "type": "number",
+      "minimum": -20,
+      "maximum": 100
+    },
+    "maxLines": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 20
+    },
+    "outline": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 20
+    },
     "outlineColor": {
       "type": "string",
       "description": "可选：描边颜色。不填沿用半透明黑。允许 #RRGGBB 或 rgb()/rgba()",
       "pattern": "^(#[0-9a-fA-F]{6}|rgba?\\([0-9., %]+\\))$"
     },
-    "shadow": { "type": "boolean" },
+    "shadow": {
+      "type": "boolean"
+    },
     "shadowColor": {
       "type": "string",
       "description": "可选：投影颜色。不填沿用半透明黑。允许 #RRGGBB 或 rgb()/rgba()",
       "pattern": "^(#[0-9a-fA-F]{6}|rgba?\\([0-9., %]+\\))$"
     },
-    "bgmId": { "type": "string", "description": "可选：该文字层配的背景音乐 ID，必须命中 bgm 台账" }
+    "bgmId": {
+      "type": "string",
+      "description": "可选：该文字层配的背景音乐 ID，必须命中 bgm 台账"
+    },
+    "opacity": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "整体不透明度（水印用）。不填为 1"
+    }
   }
 }

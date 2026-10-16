@@ -176,6 +176,24 @@ function firstChunkMs(port, token) {
     ok(expired.status === 403, `过期配对码 403（实际 ${expired.status}）`);
     await expiredGw.stop();
 
+    // ⑨ CORS：独立 App（origin 与网关不同）必须能过 —— 预检与响应头都要有
+    const pre = await new Promise((resolve, reject) => {
+      const r = http.request(
+        { host: '127.0.0.1', port: P, path: '/__pair', method: 'OPTIONS',
+          headers: { origin: 'http://localhost:5173', 'access-control-request-method': 'POST' } },
+        (res) => { let b = ''; res.on('data', (c) => (b += c)); res.on('end', () => resolve({ status: res.statusCode, headers: res.headers })); },
+      );
+      r.on('error', reject); r.end();
+    });
+    ok(
+      pre.status === 204 && pre.headers['access-control-allow-origin'] === 'http://localhost:5173',
+      `CORS 预检放行且**回显 Origin**（实际 ${pre.status} / ${pre.headers['access-control-allow-origin']}）`,
+    );
+    ok(pre.headers['access-control-allow-credentials'] === 'true', '预检允许带凭据（DSH cookie 必需）');
+    const withCors = await req({ host: '127.0.0.1', port: P, path: '/', method: 'GET', headers: { origin: 'http://localhost:5173' } });
+    ok(withCors.headers['access-control-allow-origin'] === 'http://localhost:5173', '普通响应回显 Origin');
+    ok(withCors.headers['access-control-allow-credentials'] === 'true', '普通响应允许凭据');
+
     // ⑧ stop 后端口不再受理
     await gw.stop();
     let refused = false;

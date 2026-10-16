@@ -35,9 +35,12 @@
     } catch (e) {}
   }
   var conn = loadConn();
-  /** 是否是"由网关/DSH 直接打开的页面"（此时同源即已认证，不用再配对） */
-  var SAME_ORIGIN = location.protocol === 'http:' || location.protocol === 'https:';
-  var ONLINE = !!(conn && conn.origin) || SAME_ORIGIN;
+  /**
+   * 是否"同源即已连上"：**不能只看协议**（独立 App 的本地页面也是 http，会误判成已连接 —— 实测踩到）。
+   * 判据：探测一次同源的 /mobile/api/health，通了才算。
+   */
+  var SAME_ORIGIN = false;   // 由 boot() 里的探测决定
+  var ONLINE = false;
 
   /** 当前所有请求的基地址（独立 App 时是网关地址；同源打开时空串） */
   function base() {
@@ -86,7 +89,8 @@
 
   function jfetch(path, opts) {
     var url = base() + path + authQuery();
-    return fetch(url, Object.assign({ credentials: base() ? 'omit' : 'same-origin' }, opts || {})).then(function (r) {
+    // 跨域（独立 App）时必须带凭据：DSH 的鉴权是 cookie，omit 会让网关拿到 403（实测）
+    return fetch(url, Object.assign({ credentials: base() ? 'include' : 'same-origin' }, opts || {})).then(function (r) {
       return r.json().catch(function () {
         return { ok: false, reason: 'bad-json', status: r.status };
       });
@@ -144,6 +148,7 @@
   api.parsePairLink = parsePairLink;
   api.disconnect = function () { clearConn(); conn = null; };
   api.conn = function () { return conn; };
+  api.reload = function () { startOnline(); };
   window.dshMobileApi = api;
   window.dshMobileConnect = connect;
   window.dshMobileParsePairLink = parsePairLink;
@@ -369,14 +374,33 @@
       });
   }
   window.dshMobileSend = send;
+  window.dshMobileReload = startOnline;   // 配对成功后由外壳/测试调用，或本文件内部调用
 
   // ── 启动 ─────────────────────────────────────────────────────────
   function boot() {
-    // 独立 App 且还没配对 → 显示连接页（真实用户的第一步）
-    if (SAME_ORIGIN === false && !(conn && conn.origin)) {
-      if (window.__dshMobile && window.__dshMobile.showPage) window.__dshMobile.showPage('connect');
+    // 已配对（存过地址）→ 直接在线
+    if (conn && conn.origin) {
+      ONLINE = true;
+      startOnline();
       return;
     }
+    // ⚠️ **安全默认：先显示连接页**。
+    //    之前写成"探测失败才显示"，实测在独立 App 里不生效（页面停在列表页的静态演示
+    //    内容上，用户根本不知道要配对）。现在的顺序：先给连接页 → 探测到同源可用再隐藏。
+    if (window.__dshMobile && window.__dshMobile.showPage) window.__dshMobile.showPage('connect');
+    fetch('/mobile/api/health', { credentials: 'same-origin', cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .catch(function () { return null; })
+      .then(function (h) {
+        if (!h || !h.ok) return;      // 同源连不上 → 留在连接页（正确）
+        SAME_ORIGIN = true;
+        ONLINE = true;
+        if (window.__dshMobile && window.__dshMobile.showPage) window.__dshMobile.showPage('list');
+        startOnline();
+      });
+  }
+
+  function startOnline() {
     if (!ONLINE) {
       renderList(MOCK.sessions);   // file:// 下用假数据（只服务排版断言）
       return;

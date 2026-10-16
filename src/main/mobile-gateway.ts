@@ -118,6 +118,30 @@ function upstreamPath(rawUrl: string, dshToken: string, hasDshCookie: boolean): 
   return out;
 }
 
+/**
+ * 跨域支持（独立安装的手机 App 需要）：
+ * App 里的页面来自本地壳（origin 与网关不同），要访问 `/__pair` 与 `/mobile/api/*` 就必须过 CORS。
+ * 我们的鉴权**只用显式令牌**（不依赖 cookie），所以允许 `*` 是安全的；
+ * App 侧用 `credentials: 'omit'`，不带任何凭据。
+ */
+/**
+ * ⚠️ 必须**回显 Origin + 允许凭据**（不能用 `*`）：
+ *   独立 App 的页面与网关不同源，而 DSH 的鉴权是 cookie —— 跨域请求必须带凭据，
+ *   浏览器规定"带凭据时 Allow-Origin 不能是 `*`"。只回显 Origin 才走得通（实测：写 `*` 时
+ *   DSH 侧一律 403，因为 cookie 根本没带上）。
+ */
+function corsHeaders(req: IncomingMessage): Record<string, string> {
+  const origin = String(req.headers.origin ?? '');
+  return {
+    'access-control-allow-origin': origin || '*',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, POST, OPTIONS',
+    'access-control-allow-headers': 'content-type, authorization',
+    'vary': 'Origin',
+    'access-control-max-age': '600',
+  };
+}
+
 const DENY_PAGE = `<!doctype html><meta charset="utf-8"><title>深鲸 · 手机访问</title>
 <style>body{font:14px/1.6 -apple-system,system-ui,"PingFang SC",sans-serif;margin:0;padding:40px;background:#0f1115;color:#e6e8ea}
 h1{font-size:16px;margin:0 0 8px}p{margin:6px 0;color:#9aa4ad}code{background:#1b1f27;padding:2px 6px;border-radius:4px}</style>
@@ -153,6 +177,49 @@ export function startMobileGateway(opts: GatewayOptions): Promise<GatewayHandle>
   let currentPort = opts.port ?? 0;
   let currentHostForDisplay = detectLanHost();
 
+  /**
+   * 网关自己持有的 DSH 鉴权 cookie。
+   *
+   * ⚠️ 2026-10-16 关键修正（独立 App 流程实测暴露）：
+   *   手机端只跟**网关**打交道（有我们自己的令牌），它**不可能**有 DSH 的 cookie。
+   *   之前把 DSH 的令牌/cookie 透传指望浏览器带着 —— 独立 App 场景下浏览器根本没有，
+   *   于是到了 DSH 侧全部未认证（403/401）。
+   *   正确做法：**网关在服务端自己跟 DSH 建立会话**（用 DSH 的 token 换 cookie 并缓存），
+   *   转发时注入这个 cookie。这样手机端只需要我们自己的令牌，DSH 的凭据不出网关。
+   */
+  let dshCookie = '';
+  let dshAuthPromise: Promise<string> | null = null;
+  function ensureDshAuth(): Promise<string> {
+    if (dshCookie || dshAuthPromise) return dshAuthPromise ?? Promise.resolve(dshCookie);
+    dshAuthPromise = new Promise<string>((resolve) => {
+      try {
+        const req = agent.request(
+          {
+            protocol: dshUrl.protocol,
+            hostname: dshUrl.hostname,
+            port: dshUrl.port || (isHttps ? 443 : 80),
+            method: 'GET',
+            path: `/?token=${encodeURIComponent(opts.dshToken)}`,
+            headers: { host: dshUrl.host },
+          },
+          (res) => {
+            const sc = res.headers['set-cookie'];
+            const list = Array.isArray(sc) ? sc : sc ? [sc] : [];
+            const auth = list.map((c) => String(c).split(';')[0]).filter((c) => c.startsWith('dsh-auth-'));
+            dshCookie = auth.join('; ');
+            res.resume();
+            resolve(dshCookie);
+          },
+        );
+        req.on('error', () => resolve(''));
+        req.end();
+      } catch {
+        resolve('');
+      }
+    });
+    return dshAuthPromise;
+  }
+
   const server: Server = http.createServer((req, res) => {
     void handleRequest(req, res);
   });
@@ -160,6 +227,14 @@ export function startMobileGateway(opts: GatewayOptions): Promise<GatewayHandle>
   /** 普通 HTTP 请求：鉴权 → 反代 */
   async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const url = new URL(req.url ?? '/', 'http://placeholder');
+    // CORS：预检直接放行；其余响应统一带上（独立 App 从本地壳访问网关时必需）
+    const cors = corsHeaders(req);
+    if ((req.method ?? '').toUpperCase() === 'OPTIONS') {
+      res.writeHead(204, cors);
+      res.end();
+      return;
+    }
+    for (const [k, v] of Object.entries(cors)) res.setHeader(k, v);
 
     // ① 配对：`/__pair?code=XXXXXX` 用一次性码换令牌（只有这一个免鉴权入口）
     if (url.pathname === '/__pair') {
@@ -200,6 +275,9 @@ export function startMobileGateway(opts: GatewayOptions): Promise<GatewayHandle>
       });
     }
 
+    // ③ 反代到 127.0.0.1 上的 DSH。先确保网关自己已与 DSH 建立会话（服务端持有 cookie）。
+    await ensureDshAuth();
+
     // ③ 反代到 127.0.0.1 上的 DSH（带上 DSH 自己的令牌）
     //
     // ⚠️ 2026-10-16 真机联调抓到的 bug（替身测试永远测不出来）：
@@ -209,27 +287,35 @@ export function startMobileGateway(opts: GatewayOptions): Promise<GatewayHandle>
     //    修法：令牌来自 query 时，顺手下发一个 HttpOnly 的 `dsh_mobile` cookie（见下方
     //    setCookieOnProxy）。DSH 自己的 `dsh-auth-*` cookie 照旧透传。
     const fromQuery = (url.searchParams.get('token') ?? '') !== '';
-    const hasDshCookie = /(?:^|;\s*)dsh-auth-/.test(String(req.headers.cookie || ''));
     const headers: http.OutgoingHttpHeaders = { ...req.headers };
     delete headers.host;
     delete headers.authorization;
     // 用我们自己的 cookie 名承载会话令牌，避免与 DSH 自身 cookie 冲突
-    if (headers.cookie) {
-      headers.cookie = String(headers.cookie)
-        .split(';')
-        .filter((c) => !c.trim().startsWith('dsh_mobile='))
-        .join(';');
-    }
+    // 用**网关自己的** DSH cookie 覆盖浏览器带来的 cookie（浏览器那份跟我们无关）；
+    // 同时确保 `dsh_mobile`（我们自己的令牌）不外传。
+    headers.cookie = dshCookie;
+
+    // ⚠️ 去掉浏览器的 `Origin`/`Referer`：对 DSH 来说，真正的调用方是**网关**（服务端），
+    //    带着手机页面的来源会被 DSH 的来源校验挡下 —— 实测表现为 `/mobile/api/*`（我们插件，
+    //    不校验来源）200，而 DSH 自己的 `/api/*` 一律 403。
+    delete headers.origin;
+    delete headers.referer;
+    delete headers['sec-fetch-site'];
+    delete headers['sec-fetch-mode'];
+    delete headers['sec-fetch-dest'];
     const upstreamReq = agent.request(
       {
         protocol: dshUrl.protocol,
         hostname: dshUrl.hostname,
         port: dshUrl.port || (isHttps ? 443 : 80),
         method: req.method,
-        path: upstreamPath(req.url ?? '/', opts.dshToken, hasDshCookie),
+        path: upstreamPath(req.url ?? '/', opts.dshToken, dshCookie !== ''),
         headers,
       },
       (upstreamRes) => {
+        if (process.env.DSH_GW_DEBUG === '1') {
+          console.error(`[gw] upstream ${String(upstreamRes.statusCode)} ${req.url ?? ''} cookie=${dshCookie ? '有' : '无'}`);
+        }
         const outHeaders: http.OutgoingHttpHeaders = { ...upstreamRes.headers };
         if (fromQuery) {
           // 把 DSH 原本的 Set-Cookie 保留，并**追加**我们自己的会话 cookie
@@ -253,8 +339,8 @@ export function startMobileGateway(opts: GatewayOptions): Promise<GatewayHandle>
 
   /** WebSocket 之类的 upgrade：同样必须带令牌 */
   server.on('upgrade', (req: IncomingMessage, socket: Socket, head: Buffer) => {
+    void ensureDshAuth();
     const url = new URL(req.url ?? '/', 'http://placeholder');
-    const hasDshCookie = /(?:^|;\s*)dsh-auth-/.test(String(req.headers.cookie || ''));
     if (process.env.DSH_GW_DEBUG === '1') {
       console.error(`[gw] WS ${req.url ?? ''}`);
     }
@@ -269,8 +355,8 @@ export function startMobileGateway(opts: GatewayOptions): Promise<GatewayHandle>
       hostname: dshUrl.hostname,
       port: dshUrl.port || (isHttps ? 443 : 80),
       method: 'GET',
-      path: upstreamPath(req.url ?? '/', opts.dshToken, hasDshCookie),
-      headers: { ...req.headers, host: dshUrl.host },
+      path: upstreamPath(req.url ?? '/', opts.dshToken, dshCookie !== ''),
+      headers: { ...req.headers, cookie: dshCookie, host: dshUrl.host },
     });
     upReq.on('upgrade', (upRes, upSocket, upHead) => {
       const headers = Object.entries(upRes.headers)

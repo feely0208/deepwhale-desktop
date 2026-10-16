@@ -23,6 +23,7 @@
 import { existsSync, mkdirSync, statSync, createReadStream, createWriteStream, rmSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve, extname } from 'node:path';
 import { homedir } from 'node:os';
+import { pathToFileURL } from 'node:url';
 import { getState as licState, activate as licActivate } from './license.mjs';
 import { spawn } from 'node:child_process';
 import { JobManager, resolveNode, probeElectron, electronCandidates } from './jobs.mjs';

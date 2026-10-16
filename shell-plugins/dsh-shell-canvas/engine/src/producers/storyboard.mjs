@@ -139,10 +139,17 @@ function register(registerProducer) {
           // 标题/强调条走整镜窗口：入场动画走完即定格，镜末随之离场（hold:false）。
           timeline.push({ nodeId: tId, from, to, hold: false, anim: { name: 'slide-up', params: { distance: 40 } } });
           timeline.push({ nodeId: bId, from, to, hold: false, anim: { name: 'wipe-in', params: { direction: mirrored ? 'right' : 'left' } } });
-          timeline.push({
-            nodeId: id, from, to, hold: false,   // 只在自己那段出现，之后消失（否则图片一张张叠上来）
-            anim: it.shot ? { name: 'ken-burns', params: { fromScale: 1.06, toScale: 1.0 } } : undefined,
-          });
+          // ⚠️ 只有这一镜真的有图时才推 timeline。
+          //    节点 shotN 只在 `if (it.shot)` 里创建 —— 无条件推 timeline 会得到
+          //    E_TIMELINE_NODE_UNKNOWN（时间轴引用了不存在的节点）。
+          //    表现：用界面上的「不加图」生成分镜 → 校验失败 → 出不了片。
+          //    2026-10-11 修。
+          if (it.shot) {
+            timeline.push({
+              nodeId: id, from, to, hold: false,   // 只在自己那段出现，之后消失（否则图片一张张叠上来）
+              anim: { name: 'ken-burns', params: { fromScale: 1.06, toScale: 1.0 } },
+            });
+          }
         }
       });
       // 字幕节点：整片时长（时序由 SRT 决定，管线仍会按真实配音重新对齐）

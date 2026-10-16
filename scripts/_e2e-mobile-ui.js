@@ -2,6 +2,11 @@
 //      ④ 在页面里真的发一条消息 → ⑤ 断言会话页渲染出真实消息（核心回路）
 // 透明不可见窗口，不打扰用户；DSH 由探针以 --no-open 启动。
 const { app, BrowserWindow } = require('electron');
+const os = require('os');
+const pathMod = require('path');
+// ⚠️ 每次运行用**隔离的 userData**：Electron 的 localStorage 会跨运行持久化，
+//    上一次实验留下的"已配对"记录会让页面跳过连接页 → 断言假红/假绿（实测踩了很久）
+app.setPath('userData', require('fs').mkdtempSync(pathMod.join(os.tmpdir(), 'dsh-e2e-userdata-')));
 const fs = require('fs');
 const SHOT_DIR = '/tmp/dsh-mobile-e2e';
 const base = process.env.DSH_E2E_BASE;

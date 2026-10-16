@@ -48,6 +48,7 @@ function get(pathname, cookie, method = 'GET', body) {
 async function main() {
   const argv = process.argv.slice(2);
   const rawIdx = argv.indexOf('--raw');
+  const postIdx = argv.indexOf('--post');   // --post <path> <json>  （直连 DSH 的 typed RPC 探测）
   const sessionIdx = argv.indexOf('--session');
 
   // 1) 准备临时 home（首次初始化 profile）
@@ -122,7 +123,47 @@ async function main() {
 
   // 默认流程：health → 新建一个会话 → 列表 → 取该会话详情（一次性拿到全部形状）
   const steps = [];
-  if (rawIdx >= 0) {
+  // --rpc-prompt：用 DSH 官方 typed RPC 发一条消息，再用我们的接口读回
+  if (argv.includes('--rpc-prompt')) {
+    // 用官方 RPC 建会话（我们的 sessions.create() 产出的是占位 id，真会话是 UUID）
+    const crid = `probe-c-${Date.now().toString(36)}`;
+    const cpay = JSON.stringify({
+      type: 'client-request', rpcId: crid, method: 'session/create',
+      payload: { args: { request: {} } },
+    });
+    const created = await get('/api/session/create', cookie, 'POST', cpay);
+    console.log('\n== POST /api/session/create →', created.body.slice(0, 400));
+    let sid = '';
+    try {
+      const j = JSON.parse(created.body);
+      const v = j?.result?.value ?? j?.result;
+      sid = v?.sessionId ?? v?.id ?? v?.session?.id ?? '';
+    } catch {}
+    if (!sid) {
+      console.log('（没拿到 id，改用列表里的第一个）');
+      const list = await get('/mobile/api/sessions', cookie);
+      sid = JSON.parse(list.body)?.sessions?.[0]?.id ?? '';
+    }
+    console.log('== 会话 id →', sid);
+    const rid = `probe-${Date.now().toString(36)}`;
+    const pay = JSON.stringify({
+      type: 'client-request', rpcId: rid, method: 'session/prompt',
+      payload: { args: { request: { requestId: rid, sessionId: sid, mode: 'queue', content: [{ type: 'text', text: '你好，报一下当前目录' }] } } },
+    });
+    const r = await get('/api/session/prompt', cookie, 'POST', pay);
+    console.log('== POST /api/session/prompt →', r.body.slice(0, 500));
+    await wait(3000);
+    const back = await get(`/mobile/api/session?id=${encodeURIComponent(sid)}`, cookie);
+    console.log('== 我们的接口读回 →', back.body.slice(0, 600));
+    dsh.kill('SIGKILL');
+    process.exit(0);
+  }
+
+  if (postIdx >= 0) {
+    for (const p of argv[postIdx + 1].split(',')) {
+      steps.push([p, 'POST', argv[postIdx + 2] ?? '{"type":"client-request","rpcId":"11111111-2222-4333-8444-555555555555","method":"x","payload":{}}']);
+    }
+  } else if (rawIdx >= 0) {
     steps.push([argv[rawIdx + 1] ?? '/mobile/api/health', 'GET', undefined]);
   } else {
     steps.push(['/mobile/api/health', 'GET', undefined]);

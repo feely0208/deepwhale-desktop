@@ -71,6 +71,8 @@ async function main() {
   rmSync(pluginDst, { recursive: true, force: true });
   mkdirSync(join(HOME, 'plugins'), { recursive: true });
   cpSync(pluginSrc, pluginDst, { recursive: true });
+  // 手机端界面：构建时由 build-bundled-plugins.js 拷入；探针里手动拷一次
+  cpSync(join(REPO, 'mobile-ui'), join(pluginDst, 'ui'), { recursive: true });
   const nm = join(HOME, 'profiles', PROFILE, 'node_modules', '@deepwhale-cn');
   mkdirSync(nm, { recursive: true });
   try {
@@ -111,6 +113,18 @@ async function main() {
 
   // --boot-client：先用 Electron 以"透明不可见"窗口加载一次官方页面，
   // 让 typert 把远端 RPC descriptor 注册出来（它惰性注册，没人连就是空的）。
+  // --e2e-ui：打开我们插件的 /mobile/，断言真实会话被渲染出来
+  if (argv.includes('--e2e-ui')) {
+    const { spawn: spawnEl } = await import('node:child_process');
+    const el = spawnEl(join(REPO, 'node_modules/.bin/electron'), [join(REPO, 'scripts/_e2e-mobile-ui.js')], {
+      env: { ...process.env, DSH_E2E_BASE: `http://127.0.0.1:${PORT}`, DSH_E2E_TOKEN: token, ELECTRON_RUN_AS_NODE: '' },
+      stdio: 'inherit',
+    });
+    await new Promise((r) => el.on('exit', r));
+    dsh.kill('SIGKILL');
+    process.exit(0);
+  }
+
   if (argv.includes('--boot-client')) {
     const { spawn: spawnEl } = await import('node:child_process');
     const el = spawnEl(join(REPO, 'node_modules/.bin/electron'), [join(REPO, 'scripts/_boot-dsh-client.js')], {
@@ -169,6 +183,8 @@ async function main() {
     steps.push(['/mobile/api/health', 'GET', undefined]);
     steps.push(['/mobile/api/session', 'POST', '{}']);
     steps.push(['/mobile/api/sessions', 'GET', undefined]);
+    steps.push(['/mobile/', 'GET', undefined]);
+    steps.push(['/mobile/app.js', 'GET', undefined]);
     // 发一条消息（真实链路；本机没配模型凭据时会如实返回错误——那也是有效结论）
     steps.push(['/mobile/api/_dev/activate', 'POST', JSON.stringify({ sessionId: 'mobile-1' })]);
     steps.push(['/mobile/api/prompt', 'POST', JSON.stringify({ sessionId: 'mobile-1', text: '你好，报一下当前目录' })]);

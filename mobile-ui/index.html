@@ -261,6 +261,7 @@
     <button id="nav-me"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/></svg>我的</button>
   </nav>
 </div>
+<script src="app.js"></script>
 <script>
   // 仅用于骨架/断言联调：切换两个主页面
   window.__dshMobile = {
@@ -273,6 +274,24 @@
   };
   document.getElementById('nav-chat').addEventListener('click',()=>window.__dshMobile.showPage('chat'));
   document.getElementById('nav-me').addEventListener('click',()=>window.__dshMobile.showPage('list'));
+  // 发送：接真实数据层（离线时是预览）
+  (function () {
+    var input = document.getElementById('input');
+    var send = document.getElementById('btn-send');
+    function doSend() {
+      var text = (input.value || '').trim();
+      if (!text || !window.dshMobileSend) return;
+      send.disabled = true;
+      Promise.resolve(window.dshMobileSend(text)).then(function () {
+        input.value = '';
+        send.disabled = false;
+      }).catch(function () { send.disabled = false; });
+    }
+    if (send) send.addEventListener('click', doSend);
+    if (input) input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSend(); }
+    });
+  })();
 </script>
 </body>
 </html>

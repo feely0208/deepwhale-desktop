@@ -32,7 +32,22 @@
  *    也不要返回一个看起来成功、实际是空的数据（那是假绿，桌面端已经吃过亏）。
  */
 
+import { statSync as statSyncFs, createReadStream as createReadStreamFs, readFileSync as readFileSyncFs } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join as joinPath, normalize as normPath } from 'node:path';
+
 export const name = 'shell-mobile';
+
+/** 手机端界面所在目录（构建时由 scripts/build-bundled-plugins.js 把 mobile-ui/ 拷进来） */
+const UI_DIR = joinPath(dirname(fileURLToPath(import.meta.url)), '..', 'ui');
+const MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+  '.json': 'application/json; charset=utf-8',
+};
 
 /**
  * cordis 的 `inject` 是"要什么写什么"，**缺一个就整个插件不 apply**（实测：写
@@ -357,6 +372,30 @@ export function apply(ctx) {
     const url = new URL(req.url ?? '/', 'http://127.0.0.1');
     const path = url.pathname;
 
+    // ── 手机端界面本体：/mobile/ → 插件自带 ui/ 目录（与 API 同源，手机端免跨域）──
+    // ⚠️ 必须排除 API 前缀：只写 `startsWith('/mobile/')` 会把 /mobile/api/* 也吃进来
+    // （实测：所有 API 都变成 404 "mobile ui not found"）。API 优先。
+    if ((path === '/mobile' || path.startsWith('/mobile/')) && !path.startsWith(`${ROUTE}`)) {
+      const rel = path === '/mobile' || path === '/mobile/' ? 'index.html' : path.slice('/mobile/'.length);
+      const target = joinPath(UI_DIR, normPath(rel).replace(/^(\.\.[/\\])+/, ''));
+      try {
+        const st = statSyncFs(target);
+        if (!st.isFile()) throw new Error('not a file');
+        const ext = target.slice(target.lastIndexOf('.'));
+        res.writeHead(200, {
+          'content-type': MIME[ext] ?? 'application/octet-stream',
+          'content-length': st.size,
+          'cache-control': 'no-store',
+        });
+        createReadStreamFs(target).pipe(res);
+        return;
+      } catch {
+        res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+        res.end('mobile ui not found（构建时是否把 mobile-ui/ 拷进插件？）');
+        return;
+      }
+    }
+
     if (path === `${ROUTE}/health`) {
       json(res, 200, { ok: true, plugin: name, version: PLUGIN_VERSION, injected: Object.keys(services) });
       return;
@@ -492,9 +531,11 @@ export function apply(ctx) {
     json(res, 404, { ok: false, reason: 'unknown-route', route: ROUTE });
   }
 
+  // ⚠️ 注册的是 **/mobile**（不是 /mobile/api）：手机端界面(/mobile/)与接口(/mobile/api/*)
+  // 都要经过这里。只注册 /mobile/api 时 /mobile/ 根本进不来（实测 404）。
   ctx.effect(
-    () => ctx.webServer.register({ kind: 'prefix', path: ROUTE, handler }),
-    'dsh-shell-mobile: /mobile/api 出口',
+    () => ctx.webServer.register({ kind: 'prefix', path: '/mobile', handler }),
+    'dsh-shell-mobile: /mobile 出口（界面 + 接口）',
   );
   log(`已挂载 ${ROUTE}（手机端接口层 v${PLUGIN_VERSION}）`);
 }

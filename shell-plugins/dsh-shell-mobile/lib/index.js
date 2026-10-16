@@ -35,10 +35,12 @@
 export const name = 'shell-mobile';
 
 /**
- * 我们想用的 DSH 服务。cordis 的 `inject` 是"要什么写什么"，缺了就不会 apply →
- * 这里只注入**读会话**必须的两个；写操作（prompt）等接口定型后再补。
+ * cordis 的 `inject` 是"要什么写什么"，**缺一个就整个插件不 apply**（实测：写
+ * `inject: ['webServer','sessions']` 时若 sessions 不在，插件直接挂掉）。
+ * 所以这里只注入**一定存在**的 `webServer`；会话等服务用 `ctx.get(...)` 可选获取，
+ * 取不到就如实返回原因（宁可接口说"我还没接上"，也不要整块功能不生效）。
  */
-export const inject = ['sessions', 'sessionQuery'];
+export const inject = ['webServer'];
 
 /** 路由前缀（网关与手机端都按这个约定来） */
 export const ROUTE = '/mobile/api';
@@ -110,11 +112,12 @@ export function apply(ctx) {
 
   // 自报家底用：把 ctx 上能看到的服务名与形状记下来
   const services = {};
+  let lastError = '';
   try {
     for (const key of ['sessions', 'sessionQuery', 'sessionProjections', 'agents', 'workspaceRegistry']) {
       let v;
       try {
-        v = ctx[key];
+        v = typeof ctx.get === 'function' ? ctx.get(key) : undefined;
       } catch {
         v = undefined;
       }
@@ -124,39 +127,56 @@ export function apply(ctx) {
     services.__error = String(e?.message ?? e);
   }
 
-  /** 会话列表：尽力而为 */
+  /**
+   * 会话列表。**实测得出的正解**（而不是猜的）：
+   *   · `sessions.list()` ✓ 存在；
+   *   · `sessionQuery.searchSessions()` 在本部署被**禁用**
+   *     （报 `session search is disabled: … index with openAt "never"`）→ 不能用。
+   * 这正说明"自报家底 + 如实返回原因"的做法是对的：先说清哪条路能走，再写死。
+   */
   async function listSessions() {
-    const sessions = ctx.sessions;
+    const sessions = typeof ctx.get === 'function' ? ctx.get('sessions') : undefined;
     if (!sessions) return { ok: false, reason: 'no-sessions-service' };
-    // 逐个试常见形状；认识哪个用哪个，都不认识就如实上报（附自报家底，便于下一次立刻修）
     const attempts = [
-      ['sessions.list', () => sessions.list?.({})],
-      ['sessions.all', () => sessions.all?.()],
-      ['sessions.snapshot', () => (typeof sessions.snapshot === 'function' ? sessions.snapshot() : undefined)],
-      ['sessionQuery.list', () => ctx.sessionQuery?.list?.({})],
+      ['sessions.list()', () => sessions.list?.()],
+      ['sessions.list({})', () => sessions.list?.({})],
     ];
     for (const [label, run] of attempts) {
       try {
         const v = await run();
         if (v === undefined || v === null) continue;
         const arr = Array.isArray(v) ? v : Array.isArray(v.items) ? v.items : Array.isArray(v.sessions) ? v.sessions : null;
-        if (!arr) continue;
+        if (!arr) return { ok: false, reason: 'unexpected-shape', via: label, shape: describe(v, 2) };
         return {
           ok: true,
           via: label,
           count: arr.length,
-          sessions: arr.slice(0, 200).map((s) => ({
-            id: s?.id ?? s?.sessionId ?? null,
-            title: s?.title ?? s?.name ?? null,
-            updatedAt: s?.updatedAt ?? s?.lastActivityAt ?? null,
-            workspace: s?.workspace ?? s?.workspacePath ?? null,
+          sampleKeys: arr[0] ? Object.keys(arr[0]).slice(0, 24) : [],
+          sessions: arr.slice(0, 200).map((x) => ({
+            id: x?.id ?? x?.sessionId ?? x?.key ?? null,
+            title: x?.title ?? x?.name ?? null,
+            updatedAt: x?.updatedAt ?? x?.lastActivityAt ?? null,
+            workspace: x?.workspace ?? x?.workspacePath ?? null,
           })),
         };
       } catch (e) {
-        // 试下一个形状
+        lastError = String(e?.message ?? e);
       }
     }
-    return { ok: false, reason: 'unknown-shape', hint: '见 /mobile/api/_services', services };
+    return { ok: false, reason: 'all-shapes-failed', lastError, services };
+  }
+
+  /** 单个会话：先取会话本体（sessions.get），消息等投影接口定型后再补 */
+  async function getSession(id) {
+    const sessions = typeof ctx.get === 'function' ? ctx.get('sessions') : undefined;
+    if (!sessions?.get) return { ok: false, reason: 'no-sessions.get' };
+    if (!id) return { ok: false, reason: 'missing-id' };
+    try {
+      const v = await sessions.get(id);
+      return { ok: true, session: v ?? null, shape: v ? describe(v, 2) : null };
+    } catch (e) {
+      return { ok: false, reason: 'get-failed', error: String(e?.message ?? e) };
+    }
   }
 
   async function handler(req, res) {
@@ -183,7 +203,7 @@ export function apply(ctx) {
     }
 
     if (path === `${ROUTE}/session`) {
-      json(res, 200, { ok: false, reason: 'not-implemented', hint: '先把 /_services 的形状确认后再实现' });
+      json(res, 200, await getSession(url.searchParams.get('id') ?? ''));
       return;
     }
 

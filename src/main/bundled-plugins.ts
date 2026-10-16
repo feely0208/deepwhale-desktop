@@ -75,6 +75,10 @@ const BUNDLED_PLUGINS: BundledPlugin[] = [
   // 「改完插件让用户刷新一下」变成一句空话。本插件用 DSH 的快捷键服务把这一键补回来。
   // 零界面、零依赖，解决的是"用户界面出问题时没有自救入口"，该随包发。
   { name: '@deepwhale-cn/dsh-shell-reload', dir: 'dsh-shell-reload' },
+  // 手机端接口层（手机端 1.1.0，2026-10-16 定案方案 B）：在宿主里注册 /mobile/api/*，
+  // 数据来自 DSH 的插件服务；手机端（我们自己的辉光 UI）经自家网关调用。
+  // ⚠️ 与 scripts/build-bundled-plugins.js 的拷贝段**必须同进同出**（否则声明了但载荷里没有）。
+  { name: '@deepwhale-cn/dsh-shell-mobile', dir: 'dsh-shell-mobile' },
   // ⛔ 品牌标记（空白会话顶部的青色大肥鱼）—— **不进包**（2026-10-08 用户决定）。
   //
   // 用户原话：「不要换新会话的大肥鱼头像，还是用官方原生的」。

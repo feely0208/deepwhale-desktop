@@ -1,0 +1,7 @@
+# @deepwhale-cn/dsh-shell-mobile 的组合层
+#
+# profile 在 dsh.profile.bundles 里列出本包后，这一层把插件挂进组合。
+# 约定（官方 verify-cordis-config 强制）：`name` 必须与本包 package.json 的 name 完全一致。
+- insert:
+    - id: shell-mobile
+      name: '@deepwhale-cn/dsh-shell-mobile'

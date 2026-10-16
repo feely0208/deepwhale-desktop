@@ -204,6 +204,12 @@ async function main() {
   fs.cpSync(localReloadPlugin, path.join(outDir, 'dsh-shell-reload'), { recursive: true });
   console.log('[bundled-plugins]   → dsh-shell-reload（本地源码）');
 
+  // 手机端接口层（手机端 1.1.0）：与 src/main/bundled-plugins.ts 的清单**同进同出** ——
+  // 只加清单不拷载荷 = 声明了但没有（`ensureBundledPlugins` 会静默跳过），1.0.56 踩过。
+  const localMobilePlugin = path.join(__dirname, '..', 'shell-plugins', 'dsh-shell-mobile');
+  fs.cpSync(localMobilePlugin, path.join(outDir, 'dsh-shell-mobile'), { recursive: true });
+  console.log('[bundled-plugins]   → dsh-shell-mobile（本地源码）');
+
   // ⛔ 品牌标记插件（空白会话顶部的青色大肥鱼）—— **已彻底删除**（2026-10-08 用户决定：
   //    「彻底删除掉，一毛钱的用处都没有」）。
   //    不要再加回来。它当年还踩过一个坑（只导出 name、没导出可挂载形态 →

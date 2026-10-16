@@ -94,12 +94,28 @@ function tokenOf(req: IncomingMessage, url: URL): string {
   return m ? decodeURIComponent(m[1]) : '';
 }
 
-/** 去掉我们自己的 token 参数，换成 DSH 自己的 token（DSH 首次加载认这个） */
-function upstreamPath(url: URL, dshToken: string): string {
-  const u = new URL(url.toString());
-  u.searchParams.delete('token');
-  if (dshToken) u.searchParams.set('token', dshToken);
-  return u.pathname + (u.search || '');
+/**
+ * 去掉我们自己的 token 参数，必要时换成 DSH 自己的 token。
+ *
+ * ⚠️ 2026-10-16 真机联调第二个 bug（替身测不出来）：
+ *   DSH 只要发现 URL 里带 `token` 就**一直 303 去把它洗掉**（避免令牌留在地址栏/历史里）。
+ *   我最初**每次**都给上游补上 DSH 令牌 → 令牌永远在 → **无限重定向**（手机端白屏）。
+ *   正确做法：**只在客户端还没有 DSH 的鉴权 cookie 时才注入**；之后让 cookie 说话。
+ */
+function upstreamPath(rawUrl: string, dshToken: string, hasDshCookie: boolean): string {
+  // ⚠️ 绝不能在这里用 `new URL()` 重新解析再拼回去（2026-10-16 真机联调第三个 bug）：
+  //    DSH 的客户端资源路径形如 `plugins/??@deepseek-ai/dsh-client-modules/client.js&rev=…`，
+  //    `new URL()` 会把**第一个 `?` 当成 query 边界** → pathname 被截断成 `plugins/` → 404，
+  //    手机端就是白屏（直连 DSH 同一路径实测 200 / 40KB）。
+  //    所以：只在原始串上摘掉"我们自己的 token 参数"，必要时再追加 DSH 的令牌。
+  let out = rawUrl.replace(/([?&])token=[^&]*/g, '$1');
+  out = out.replace(/[?&]+(?=&|$)/g, '').replace(/\?&/g, '?').replace(/&&+/g, '&');
+  if (out === '') out = '/';
+  if (!out.startsWith('/')) out = '/' + out;
+  if (dshToken && !hasDshCookie) {
+    out += (out.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(dshToken);
+  }
+  return out;
 }
 
 const DENY_PAGE = `<!doctype html><meta charset="utf-8"><title>深鲸 · 手机访问</title>
@@ -168,7 +184,32 @@ export function startMobileGateway(opts: GatewayOptions): Promise<GatewayHandle>
       return;
     }
 
+    // 调试：把经网关的 /api/* 请求记下来（手机端 1.1.0 要自己实现通信层，
+    // 这是"读官方客户端实际发了什么"的最可靠手段 —— 比翻生成代码快得多）。
+    // 记录所有**非静态资源**请求（资源路径形如 plugins/??…/client.js，量太大不要记）
+    const isAsset = url.pathname.startsWith('/plugins/') || /\.(js|css|map|png|svg|woff2?|ico)$/.test(url.pathname);
+    if (process.env.DSH_GW_DEBUG === '1' && !isAsset) {
+      const chunks: Buffer[] = [];
+      req.on('data', (c: Buffer) => {
+        chunks.push(c);
+        if (chunks.reduce((n, b) => n + b.length, 0) < 4096) return;
+      });
+      req.on('end', () => {
+        const body = Buffer.concat(chunks).toString('utf8').slice(0, 400);
+        console.error(`[gw] ${req.method ?? ''} ${url.pathname} body=${body}`);
+      });
+    }
+
     // ③ 反代到 127.0.0.1 上的 DSH（带上 DSH 自己的令牌）
+    //
+    // ⚠️ 2026-10-16 真机联调抓到的 bug（替身测试永远测不出来）：
+    //    DSH 第一次带 `?token=` 访问会 **303 重定向到 `./`**，而那个**相对地址把我们自己的
+    //    令牌丢了** —— 浏览器随后只带 cookie 来。过去我们只在 `?token=`/请求头里认令牌、
+    //    却**从不下发自己的 cookie** → 手机端一过重定向就 401 卡死（页面白屏）。
+    //    修法：令牌来自 query 时，顺手下发一个 HttpOnly 的 `dsh_mobile` cookie（见下方
+    //    setCookieOnProxy）。DSH 自己的 `dsh-auth-*` cookie 照旧透传。
+    const fromQuery = (url.searchParams.get('token') ?? '') !== '';
+    const hasDshCookie = /(?:^|;\s*)dsh-auth-/.test(String(req.headers.cookie || ''));
     const headers: http.OutgoingHttpHeaders = { ...req.headers };
     delete headers.host;
     delete headers.authorization;
@@ -185,11 +226,21 @@ export function startMobileGateway(opts: GatewayOptions): Promise<GatewayHandle>
         hostname: dshUrl.hostname,
         port: dshUrl.port || (isHttps ? 443 : 80),
         method: req.method,
-        path: upstreamPath(url, opts.dshToken),
+        path: upstreamPath(req.url ?? '/', opts.dshToken, hasDshCookie),
         headers,
       },
       (upstreamRes) => {
-        res.writeHead(upstreamRes.statusCode ?? 502, upstreamRes.headers);
+        const outHeaders: http.OutgoingHttpHeaders = { ...upstreamRes.headers };
+        if (fromQuery) {
+          // 把 DSH 原本的 Set-Cookie 保留，并**追加**我们自己的会话 cookie
+          const existing = upstreamRes.headers['set-cookie'];
+          const list = Array.isArray(existing) ? [...existing] : existing ? [existing] : [];
+          list.push(
+            `dsh_mobile=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${String(Math.floor(pairTtlMs / 1000) + 3600)}`,
+          );
+          outHeaders['set-cookie'] = list;
+        }
+        res.writeHead(upstreamRes.statusCode ?? 502, outHeaders);
         upstreamRes.pipe(res); // 流式（SSE 也走这里，不缓冲）
       },
     );
@@ -203,6 +254,10 @@ export function startMobileGateway(opts: GatewayOptions): Promise<GatewayHandle>
   /** WebSocket 之类的 upgrade：同样必须带令牌 */
   server.on('upgrade', (req: IncomingMessage, socket: Socket, head: Buffer) => {
     const url = new URL(req.url ?? '/', 'http://placeholder');
+    const hasDshCookie = /(?:^|;\s*)dsh-auth-/.test(String(req.headers.cookie || ''));
+    if (process.env.DSH_GW_DEBUG === '1') {
+      console.error(`[gw] WS ${req.url ?? ''}`);
+    }
     const given = tokenOf(req, url);
     if (given === '' || !safeEqual(given, token)) {
       socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
@@ -214,7 +269,7 @@ export function startMobileGateway(opts: GatewayOptions): Promise<GatewayHandle>
       hostname: dshUrl.hostname,
       port: dshUrl.port || (isHttps ? 443 : 80),
       method: 'GET',
-      path: upstreamPath(url, opts.dshToken),
+      path: upstreamPath(req.url ?? '/', opts.dshToken, hasDshCookie),
       headers: { ...req.headers, host: dshUrl.host },
     });
     upReq.on('upgrade', (upRes, upSocket, upHead) => {

@@ -196,6 +196,7 @@ async function run() {
       if (m.scrollW > m.vw + 1) problems.push(`${tag} 横向溢出：scrollWidth ${m.scrollW} > ${m.vw}`);
       for (const it of m.items) {
         if (it.tag === 'textarea') continue;
+        if (it.r.w === 0 || it.r.h === 0) continue;   // 隐藏元素不参与尺寸断言
         const h = Math.max(it.r.h, it.hit.h), w = Math.max(it.r.w, it.hit.w);
         if (h < 43 || w < 43) {
           problems.push(`${tag} 点按热区不足 44：${it.text || it.id || it.cls} ${Math.round(w)}×${Math.round(h)}`);
@@ -215,7 +216,8 @@ async function run() {
         if (it.overflowX > 1) problems.push(`${tag} 按钮文字横向溢出：${it.text}`);
         if (it.overflowY > 2) problems.push(`${tag} 按钮文字换行：${it.text}`);
       }
-      if (m.send) {
+      // 只在发送按钮**可见**时断言（连接页把它隐藏了，rect=0×0 会误报；实测踩到）
+      if (m.send && m.send.w > 0 && m.send.h > 0) {
         if (!(m.send.w >= 47 && m.send.h >= 47)) {
           problems.push(`${tag} 发送按钮尺寸不足 48：${Math.round(m.send.w)}×${Math.round(m.send.h)}`);
         }

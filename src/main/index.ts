@@ -45,6 +45,7 @@ import { healPatchFiles } from './patch-heal';
 import { healLegacyAgentPreset } from './preset-heal';
 import { registerLocalFilesIpc } from './localfiles';
 import { notesFor } from './whatsnew';
+import { initMobilePanel, showMobilePanel, disposeMobileGateway } from './mobile-panel';
 import {
 
 
@@ -429,7 +430,37 @@ function openSettingsPage(): void {
  *
  * 鉴权**保持开启**：0.0.0.0 意味着同网段可达，关掉 token 等于把会话记录对同 WiFi 敞开。
  */
+/**
+ * 「手机连接」= 打开**手机连接面板**（2026-10-16 改版）。
+ *
+ * 旧实现（`showMobileConnectLegacy`，保留作对照）是个 messageBox：给一串局域网地址 +
+ * token，让用户自己配转发与认证 —— 这正是第三方用"扫码 10 秒"超过我们的地方。
+ * 现在：壳里直接跑一个只监局域网的网关，面板负责开关 + 出二维码，手机扫码即配对。
+ *
+ * 首次打开时注入"取 DSH 地址与令牌"的方法：只有这里知道 service 实例，
+ * 而网关需要它去与 DSH 建立会话（凭据留在网关内，不下发手机）。
+ */
+let mobilePanelInited = false;
 async function showMobileConnect(): Promise<void> {
+  if (!store.get('lanAccess')) {
+    await dialog.showMessageBox({
+      type: 'info',
+      title: '手机连接',
+      message: '「允许手机连接」当前是关闭的。',
+      detail: '打开后深鲸桌面才会在局域网里可被访问。可以在设置里打开，或联系支持。',
+      buttons: ['知道了'],
+    });
+    return;
+  }
+  if (!mobilePanelInited) {
+    initMobilePanel(() => service?.getWebEndpoint() ?? null);
+    mobilePanelInited = true;
+  }
+  showMobilePanel();
+}
+
+/** 旧版「手机连接」（弹框给地址）——保留备查，不再从菜单调用 */
+async function showMobileConnectLegacy(): Promise<void> {
   if (!store.get('lanAccess')) {
     await dialog.showMessageBox({
       type: 'info',
@@ -3781,6 +3812,8 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
     quitting = true;
     usage.stop();
     updates?.dispose();
+    // 手机访问网关必须随应用退出收掉：否则端口还开着、别人还能连（安全第一）
+    void disposeMobileGateway();
     if (service) {
       // 冒烟模式不保留服务（见下面的 will-quit），其余情况沿用用户的 keepDshRunning。
       if (!SMOKE && store.get('keepDshRunning')) {

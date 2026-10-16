@@ -114,7 +114,20 @@ export function apply(ctx) {
   const services = {};
   let lastError = '';
   try {
-    for (const key of ['sessions', 'sessionQuery', 'sessionProjections', 'agents', 'workspaceRegistry']) {
+    for (const key of [
+      'sessions',
+      'sessionQuery',
+      'sessionProjections',
+      'agents',
+      'workspaceRegistry',
+      // 宿主把会话接口实现挂成服务时可能叫这些名字（生成代码里出现过 sessionController）
+      'sessionController',
+      'sessionApi',
+      'apiSession',
+      'attachments',
+      'connection',
+      'typert',
+    ]) {
       let v;
       try {
         v = typeof ctx.get === 'function' ? ctx.get(key) : undefined;
@@ -239,6 +252,103 @@ export function apply(ctx) {
     return { ok: false, reason: 'all-shapes-failed', lastError };
   }
 
+  /**
+   * 发消息（prompt）。**按宿主实现的真实流程来**（读 `dsh-api-session-controller` 的
+   * `prompt()` 得出，不是猜）：
+   *   const agent = agents.get(sessionId)
+   *   const message = createUserMessage({ content, source })
+   *   agent.followup(message)        // mode === 'steer' 时用 agent.steer(message)
+   * `createUserMessage` 来自 DSH 的基础包 `@deepseek-ai/dsh-llm`（**底座 API**，可以 import）。
+   */
+  async function sendPrompt({ sessionId, text, mode } = {}) {
+    if (!sessionId) return { ok: false, reason: 'missing-sessionId' };
+    if (typeof text !== 'string' || text.trim() === '') return { ok: false, reason: 'empty-text' };
+    const agents = typeof ctx.get === 'function' ? ctx.get('agents') : undefined;
+    if (!agents?.get) return { ok: false, reason: 'no-agents.get' };
+    let agent;
+    try {
+      agent = agents.get(sessionId);
+    } catch (e) {
+      return { ok: false, reason: 'agent-get-failed', error: String(e?.message ?? e) };
+    }
+    if (!agent) return { ok: false, reason: 'agent-not-found', sessionId, hint: '先 POST /mobile/api/session 新建，或确认 sessionId' };
+
+    let createUserMessage;
+    try {
+      ({ createUserMessage } = await import('@deepseek-ai/dsh-llm'));
+    } catch (e) {
+      return { ok: false, reason: 'cannot-import-dsh-llm', error: String(e?.message ?? e) };
+    }
+    const rpcId = `mobile-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    try {
+      // 文本内容先经 attachments 准入（与宿主一致）；该服务取不到时退回裸文本块
+      const attachments = typeof ctx.get === 'function' ? ctx.get('attachments') : undefined;
+      let content = [{ type: 'text', text }];
+      if (attachments?.admitPromptContent) {
+        try {
+          content = await attachments.admitPromptContent(content);
+        } catch {
+          /* 准入失败就按裸文本走，让下游给出真实错误 */
+        }
+      }
+      const message = createUserMessage({ content, source: { kind: 'user', rpcId } });
+      const fn = mode === 'steer' ? agent.steer : agent.followup;
+      if (typeof fn !== 'function') {
+        return { ok: false, reason: mode === 'steer' ? 'no-agent.steer' : 'no-agent.followup', agentKeys: describe(agent, 2).keys };
+      }
+      await fn.call(agent, message);
+      return { ok: true, accepted: true, rpcId, mode: mode ?? 'followup' };
+    } catch (e) {
+      return { ok: false, reason: 'prompt-failed', error: String(e?.message ?? e) };
+    }
+  }
+
+  /**
+   * 【开发用】把"让某个会话拥有活跃 agent"这一步**试出来**（宿主内部有 resolve/resume
+   * 机制，但那是 controller 私有面；插件能用的是 sessions/agents 两个服务）。
+   * 逐个候选调用，**报出哪一个真的让 agents.get(id) 变成有值** —— 不猜。
+   */
+  async function activateAgent(sessionId) {
+    const agents = typeof ctx.get === 'function' ? ctx.get('agents') : undefined;
+    const sessions = typeof ctx.get === 'function' ? ctx.get('sessions') : undefined;
+    if (!agents?.get || !sessions) return { ok: false, reason: 'bad-input' };
+    const id = sessionId && sessionId !== '' ? sessionId : `mobile-${Date.now().toString(36)}`;
+    const already = agents.get(id);
+    if (already) return { ok: true, already: true, via: 'agents.get', id };
+
+    const tried = [];
+    // 候选链（每个都试，报出返回了什么 / 抛了什么）
+    const chains = [
+      ['prepare→enter(obs)→get', async () => {
+        const obs = await sessions.prepare(id, {});
+        const entered = await sessions.enter(obs);
+        return { obs, entered };
+      }],
+      ['prepare→get', async () => sessions.prepare(id, {})],
+      ['enter(prepare(id,{}))→get', async () => sessions.enter(await sessions.prepare(id, {}))],
+    ];
+    for (const [label, run] of chains) {
+      try {
+        const v = await run();
+        const live = agents.get(id);
+        tried.push(`${label}: ok，get→${live ? '有 agent' : '仍为空'}`);
+        if (live) {
+          return {
+            ok: true,
+            via: label,
+            id,
+            agentKeys: describe(live, 2).keys,
+            preparedKeys: describe(v?.obs ?? v, 1).keys,
+            tried,
+          };
+        }
+      } catch (e) {
+        tried.push(`${label}: 抛错 ${String(e?.message ?? e).slice(0, 140)}`);
+      }
+    }
+    return { ok: false, reason: 'no-chain-worked', id, tried };
+  }
+
   async function handler(req, res) {
     if (!isLoopback(req)) {
       json(res, 403, { ok: false, reason: 'loopback-only' });
@@ -249,6 +359,81 @@ export function apply(ctx) {
 
     if (path === `${ROUTE}/health`) {
       json(res, 200, { ok: true, plugin: name, version: PLUGIN_VERSION, injected: Object.keys(services) });
+      return;
+    }
+
+    if (path === `${ROUTE}/_dev/activate`) {
+      let body = '';
+      req.on('data', (c) => {
+        body += c;
+      });
+      req.on('end', async () => {
+        let payload = {};
+        try {
+          payload = body ? JSON.parse(body) : {};
+        } catch {
+          payload = {};
+        }
+        json(res, 200, await activateAgent(payload.sessionId));
+      });
+      return;
+    }
+
+    if (path === `${ROUTE}/_dev/routes`) {
+      const ws = typeof ctx.get === 'function' ? ctx.get('webServer') : undefined;
+      const conn = typeof ctx.get === 'function' ? ctx.get('connection') : undefined;
+      const keys = (o) => (o ? Object.keys(o).filter((k) => !k.startsWith('_')).slice(0, 40) : null);
+      const dump = {
+        webServerKeys: keys(ws),
+        exact: ws?.exact ? [...ws.exact.keys()].slice(0, 80) : null,
+        prefixes: ws?.prefixes ? [...ws.prefixes.keys()].slice(0, 80) : null,
+        upgrades: ws?.upgrades ? [...ws.upgrades.keys()].slice(0, 40) : null,
+        connectionKeys: keys(conn),
+        fetchKeys: conn?.fetch ? keys(conn.fetch) : null,
+        fetchRoutes: conn?.fetchRoutes
+          ? conn.fetchRoutes instanceof Map
+            ? [...conn.fetchRoutes.keys()].slice(0, 120)
+            : Object.keys(conn.fetchRoutes).slice(0, 120)
+          : null,
+        exactRoutes: ws?.exact ? [...ws.exact.keys()] : null,
+        // /api 前缀路由是谁注册的（谁就掌握方法名映射）
+        apiRoute: (() => {
+          try {
+            const r = ws?.prefixes?.get?.('/api');
+            if (!r) return null;
+            return { kind: r.kind, path: r.path, ownerKeys: r.handler ? Object.keys(r.handler).slice(0, 20) : null, ownerName: r.handler?.name ?? null };
+          } catch (e) {
+            return String(e?.message ?? e);
+          }
+        })(),
+        // typert 的远端面（方法名可能在这里）
+        rpcNames: (() => {
+          const t = typeof ctx.get === 'function' ? ctx.get('typert') : undefined;
+          if (!t) return null;
+          const keysOf = (o) => {
+            try {
+              if (o instanceof Map) return [...o.keys()];
+              if (o && typeof o === 'object') return Object.keys(o);
+            } catch {}
+            return null;
+          };
+          const desc = t.remoteStore?.descriptors;
+          const entries = desc?.entries;
+          return {
+            descriptors: keysOf(desc)?.slice(0, 120) ?? null,
+            entries: keysOf(entries)?.slice(0, 200) ?? null,
+            ids: keysOf(desc?.ids)?.slice(0, 200) ?? null,
+            definitions: keysOf(t.lookupStore?.definitions)?.slice(0, 200) ?? null,
+          };
+        })(),
+        typertStores: (() => {
+          const t = typeof ctx.get === 'function' ? ctx.get('typert') : undefined;
+          if (!t) return null;
+          const sh = (o) => (o && typeof o === 'object' ? Object.keys(o).slice(0, 60) : null);
+          return { remoteStore: sh(t.remoteStore), lookupStore: sh(t.lookupStore), contextStore: sh(t.contextStore), packages: sh(t.packages) };
+        })(),
+      };
+      json(res, 200, { ok: true, dump });
       return;
     }
 
@@ -284,7 +469,23 @@ export function apply(ctx) {
     }
 
     if (path === `${ROUTE}/prompt`) {
-      json(res, 501, { ok: false, reason: 'not-implemented' });
+      if ((req.method ?? 'GET').toUpperCase() !== 'POST') {
+        json(res, 405, { ok: false, reason: 'use-post' });
+        return;
+      }
+      let body = '';
+      req.on('data', (c) => {
+        body += c;
+      });
+      req.on('end', async () => {
+        let payload = {};
+        try {
+          payload = body ? JSON.parse(body) : {};
+        } catch {
+          payload = {};
+        }
+        json(res, 200, await sendPrompt(payload));
+      });
       return;
     }
 

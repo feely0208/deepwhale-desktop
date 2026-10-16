@@ -108,6 +108,18 @@ async function main() {
   const first = await get(`/?token=${token}`);
   const cookie = (first.headers['set-cookie'] ?? []).map((c) => String(c).split(';')[0]).join('; ');
 
+  // --boot-client：先用 Electron 以"透明不可见"窗口加载一次官方页面，
+  // 让 typert 把远端 RPC descriptor 注册出来（它惰性注册，没人连就是空的）。
+  if (argv.includes('--boot-client')) {
+    const { spawn: spawnEl } = await import('node:child_process');
+    const el = spawnEl(join(REPO, 'node_modules/.bin/electron'), [join(REPO, 'scripts/_boot-dsh-client.js')], {
+      env: { ...process.env, DSH_BOOT_URL: `http://127.0.0.1:${PORT}/?token=${token}`, DSH_BOOT_MS: '25000', ELECTRON_RUN_AS_NODE: '' },
+      stdio: 'ignore',
+    });
+    await wait(26000);
+    el.kill('SIGKILL');
+  }
+
   // 默认流程：health → 新建一个会话 → 列表 → 取该会话详情（一次性拿到全部形状）
   const steps = [];
   if (rawIdx >= 0) {
@@ -116,13 +128,19 @@ async function main() {
     steps.push(['/mobile/api/health', 'GET', undefined]);
     steps.push(['/mobile/api/session', 'POST', '{}']);
     steps.push(['/mobile/api/sessions', 'GET', undefined]);
+    // 发一条消息（真实链路；本机没配模型凭据时会如实返回错误——那也是有效结论）
+    steps.push(['/mobile/api/_dev/activate', 'POST', JSON.stringify({ sessionId: 'mobile-1' })]);
+    steps.push(['/mobile/api/prompt', 'POST', JSON.stringify({ sessionId: 'mobile-1', text: '你好，报一下当前目录' })]);
+    steps.push(['/mobile/api/session?id=mobile-1', 'GET', undefined]);
   }
   if (sessionIdx >= 0) steps.push([`/mobile/api/session?id=${encodeURIComponent(argv[sessionIdx + 1] ?? '')}`, 'GET', undefined]);
 
   for (const [p, method, body] of steps) {
     const r = await get(p, cookie, method, body);
-    console.log(`\n== ${p}  → HTTP ${r.status}`);
-    console.log(r.body.slice(0, 1200));
+    console.log(`\n== ${p}  → HTTP ${r.status}（${r.body.length} 字节）`);
+    // 完整正文写文件（截断打印过 JSON 会解析不了，踩过）
+    writeFileSync('/tmp/dsh-mobile-probe-out.json', r.body);
+    console.log(r.body.slice(0, 600));
   }
 
   dsh.kill('SIGKILL');

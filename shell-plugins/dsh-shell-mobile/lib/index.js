@@ -152,12 +152,15 @@ export function apply(ctx) {
           via: label,
           count: arr.length,
           sampleKeys: arr[0] ? Object.keys(arr[0]).slice(0, 24) : [],
-          sessions: arr.slice(0, 200).map((x) => ({
-            id: x?.id ?? x?.sessionId ?? x?.key ?? null,
-            title: x?.title ?? x?.name ?? null,
-            updatedAt: x?.updatedAt ?? x?.lastActivityAt ?? null,
-            workspace: x?.workspace ?? x?.workspacePath ?? null,
-          })),
+          sessions: arr.slice(0, 200).map((x) => {
+            const h = x?.header && typeof x.header === 'object' ? x.header : {};
+            return {
+              id: x?.id ?? x?.sessionId ?? x?.key ?? null,
+              title: h.title ?? x?.title ?? null,
+              updatedAt: h.updatedAt ?? h.lastActivityAt ?? x?.updatedAt ?? null,
+              workspace: h.workspace ?? h.workspacePath ?? x?.workspace ?? null,
+            };
+          }),
         };
       } catch (e) {
         lastError = String(e?.message ?? e);
@@ -166,17 +169,74 @@ export function apply(ctx) {
     return { ok: false, reason: 'all-shapes-failed', lastError, services };
   }
 
-  /** 单个会话：先取会话本体（sessions.get），消息等投影接口定型后再补 */
+  /**
+   * 单个会话 + 消息。实测形状（见探针输出）：
+   *   会话对象：`id` / `header`（标题等在这里）/ `log` / `seq`
+   *             方法：`deriveMessages()` / `snapshotEvents()` / `requestHeader()` …
+   * → 所以标题从 `header` 取、消息从 `deriveMessages()` 取，**都是实测出来的**。
+   */
   async function getSession(id) {
     const sessions = typeof ctx.get === 'function' ? ctx.get('sessions') : undefined;
     if (!sessions?.get) return { ok: false, reason: 'no-sessions.get' };
     if (!id) return { ok: false, reason: 'missing-id' };
+    let v;
     try {
-      const v = await sessions.get(id);
-      return { ok: true, session: v ?? null, shape: v ? describe(v, 2) : null };
+      v = await sessions.get(id);
     } catch (e) {
       return { ok: false, reason: 'get-failed', error: String(e?.message ?? e) };
     }
+    if (!v) return { ok: false, reason: 'not-found', id };
+
+    const header = v.header && typeof v.header === 'object' ? v.header : null;
+    let messages = null;
+    let messagesError = '';
+    try {
+      if (typeof v.deriveMessages === 'function') messages = v.deriveMessages();
+      else if (typeof v.snapshotEvents === 'function') messages = v.snapshotEvents();
+    } catch (e) {
+      messagesError = String(e?.message ?? e);
+    }
+    const arr = Array.isArray(messages) ? messages : null;
+    return {
+      ok: true,
+      id: v.id ?? id,
+      title: header?.title ?? null,
+      headerKeys: header ? Object.keys(header).slice(0, 24) : [],
+      header: header ? describe(header, 2) : null,
+      messageCount: arr ? arr.length : null,
+      messageKeys: arr?.[0] ? Object.keys(arr[0]).slice(0, 24) : [],
+      messagesSample: arr ? arr.slice(0, 2).map((m) => describe(m, 2)) : null,
+      messagesError,
+    };
+  }
+
+  /**
+   * 新建会话（手机端"新建会话"要用）。`sessions.create(2)` 实测存在，但入参形状未知 →
+   * 多试几种，把有效的那种报出去。
+   */
+  async function createSession(payload) {
+    const sessions = typeof ctx.get === 'function' ? ctx.get('sessions') : undefined;
+    if (!sessions?.create) return { ok: false, reason: 'no-sessions.create' };
+    const attempts = [
+      ['create()', () => sessions.create()],
+      ['create({})', () => sessions.create({})],
+      ['create(payload)', () => sessions.create(payload ?? {})],
+    ];
+    for (const [label, run] of attempts) {
+      try {
+        const v = await run();
+        if (v === undefined || v === null) continue;
+        return {
+          ok: true,
+          via: label,
+          id: v?.id ?? v?.sessionId ?? null,
+          shape: describe(v, 2),
+        };
+      } catch (e) {
+        lastError = String(e?.message ?? e);
+      }
+    }
+    return { ok: false, reason: 'all-shapes-failed', lastError };
   }
 
   async function handler(req, res) {
@@ -203,6 +263,22 @@ export function apply(ctx) {
     }
 
     if (path === `${ROUTE}/session`) {
+      if ((req.method ?? 'GET').toUpperCase() === 'POST') {
+        let body = '';
+        req.on('data', (c) => {
+          body += c;
+        });
+        req.on('end', async () => {
+          let payload = {};
+          try {
+            payload = body ? JSON.parse(body) : {};
+          } catch {
+            payload = {};
+          }
+          json(res, 200, await createSession(payload));
+        });
+        return;
+      }
       json(res, 200, await getSession(url.searchParams.get('id') ?? ''));
       return;
     }

@@ -314,7 +314,17 @@ export function startMobileGateway(opts: GatewayOptions): Promise<GatewayHandle>
       },
       (upstreamRes) => {
         if (process.env.DSH_GW_DEBUG === '1') {
-          console.error(`[gw] upstream ${String(upstreamRes.statusCode)} ${req.url ?? ''} cookie=${dshCookie ? '有' : '无'}`);
+          const code = String(upstreamRes.statusCode);
+          console.error(`[gw] upstream ${code} ${req.url ?? ''} cookie=${dshCookie ? '有' : '无'}`);
+          // 4xx 时把上游正文打出来（定位 403 到底是谁拒绝、为什么 —— 只看状态码查不动）
+          if (/^4/.test(code)) {
+            const chunks: Buffer[] = [];
+            upstreamRes.on('data', (c: Buffer) => chunks.push(c));
+            upstreamRes.on('end', () => {
+              console.error(`[gw] upstream body ${code}: ${Buffer.concat(chunks).toString('utf8').slice(0, 300)}`);
+            });
+          }
+          console.error(`[gw] sent headers: ${JSON.stringify({ host: headers.host, cookie: String(headers.cookie ?? '').slice(0, 40), origin: headers.origin ?? null, referer: headers.referer ?? null, 'content-type': headers['content-type'] })}`);
         }
         const outHeaders: http.OutgoingHttpHeaders = { ...upstreamRes.headers };
         if (fromQuery) {
@@ -408,6 +418,45 @@ export function detectLanHost(): string {
     }
   }
   return '127.0.0.1';
+}
+
+/**
+ * 本地生成二维码 SVG（**不联网**）。
+ *
+ * 为什么不用在线二维码服务：配对载荷里含一次性配对码与网关地址 —— 发给第三方服务
+ * 等于把"临时钥匙"递给别人。用 `qrcode-generator`（MIT、无依赖）在本地画。
+ */
+/** 二维码模块矩阵（true=黑）。用于**结构断言**：模块数、三个定位图案、时序图案。 */
+export function qrMatrix(text: string): boolean[][] {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const qrcode = require('qrcode-generator') as (
+    type: number,
+    ec: string,
+  ) => { addData(d: string): void; make(): void; getModuleCount(): number; isDark(r: number, c: number): boolean };
+  const qr = qrcode(0, 'M');
+  qr.addData(text);
+  qr.make();
+  const n = qr.getModuleCount();
+  const m: boolean[][] = [];
+  for (let r = 0; r < n; r += 1) {
+    const row: boolean[] = [];
+    for (let c = 0; c < n; c += 1) row.push(qr.isDark(r, c));
+    m.push(row);
+  }
+  return m;
+}
+
+export function qrSvg(text: string, size = 260): string {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const qrcode = require('qrcode-generator') as (
+    type: number,
+    ec: string,
+  ) => { addData(d: string): void; make(): void; createSvgTag(o: Record<string, unknown>): string; getModuleCount(): number };
+  const qr = qrcode(0, 'M');
+  qr.addData(text);
+  qr.make();
+  const cell = Math.max(2, Math.floor(size / (qr.getModuleCount() + 4)));
+  return qr.createSvgTag({ cellSize: cell, margin: 2, scalable: true });
 }
 
 /**

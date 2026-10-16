@@ -95,6 +95,17 @@ export class ServiceManager extends EventEmitter {
   private stopping = false;
   private port: number;
   private recentOutput: string[] = [];
+  /** DSH 宣布的服务地址（如 http://127.0.0.1:8080），拿不到时为 null */
+  private webBase: string | null = null;
+  /** DSH 的访问令牌（手机端网关用它在服务端建立会话） */
+  private webToken: string | null = null;
+
+  /** 供手机端网关使用：DSH 的地址与令牌（未就绪时返回 null） */
+  getWebEndpoint(): { base: string; token: string } | null {
+    if (!this.webBase || !this.webToken) return null;
+    return { base: this.webBase, token: this.webToken };
+  }
+
   /** 是否已看到 DSH 自己打印的 `dsh web: http://…` 那行（= 它宣布"可服务"） */
   private sawBanner = false;
   /** 探测过几次（写进失败详情，替代"只能猜"） */
@@ -398,7 +409,16 @@ export class ServiceManager extends EventEmitter {
       if (!trimmed) continue;
       // DSH 打印 `dsh web: http://127.0.0.1:<port>/?token=…` 的那一刻，服务已经能应答 ——
       // 把这行当**第二条就绪信号**（见 ensureReady 里的说明）。
-      if (/^dsh web:\s*https?:\/\//.test(trimmed)) this.sawBanner = true;
+      if (/^dsh web:\s*https?:\/\//.test(trimmed)) {
+        this.sawBanner = true;
+        // 记下 DSH 宣布的地址与令牌：手机端网关要用它去跟 DSH 建立会话
+        // （手机只能连网关，不能直连 DSH —— DSH 只监听 127.0.0.1）
+        const m = /^dsh web:\s*(https?:\/\/[^\s?]+)\/?\?token=([^\s]+)/.exec(trimmed);
+        if (m) {
+          this.webBase = m[1];
+          this.webToken = m[2];
+        }
+      }
       this.recentOutput.push(trimmed);
       if (this.recentOutput.length > 50) this.recentOutput.shift();
       this.options.onLogLine?.(trimmed);

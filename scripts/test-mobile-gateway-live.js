@@ -115,17 +115,14 @@ function get(url, headers) {
     ok(page.status === 200, `带令牌取首页 200（实际 ${page.status}）`);
     ok(/__ModuleLoader__/.test(page.body), '拿到的是**真的 DSH 页面**（含 __ModuleLoader__）');
 
-    // ④ DSH 的 Cookie 穿过网关
-    // ⚠️ 注意：DSH 的 cookie 是在**首次 303** 那一条上下的，跟随重定向后的 200 上不会再有
+    // ④ DSH 的凭据**留在网关里**（新契约，2026-10-16）
+    //    手机端只认我们自己的令牌；DSH 的 cookie 不下发给客户端（更安全，且独立 App 场景
+    //    浏览器本来也拿不到它）。这里断言的是"没泄漏"这一条。
     const setCookie = firstPage.headers['set-cookie'] || [];
-    const dshCookie = setCookie.map((c) => String(c).split(';')[0]).find((c) => /^dsh-auth-/.test(c));
-    ok(!!dshCookie, `DSH 的鉴权 cookie 被透传（${(dshCookie || '无').split('=')[0]}）`);
-    if (dshCookie) {
-      const viaCookie = await get(`http://127.0.0.1:${gw.port}/?token=${encodeURIComponent(token)}`, {
-        cookie: dshCookie,
-      });
-      ok(viaCookie.status === 200, `带 DSH cookie 再次请求 200（实际 ${viaCookie.status}）`);
-    }
+    const leaked = setCookie.map((c) => String(c).split(';')[0]).filter((c) => /^dsh-auth-/.test(c));
+    ok(leaked.length === 0, `DSH 的鉴权 cookie **没有**下发给手机（实际泄漏 ${leaked.length} 个）`);
+    const ourCookieStill = setCookie.map((c) => String(c).split(';')[0]).find((c) => c.startsWith('dsh_mobile='));
+    ok(!!ourCookieStill, '网关只下发我们自己的会话 cookie');
 
     // ⑤ 静态资源（手机端白屏与否的关键）
     const assetMatch = /<script src="([^"]*dsh-client-modules\/client\.js[^"]*)"/.exec(page.body);

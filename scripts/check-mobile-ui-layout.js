@@ -150,7 +150,7 @@ async function run() {
     win.setContentSize(d.w, d.h);
     await wait(260);
     const perPage = [];
-    for (const page of ['list', 'chat']) {
+    for (const page of ['list', 'chat', 'connect']) {
       await win.webContents.executeJavaScript(`window.__dshMobile.showPage('${page}')`);
       await wait(180);
       // 在页面内 try/catch 后**转成 JSON 字符串**再返回：
@@ -224,6 +224,21 @@ async function run() {
         }
       }
       if (!m.safeCss) problems.push(`${tag} 缺少 viewport-fit=cover 或 env(safe-area-inset-*)`);
+      // 连接页专项：不出现输入区/标签栏；「连接」按钮够大
+      if (page === 'connect') {
+        const composer = await win.webContents.executeJavaScript(
+          "getComputedStyle(document.querySelector('.composer')).display",
+        );
+        const tabbar = await win.webContents.executeJavaScript(
+          "getComputedStyle(document.querySelector('.tabbar')).display",
+        );
+        if (composer !== 'none') problems.push(`${tag} 连接页不该显示输入区`);
+        if (tabbar !== 'none') problems.push(`${tag} 连接页不该显示底部标签栏`);
+        const go = m.items.find((i) => i.id === 'conn-go');
+        if (go && (go.r.h < 47 || go.r.w < 100)) {
+          problems.push(`${tag} 「连接」按钮太小：${Math.round(go.r.w)}×${Math.round(go.r.h)}`);
+        }
+      }
       // ⑧ emoji 当图标 → 产品感不足
       for (const e of m.emojiInIcons) {
         problems.push(`${tag} 图标用了 emoji（应为矢量图标）：${e.id} → "${e.text}"`);

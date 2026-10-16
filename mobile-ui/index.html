@@ -137,6 +137,20 @@
   .msg.me{background:linear-gradient(160deg, rgba(74,138,196,.30), rgba(45,95,158,.22));
     border-color:rgba(124,186,240,.35);margin-left:46px}
   .meta{font-size:12px;opacity:.6;display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
+  /* 连接页（独立安装的 App 首次进来看到的）：地址 + 配对码 + 连接 */
+  .connect{padding:28px 18px;display:flex;flex-direction:column;gap:14px}
+  .connect h1{font-size:20px;margin:0 0 4px;font-weight:600}
+  .connect p{margin:0;font-size:13px;opacity:.7;line-height:1.6}
+  .connect label{display:block;font-size:12px;opacity:.6;margin-bottom:6px}
+  .connect input{width:100%;height:var(--btn-h-primary);padding:0 14px;border-radius:var(--r-md);
+    border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.06);color:inherit;font:inherit;font-size:15px}
+  @media (prefers-color-scheme: light){
+    .connect input{border-color:rgba(20,40,70,.14);background:rgba(255,255,255,.7)}
+  }
+  .connect .go{height:var(--btn-h-primary);border-radius:var(--r-md);border:0;font-size:15px;font-weight:600;
+    color:#f4f9ff;background:linear-gradient(180deg,#5c9ad4,#2d5f9e);box-shadow:var(--glow)}
+  .connect .err{font-size:13px;color:#e5534b;min-height:18px}
+
   /* 轨迹行：类型徽标 + 摘要 + 序号（一行放不下就换行，不许横向溢出） */
   /* 一行到底、长文本省略号截断（原来 flex-wrap:wrap 会被长系统消息撑成两行，序号被挤下去） */
   .traj-row{display:flex;align-items:center;gap:10px;min-height:44px;padding:8px 14px;
@@ -208,6 +222,25 @@
     <button class="icon-btn" id="btn-settings" aria-label="设置"><svg class="ic" viewBox="0 0 24 24" width="20" height="20"><circle cx="12" cy="12" r="3"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"/></svg></button>
   </header>
 
+  <!-- 连接页（独立 App 首次进来 / 换电脑时） -->
+  <main class="scroll" id="page-connect" hidden>
+    <div class="connect">
+      <h1>连接你的电脑</h1>
+      <p>在电脑上打开「深鲸桌面 → 手机连接」，点「开启手机访问」，然后用这里扫描二维码（或手填地址与配对码）。配对码一次性、5 分钟有效。</p>
+      <div>
+        <label for="conn-origin">网关地址</label>
+        <input id="conn-origin" type="url" inputmode="url" placeholder="http://192.168.1.5:8765" autocomplete="off">
+      </div>
+      <div>
+        <label for="conn-code">配对码</label>
+        <input id="conn-code" type="text" inputmode="text" placeholder="6 位配对码" autocomplete="off" maxlength="8">
+      </div>
+      <div class="err" id="conn-err"></div>
+      <button class="go" id="conn-go">连接</button>
+      <p>连上之后这台手机会记住地址，下次直接进入。</p>
+    </div>
+  </main>
+
   <!-- 会话列表页 -->
   <main class="scroll" id="page-list">
     <div class="search">🔍 搜索会话内容</div>
@@ -276,12 +309,50 @@
     showPage(name){
       document.getElementById('page-list').hidden = name !== 'list';
       document.getElementById('page-chat').hidden = name !== 'chat';
+      var c = document.getElementById('page-connect');
+      if (c) c.hidden = name !== 'connect';
+      // 未连接时不该出现输入区与标签栏（那是"已在用"的界面，会对不上）
+      var composer = document.querySelector('.composer');
+      var tabbar = document.querySelector('.tabbar');
+      var onConnect = name === 'connect';
+      if (composer) composer.style.display = onConnect ? 'none' : '';
+      if (tabbar) tabbar.style.display = onConnect ? 'none' : '';
       document.querySelectorAll('.tabbar button').forEach((b)=>b.removeAttribute('aria-current'));
       document.getElementById(name === 'list' ? 'nav-chat' : 'nav-chat').setAttribute('aria-current','page');
     },
   };
   document.getElementById('nav-chat').addEventListener('click',()=>window.__dshMobile.showPage('chat'));
   document.getElementById('nav-me').addEventListener('click',()=>window.__dshMobile.showPage('list'));
+  // 连接页：点「连接」→ 配对 → 进列表
+  (function () {
+    var go = document.getElementById('conn-go');
+    if (!go) return;
+    function submit() {
+      var origin = (document.getElementById('conn-origin').value || '').trim();
+      var code = (document.getElementById('conn-code').value || '').trim();
+      var err = document.getElementById('conn-err');
+      err.textContent = '';
+      if (!origin || !code) { err.textContent = '地址和配对码都要填'; return; }
+      go.disabled = true;
+      window.dshMobileConnect(origin, code).then(function (r) {
+        go.disabled = false;
+        if (!r.ok) { err.textContent = '连接失败：' + (r.reason || '未知原因'); return; }
+        window.__dshMobile.showPage('list');
+        window.location.reload();   // 重新加载后即为已连接状态（拿到令牌）
+      });
+    }
+    go.addEventListener('click', submit);
+    var codeEl = document.getElementById('conn-code');
+    if (codeEl) codeEl.addEventListener('keydown', function (e) { if (e.key === 'Enter') submit(); });
+    // 深链扫码：dshmobile://pair?origin=…&code=…（外壳把扫到的字符串塞进 location.hash）
+    var link = window.dshMobileParsePairLink ? window.dshMobileParsePairLink(location.hash.slice(1)) : null;
+    if (link) {
+      document.getElementById('conn-origin').value = link.origin;
+      document.getElementById('conn-code').value = link.code;
+      submit();
+    }
+  })();
+
   // 轨迹 tab
   (function () {
     var t = document.getElementById('tab-trace');

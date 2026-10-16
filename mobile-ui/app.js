@@ -15,10 +15,78 @@
 (function () {
   'use strict';
 
-  var ONLINE = location.protocol === 'http:' || location.protocol === 'https:';
+  // ── 连接配置（独立安装的 App 用）：网关地址 + 会话令牌，存在本机 ──────────
+  var STORE_KEY = 'dshMobile.conn';
+  function loadConn() {
+    try {
+      return JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
+    } catch (e) {
+      return null;
+    }
+  }
+  function saveConn(c) {
+    try {
+      localStorage.setItem(STORE_KEY, JSON.stringify(c));
+    } catch (e) {}
+  }
+  function clearConn() {
+    try {
+      localStorage.removeItem(STORE_KEY);
+    } catch (e) {}
+  }
+  var conn = loadConn();
+  /** 是否是"由网关/DSH 直接打开的页面"（此时同源即已认证，不用再配对） */
+  var SAME_ORIGIN = location.protocol === 'http:' || location.protocol === 'https:';
+  var ONLINE = !!(conn && conn.origin) || SAME_ORIGIN;
+
+  /** 当前所有请求的基地址（独立 App 时是网关地址；同源打开时空串） */
+  function base() {
+    if (conn && conn.origin) return conn.origin;
+    return '';
+  }
+  function authQuery() {
+    if (conn && conn.token) return (base().indexOf('?') >= 0 ? '&' : '?') + 'token=' + encodeURIComponent(conn.token);
+    return '';
+  }
+
+  /**
+   * 配对：把扫码得到的 origin + 一次性配对码换成会话令牌。
+   * 配对码一次性、5 分钟有效（网关侧实现，见 src/main/mobile-gateway.ts）。
+   */
+  function connect(origin, code) {
+    var o = String(origin || '').replace(/\/+$/, '');
+    if (!o) return Promise.resolve({ ok: false, reason: 'missing-origin' });
+    return fetch(o + '/__pair?code=' + encodeURIComponent(String(code || '').trim().toUpperCase()))
+      .then(function (r) { return r.json().catch(function () { return { ok: false, reason: 'bad-json' }; }); })
+      .then(function (j) {
+        if (!j || !j.ok) return { ok: false, reason: (j && j.reason) || 'pair-failed' };
+        conn = { origin: o, token: j.token };
+        saveConn(conn);
+        ONLINE = true;
+        return { ok: true };
+      })
+      .catch(function (e) { return { ok: false, reason: 'network: ' + e.message }; });
+  }
+
+  /** 解析扫码得到的深链：dshmobile://pair?origin=…&code=… */
+  function parsePairLink(link) {
+    try {
+      var s = String(link || '');
+      var q = s.indexOf('?');
+      if (q < 0) return null;
+      var params = new URLSearchParams(s.slice(q + 1));
+      var origin = params.get('origin');
+      var code = params.get('code');
+      if (!origin || !code) return null;
+      return { origin: origin, code: code };
+    } catch (e) {
+      return null;
+    }
+  }
 
   function jfetch(path, opts) {
-    return fetch(path, Object.assign({ credentials: 'same-origin' }, opts || {})).then(function (r) {
+    var url = base() + path + authQuery();
+    return fetch(url, Object.assign({ credentials: base() ? 'omit' : 'same-origin' }, opts || {})).then(function (r) {
       return r.json().catch(function () {
         return { ok: false, reason: 'bad-json', status: r.status };
       });
@@ -72,7 +140,13 @@
     },
   };
 
+  api.connect = connect;
+  api.parsePairLink = parsePairLink;
+  api.disconnect = function () { clearConn(); conn = null; };
+  api.conn = function () { return conn; };
   window.dshMobileApi = api;
+  window.dshMobileConnect = connect;
+  window.dshMobileParsePairLink = parsePairLink;
 
   // ── 离线（file://）时的假数据：只服务排版断言 ─────────────────────
   var MOCK = {
@@ -298,6 +372,11 @@
 
   // ── 启动 ─────────────────────────────────────────────────────────
   function boot() {
+    // 独立 App 且还没配对 → 显示连接页（真实用户的第一步）
+    if (SAME_ORIGIN === false && !(conn && conn.origin)) {
+      if (window.__dshMobile && window.__dshMobile.showPage) window.__dshMobile.showPage('connect');
+      return;
+    }
     if (!ONLINE) {
       renderList(MOCK.sessions);   // file:// 下用假数据（只服务排版断言）
       return;

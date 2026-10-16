@@ -168,7 +168,8 @@ async function main() {
     console.log('== POST /api/session/prompt →', r.body.slice(0, 500));
     await wait(3000);
     const back = await get(`/mobile/api/session?id=${encodeURIComponent(sid)}`, cookie);
-    console.log('== 我们的接口读回 →', back.body.slice(0, 600));
+    writeFileSync('/tmp/dsh-mobile-probe-out.json', back.body);   // 完整正文落盘（打印会被控制字符截断）
+    console.log('== 我们的接口读回 →', back.body.slice(0, 300));
     dsh.kill('SIGKILL');
     process.exit(0);
   }

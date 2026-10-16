@@ -45,11 +45,18 @@ const problems = [];
 if (!(data.rows >= 1)) problems.push(`页面里没有渲染出任何会话行（rows=${data.rows}）`);
 if (data.health !== 'object') problems.push('数据层未加载（window.dshMobileApi 不是对象）');
 if (!data.firstId) problems.push('渲染出的行没有 data-id（会话 id 没传进界面）');
+// 核心回路：发一条消息后，会话页必须渲染出真实消息
+const chat = data.chat || {};
+if (!(chat.messages >= 1)) problems.push(`发消息后会话页没有渲染出消息（messages=${chat.messages}）`);
+if (chat.page !== 'chat') problems.push('发消息后没有切到会话页');
 
 if (problems.length) {
   console.error('❌ 手机端 E2E 失败：\n');
   problems.forEach((p, i) => console.error(`   ${i + 1}. ${p}`));
   process.exitCode = 1;
 } else {
-  console.log(`✅ 手机端 E2E 通过：界面渲染出 ${data.rows} 行真实会话（${data.firstId}）`);
+  console.log(
+    `✅ 手机端 E2E 通过：列表 ${data.rows} 行真实会话（${data.firstId}）· 发消息后会话页渲染 ${chat.messages} 条消息` +
+      (chat.firstText ? `（首条：「${chat.firstText}…」）` : ''),
+  );
 }

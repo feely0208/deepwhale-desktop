@@ -164,7 +164,14 @@
       page.insertBefore(messageNode(m), null);
       void tabs;
     });
-    page.scrollTop = page.scrollHeight;
+    // 滚到底：设置的是页面容器本身，但真正的滚动容器可能是它的父级/自身（实测截图停在中间）
+    try {
+      page.scrollTop = page.scrollHeight;
+      var sc = page.closest ? page.closest('.scroll') : null;
+      if (sc) sc.scrollTop = sc.scrollHeight;
+      var last = page.lastElementChild;
+      if (last && last.scrollIntoView) last.scrollIntoView({ block: 'end' });
+    } catch (e) {}
   }
 
   var currentSessionId = '';
@@ -176,18 +183,28 @@
       return;
     }
     api.session(id).then(function (r) {
-      var msgs = (r.messagesSample || []).map(function () {
-        return { role: 'assistant', text: '(见轨迹)' };
+      // 我们的接口已把消息规范化成 {role,text,source}（见插件里的契约注释）
+      var msgs = (r && r.messages) || [];
+      renderChat({
+        // system 提示词不是聊天内容（实测第一条就是"You are an AI agent…"）→ 过滤掉
+        messages: msgs
+          .filter(function (m) {
+            // 只显示真正的聊天：system 角色与 kind=context（运行时上下文/skill 清单）都不是聊天
+            return m.role !== 'system' && m.kind !== 'context' && (m.text || '').trim() !== '';
+          })
+          .map(function (m) {
+            return { role: m.role === 'user' ? 'user' : 'assistant', text: m.text || '' };
+          }),
       });
-      // 真消息在 /mobile/api/session 的 sample 里是摘要形态；先用最小可用渲染，
-      // 精确映射（role/content → 文本）在下一步按实测字段补。
-      renderChat({ messages: msgs.length ? msgs : [] });
     });
   }
 
   /** 发送：先建会话（若还没有），再 prompt，再轮询读回 */
   function send(text) {
     if (!text || !text.trim()) return Promise.resolve({ ok: false, reason: 'empty' });
+    // ⚠️ 必须切到会话页：只在 openSession 里切是不够的 —— 用户直接输入发送时
+    //    页面还停在列表页，消息渲染了但看不见（E2E 断言抓到的真实 bug）。
+    if (window.__dshMobile && window.__dshMobile.showPage) window.__dshMobile.showPage('chat');
     if (!ONLINE) {
       var page = document.getElementById('page-chat');
       page.insertBefore(messageNode({ role: 'user', text: text }), null);
@@ -215,9 +232,20 @@
               if (s && s.ok) {
                 var count = s.messageCount || 0;
                 if (count > 0) {
-                  renderChat({
-                    messages: [{ role: 'user', text: text }, { role: 'assistant', text: '已收到 ' + count + ' 条消息（流式渲染下一步接）' }],
-                  });
+                  var msgs = (s.messages || [])
+                    .filter(function (m) {
+                      return m.role !== 'system' && m.kind !== 'context' && (m.text || '').trim() !== '';
+                    })
+                    .map(function (m) {
+                      return { role: m.role === 'user' ? 'user' : 'assistant', text: m.text || '' };
+                    });
+                  if (!msgs.length) {
+                    msgs = [
+                      { role: 'user', text: text },
+                      { role: 'assistant', text: '已收到 ' + count + ' 条消息（流式渲染下一步接）' },
+                    ];
+                  }
+                  renderChat({ messages: msgs });
                 } else {
                   setTimeout(tick, 600);
                 }
@@ -234,8 +262,16 @@
   // ── 启动 ─────────────────────────────────────────────────────────
   function boot() {
     if (!ONLINE) {
-      renderList(MOCK.sessions);
+      renderList(MOCK.sessions);   // file:// 下用假数据（只服务排版断言）
       return;
+    }
+    // 真数据模式：骨架里的静态演示内容（假会话行、假审批卡）全部清掉 ——
+    // 否则会让人以为"真的有审批待办"（假绿，比没有更坏）。
+    var card = document.getElementById('approval-card');
+    if (card) card.style.display = 'none';
+    var chat = document.getElementById('page-chat');
+    if (chat) {
+      Array.prototype.slice.call(chat.querySelectorAll('.msg')).forEach(function (n) { n.remove(); });
     }
     api.health().then(function (h) {
       if (!h || !h.ok) return;

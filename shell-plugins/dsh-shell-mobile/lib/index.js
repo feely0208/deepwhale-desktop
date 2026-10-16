@@ -231,9 +231,42 @@ export function apply(ctx) {
       title: header?.title ?? null,
       headerKeys: header ? Object.keys(header).slice(0, 24) : [],
       header: header ? describe(header, 2) : null,
+      // 规范化消息：**这是我们自己的接口契约**（把 DSH 的内部形状收在插件里，
+      // 手机端只认 role/text/source —— 上游怎么变都只改这一处）。
+      messages: arr
+        ? arr.slice(-200).map((m) => ({
+            id: m?.id ?? null,
+            role: m?.role ?? null,
+            text: (Array.isArray(m?.content) ? m.content : [])
+              .filter((part) => part?.type === 'text' && typeof part.text === 'string')
+              .map((part) => part.text)
+              .join('\n'),
+            source: m?.source?.kind ?? null,
+            // 区分"真聊天"与"上下文注入"：DSH 会把运行时上下文/skill 清单作为
+            // user 角色塞进来（实测首条就是 <system-reminder>…）——手机端不该显示它们。
+            kind: (() => {
+              const src = String(m?.source?.kind ?? '');
+              const txt = (Array.isArray(m?.content) ? m.content : [])
+                .filter((part) => part?.type === 'text' && typeof part.text === 'string')
+                .map((part) => part.text)
+                .join('\n');
+              if (src && src !== 'user' && src !== 'assistant') return 'context';
+              if (/^\s*<(system-reminder|available_skills|runtime-context)\b/i.test(txt)) return 'context';
+              if (/^\s*<[a-z_-]+>\s*$/i.test(txt)) return 'context';
+              return 'chat';
+            })(),
+          }))
+        : [],
       messageCount: arr ? arr.length : null,
       messageKeys: arr?.[0] ? Object.keys(arr[0]).slice(0, 24) : [],
       messagesSample: arr ? arr.slice(0, 2).map((m) => describe(m, 2)) : null,
+      contentPartTypes: arr && arr[0] && Array.isArray(arr[0].content)
+        ? arr[0].content.slice(0, 8).map((p) => String(p?.type ?? typeof p))
+        : null,
+      contentPartKeys: arr && arr[0] && Array.isArray(arr[0].content)
+        ? arr[0].content.slice(0, 4).map((p) => (p && typeof p === 'object' ? Object.keys(p) : null))
+        : null,
+      allRoles: arr ? arr.map((m) => m.role ?? null) : null,
       messagesError,
     };
   }

@@ -1,25 +1,61 @@
-// E2E：先用 token 建立 DSH cookie，再打开我们插件的 /mobile/，看真实会话是否渲染出来。
-// 透明不可见窗口（show:false + opacity 0），不打扰用户。
+// E2E：① token 建 cookie → ② 打开我们插件的 /mobile/ → ③ 断言真实会话渲染 →
+//      ④ 在页面里真的发一条消息 → ⑤ 断言会话页渲染出真实消息（核心回路）
+// 透明不可见窗口，不打扰用户；DSH 由探针以 --no-open 启动。
 const { app, BrowserWindow } = require('electron');
-const base = process.env.DSH_E2E_BASE;      // http://127.0.0.1:PORT
+const fs = require('fs');
+const SHOT_DIR = '/tmp/dsh-mobile-e2e';
+const base = process.env.DSH_E2E_BASE;
 const token = process.env.DSH_E2E_TOKEN;
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
 app.whenReady().then(async () => {
   const w = new BrowserWindow({
     show: false, width: 390, height: 844, opacity: 0, focusable: false, skipTaskbar: true,
     webPreferences: { contextIsolation: true, backgroundThrottling: false },
   });
   try {
-    await w.loadURL(`${base}/?token=${token}`);          // 拿 cookie
-    await new Promise((r) => setTimeout(r, 1500));
-    await w.loadURL(`${base}/mobile/`);                  // 我们的手机端界面
-  } catch (e) { console.log('LOAD_ERR', e.message); }
-  await new Promise((r) => setTimeout(r, 4000));
-  const out = await w.webContents.executeJavaScript(`JSON.stringify({
-    rows: document.querySelectorAll('.row-btn').length,
-    firstTitle: (document.querySelector('.row-btn .title')||{}).textContent || null,
-    firstId: (document.querySelector('.row-btn')||{}).dataset ? document.querySelector('.row-btn').dataset.id : null,
-    health: typeof window.dshMobileApi,
-  })`).catch((e) => 'EVAL_ERR ' + e.message);
-  console.log('E2E_RESULT ' + out);
+    await w.loadURL(`${base}/?token=${token}`);   // 拿 DSH cookie
+    await wait(1500);
+    await w.loadURL(`${base}/mobile/`);           // 我们的手机端界面
+  } catch (e) {
+    console.log('E2E_RESULT ' + JSON.stringify({ error: 'load: ' + e.message }));
+    app.exit(0);
+    return;
+  }
+  await wait(3500);
+  try {
+    fs.mkdirSync(SHOT_DIR, { recursive: true });
+    fs.writeFileSync(`${SHOT_DIR}/list.png`, (await w.webContents.capturePage()).toPNG());
+  } catch (e) {}
+
+  const list = await w.webContents
+    .executeJavaScript(`JSON.stringify({
+      rows: document.querySelectorAll('.row-btn').length,
+      firstId: (document.querySelector('.row-btn')||{dataset:{}}).dataset ? (document.querySelector('.row-btn')||{}).dataset.id : null,
+      health: typeof window.dshMobileApi,
+    })`)
+    .catch((e) => JSON.stringify({ error: 'eval1: ' + e.message }));
+
+  // ④ 发送一条真实消息（界面里的发送逻辑）
+  await w.webContents
+    .executeJavaScript(`window.dshMobileSend ? window.dshMobileSend('你好，报一下当前目录') : Promise.resolve({ok:false})`)
+    .catch(() => {});
+  await wait(8000);
+
+  const chat = await w.webContents
+    .executeJavaScript(`JSON.stringify({
+      messages: document.querySelectorAll('#page-chat .msg').length,
+      firstText: ((document.querySelector('#page-chat .msg')||{}).textContent || '').slice(0, 60),
+      page: (document.getElementById('page-chat')||{}).hidden === false ? 'chat' : 'other',
+    })`)
+    .catch((e) => JSON.stringify({ error: 'eval2: ' + e.message }));
+
+  try {
+    fs.writeFileSync(`${SHOT_DIR}/chat.png`, (await w.webContents.capturePage()).toPNG());
+  } catch (e) {}
+  let L = {}, C = {};
+  try { L = JSON.parse(list); } catch (e) {}
+  try { C = JSON.parse(chat); } catch (e) {}
+  console.log('E2E_RESULT ' + JSON.stringify(Object.assign({}, L, { chat: C })));
   app.exit(0);
 });

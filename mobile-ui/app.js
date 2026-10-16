@@ -48,6 +48,7 @@
     return '';
   }
   function authQuery() {
+    // 同源（origin 为空）也要带令牌：网关要求显式令牌，不是所有部署都会下发 cookie
     if (conn && conn.token) return (base().indexOf('?') >= 0 ? '&' : '?') + 'token=' + encodeURIComponent(conn.token);
     return '';
   }
@@ -378,9 +379,24 @@
 
   // ── 启动 ─────────────────────────────────────────────────────────
   function boot() {
+    // ⚠️ 外壳跳转过来时会带 `?token=…`（见 Android 壳的连接逻辑）——必须**接住它**：
+    //    否则页面的 API 请求没有令牌 → 网关 401 → 页面退回连接页（实测：壳跳转成功但列表 0 行）。
+    try {
+      var qs = new URLSearchParams(location.search || '');
+      var urlToken = qs.get('token');
+      if (urlToken && !(conn && conn.token)) {
+        conn = { origin: '', token: urlToken };   // origin 空 = 同源
+        saveConn(conn);
+        // 把令牌从地址栏抹掉（别留在历史里）
+        try { history.replaceState(null, '', location.pathname); } catch (e) {}
+      }
+    } catch (e) {}
+
     // 已配对（存过地址）→ 直接在线
-    if (conn && conn.origin) {
+    if (conn && conn.token) {
+      // 有令牌即可在线（同源或跨源都一样）
       ONLINE = true;
+      SAME_ORIGIN = !conn.origin;
       startOnline();
       return;
     }

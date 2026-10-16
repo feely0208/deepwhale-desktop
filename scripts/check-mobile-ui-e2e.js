@@ -49,6 +49,9 @@ if (!data.firstId) problems.push('渲染出的行没有 data-id（会话 id 没�
 const chat = data.chat || {};
 if (!(chat.messages >= 1)) problems.push(`发消息后会话页没有渲染出消息（messages=${chat.messages}）`);
 if (chat.page !== 'chat') problems.push('发消息后没有切到会话页');
+// 轨迹视图（Whaleness 的招牌功能之一）
+const traj = data.trajectory || {};
+if (!(traj.rows >= 1)) problems.push(`轨迹 tab 没有渲染出事件行（rows=${traj.rows}）`);
 
 if (problems.length) {
   console.error('❌ 手机端 E2E 失败：\n');
@@ -57,6 +60,7 @@ if (problems.length) {
 } else {
   console.log(
     `✅ 手机端 E2E 通过：列表 ${data.rows} 行真实会话（${data.firstId}）· 发消息后会话页渲染 ${chat.messages} 条消息` +
-      (chat.firstText ? `（首条：「${chat.firstText}…」）` : ''),
+      (chat.firstText ? `（首条：「${chat.firstText}…」）` : '') +
+      ` · 轨迹 ${traj.rows} 行（首条标签「${traj.firstLabel}」）`,
   );
 }

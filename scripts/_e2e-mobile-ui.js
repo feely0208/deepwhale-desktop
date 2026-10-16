@@ -53,9 +53,25 @@ app.whenReady().then(async () => {
   try {
     fs.writeFileSync(`${SHOT_DIR}/chat.png`, (await w.webContents.capturePage()).toPNG());
   } catch (e) {}
-  let L = {}, C = {};
+  // ⑥ 轨迹 tab：点一下，断言渲染出事件行 + 出图
+  await w.webContents
+    .executeJavaScript(`(function(){var t=document.getElementById('tab-trace'); if(t) t.click(); return true;})()`)
+    .catch(() => {});
+  await wait(2500);
+  const traj = await w.webContents
+    .executeJavaScript(`JSON.stringify({
+      rows: document.querySelectorAll('.traj-row').length,
+      firstLabel: ((document.querySelector('.traj-badge')||{}).textContent || ''),
+    })`)
+    .catch((e) => JSON.stringify({ error: 'eval3: ' + e.message }));
+  try {
+    fs.writeFileSync(`${SHOT_DIR}/trajectory.png`, (await w.webContents.capturePage()).toPNG());
+  } catch (e) {}
+
+  let L = {}, C = {}, T = {};
+  try { T = JSON.parse(traj); } catch (e) {}
   try { L = JSON.parse(list); } catch (e) {}
   try { C = JSON.parse(chat); } catch (e) {}
-  console.log('E2E_RESULT ' + JSON.stringify(Object.assign({}, L, { chat: C })));
+  console.log('E2E_RESULT ' + JSON.stringify(Object.assign({}, L, { chat: C, trajectory: T })));
   app.exit(0);
 });

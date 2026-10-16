@@ -137,6 +137,14 @@
   .msg.me{background:linear-gradient(160deg, rgba(74,138,196,.30), rgba(45,95,158,.22));
     border-color:rgba(124,186,240,.35);margin-left:46px}
   .meta{font-size:12px;opacity:.6;display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
+  /* 轨迹行：类型徽标 + 摘要 + 序号（一行放不下就换行，不许横向溢出） */
+  /* 一行到底、长文本省略号截断（原来 flex-wrap:wrap 会被长系统消息撑成两行，序号被挤下去） */
+  .traj-row{display:flex;align-items:center;gap:10px;min-height:44px;padding:8px 14px;
+    border-bottom:1px solid rgba(255,255,255,.06);font-size:13px;flex-wrap:nowrap}
+  .traj-badge{flex:0 0 auto;padding:2px 10px;border-radius:999px;font-size:12px;
+    background:rgba(124,186,240,.18);border:1px solid rgba(124,186,240,.35)}
+  .traj-detail{flex:1 1 auto;min-width:0;opacity:.8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .traj-seq{flex:0 0 auto;opacity:.45;font-size:12px}
   pre{margin:10px 0 0;padding:11px 12px;border-radius:var(--r-sm);overflow-x:auto;font-size:12.5px;
     background:rgba(6,10,16,.62);border:1px solid rgba(255,255,255,.07);line-height:1.6}
 
@@ -274,6 +282,19 @@
   };
   document.getElementById('nav-chat').addEventListener('click',()=>window.__dshMobile.showPage('chat'));
   document.getElementById('nav-me').addEventListener('click',()=>window.__dshMobile.showPage('list'));
+  // 轨迹 tab
+  (function () {
+    var t = document.getElementById('tab-trace');
+    var c = document.getElementById('tab-chat');
+    if (t) t.addEventListener('click', function () {
+      c.setAttribute('aria-selected','false'); t.setAttribute('aria-selected','true');
+      if (window.dshMobileTrajectory) window.dshMobileTrajectory();
+    });
+    if (c) c.addEventListener('click', function () {
+      t.setAttribute('aria-selected','false'); c.setAttribute('aria-selected','true');
+      if (window.dshMobileReloadChat) window.dshMobileReloadChat();
+    });
+  })();
   // 发送：接真实数据层（离线时是预览）
   (function () {
     var input = document.getElementById('input');

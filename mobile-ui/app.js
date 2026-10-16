@@ -55,6 +55,9 @@
     session: function (id) {
       return jfetch('/mobile/api/session?id=' + encodeURIComponent(id));
     },
+    trajectory: function (id) {
+      return jfetch('/mobile/api/trajectory?id=' + encodeURIComponent(id));
+    },
     create: function () {
       return rpc('session/create', {});
     },
@@ -175,6 +178,40 @@
   }
 
   var currentSessionId = '';
+
+  /** 轨迹 tab：把事件按时间线渲染（类型徽标 + 摘要） */
+  function renderTrajectory(events) {
+    var page = document.getElementById('page-chat');
+    if (!page) return;
+    Array.prototype.slice.call(page.querySelectorAll('.traj-row')).forEach(function (n) { n.remove(); });
+    events.forEach(function (e) {
+      var row = el('div', 'traj-row');
+      var badge = el('span', 'traj-badge', e.label || e.type || '事件');
+      row.appendChild(badge);
+      if (e.detail) row.appendChild(el('span', 'traj-detail', String(e.detail).slice(0, 160)));
+      if (e.seq !== null && e.seq !== undefined) row.appendChild(el('span', 'traj-seq', '#' + e.seq));
+      page.appendChild(row);
+    });
+  }
+
+  function showTrajectory() {
+    var page = document.getElementById('page-chat');
+    if (page) {
+      Array.prototype.slice.call(page.querySelectorAll('.msg')).forEach(function (n) { n.remove(); });
+    }
+    if (!ONLINE || !currentSessionId) {
+      renderTrajectory([
+        { label: '回合开始', detail: '第 1 轮', seq: 1 },
+        { label: '用户消息', detail: '离线预览', seq: 2 },
+        { label: '模型回复', detail: '离线预览', seq: 3 },
+      ]);
+      return;
+    }
+    api.trajectory(currentSessionId).then(function (r) {
+      renderTrajectory((r && r.events) || []);
+    });
+  }
+  window.dshMobileTrajectory = showTrajectory;
   function openSession(id) {
     currentSessionId = id || '';
     if (window.__dshMobile && window.__dshMobile.showPage) window.__dshMobile.showPage('chat');

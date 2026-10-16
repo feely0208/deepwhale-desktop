@@ -116,6 +116,61 @@ function describe(value, depth = 2, seen = new Set()) {
   return out;
 }
 
+/** 事件类型 → 中文标签（轨迹视图用）。未知类型保留原样，**不假装知道**。 */
+const EVENT_LABELS = {
+  'turn/start': '回合开始',
+  'turn/end': '回合结束',
+  'step/start': '步骤开始',
+  'step/end': '步骤结束',
+  'user/message': '用户消息',
+  'system/message': '系统消息',
+  'assistant/attempt': '模型回复',
+  'assistant/stream': '模型输出',
+  'session/title': '会话标题',
+  'request/header': '请求头',
+  'request/context': '请求上下文',
+  'approval/policy': '审批策略',
+  'permission/preset': '权限预设',
+  'sandbox/mode': '沙箱模式',
+  'agent/inbox/spliced': '队列变更',
+  'tool/use': '工具调用',
+  'tool/result': '工具结果',
+};
+
+function textOf(message) {
+  const parts = Array.isArray(message?.content) ? message.content : [];
+  return parts
+    .filter((p) => p?.type === 'text' && typeof p.text === 'string')
+    .map((p) => p.text)
+    .join('\n');
+}
+
+/** 把 DSH 的事件整理成手机端轨迹要的形态（对外契约，收在插件里） */
+function normalizeEvents(events) {
+  return (events || []).slice(-300).map((e) => {
+    const type = String(e?.type ?? '');
+    const d = e?.data ?? {};
+    let detail = '';
+    if (type === 'session/title') detail = String(d.title ?? '');
+    else if (type === 'user/message') detail = textOf(d.message).slice(0, 120);
+    else if (type === 'system/message') detail = textOf(d.message).slice(0, 80);
+    // 编号用原始值：实测数据本身就是 1-based，之前 +1 会多算一轮（截图里"第 2 轮"其实只有 1 轮）
+    else if (type === 'turn/start') detail = `第 ${String(d.turn ?? 1)} 轮`;
+    else if (type === 'step/start') detail = `第 ${String(d.step ?? 1)} 步`;
+    else if (type === 'tool/use') detail = String(d.name ?? d.tool ?? '');
+    else if (type === 'approval/policy') detail = String(d.policy ?? '');
+    else if (type === 'sandbox/mode') detail = String(d.mode ?? '');
+    else if (type === 'permission/preset') detail = String(d.preset ?? '');
+    return {
+      seq: e?.seq ?? null,
+      type,
+      label: EVENT_LABELS[type] ?? type,
+      time: e?.time ?? null,
+      detail,
+    };
+  });
+}
+
 export function apply(ctx) {
   const log = (m) => {
     try {
@@ -509,6 +564,47 @@ export function apply(ctx) {
       return;
     }
 
+    if (path === `${ROUTE}/_dev/events`) {
+      const sessions = typeof ctx.get === 'function' ? ctx.get('sessions') : undefined;
+      const id = url.searchParams.get('id') ?? '';
+      const sess = id && sessions?.get ? sessions.get(id) : null;
+      if (!sess) {
+        json(res, 200, { ok: false, reason: 'session-not-found', id });
+        return;
+      }
+      const out = { ok: true };
+      try {
+        const evs = sess.snapshotEvents();
+        const counts = {};
+        (evs || []).forEach((e) => {
+          const t = String(e?.type ?? '?');
+          counts[t] = (counts[t] ?? 0) + 1;
+        });
+        out.typeCounts = counts;
+        const first = (evs || []).find((e) => /tool/i.test(String(e?.type ?? '')));
+        out.firstTool = first ? { type: first.type, dataKeys: first.data ? Object.keys(first.data).slice(0, 16) : null } : null;
+        const typesWithData = {};
+        (evs || []).slice(0, 8).forEach((e) => {
+          typesWithData[String(e?.type)] = e?.data && typeof e.data === 'object' ? Object.keys(e.data).slice(0, 10) : null;
+        });
+        out.sampleDataKeys = typesWithData;
+      } catch (e) {
+        out.typeCounts = 'ERR ' + String(e?.message ?? e).slice(0, 120);
+      }
+      for (const fn of ['snapshotEvents', 'ownEvents', 'deriveMessages']) {
+        try {
+          const v = typeof sess[fn] === 'function' ? sess[fn]() : undefined;
+          out[fn] = Array.isArray(v)
+            ? { count: v.length, sample: v.slice(0, 2).map((e) => describe(e, 2)) }
+            : describe(v, 2);
+        } catch (e) {
+          out[fn] = 'ERR ' + String(e?.message ?? e).slice(0, 100);
+        }
+      }
+      json(res, 200, out);
+      return;
+    }
+
     if (path === `${ROUTE}/_services`) {
       json(res, 200, { ok: true, services });
       return;
@@ -516,6 +612,25 @@ export function apply(ctx) {
 
     if (path === `${ROUTE}/sessions`) {
       json(res, 200, await listSessions());
+      return;
+    }
+
+    if (path === `${ROUTE}/trajectory`) {
+      const sessions = typeof ctx.get === 'function' ? ctx.get('sessions') : undefined;
+      const id = url.searchParams.get('id') ?? '';
+      const sess = id && sessions?.get ? sessions.get(id) : null;
+      if (!sess) {
+        json(res, 200, { ok: false, reason: 'session-not-found', id });
+        return;
+      }
+      let events = [];
+      try {
+        events = typeof sess.snapshotEvents === 'function' ? sess.snapshotEvents() : [];
+      } catch (e) {
+        json(res, 200, { ok: false, reason: 'events-failed', error: String(e?.message ?? e) });
+        return;
+      }
+      json(res, 200, { ok: true, count: events.length, events: normalizeEvents(events) });
       return;
     }
 

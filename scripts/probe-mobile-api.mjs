@@ -167,6 +167,15 @@ async function main() {
     const r = await get('/api/session/prompt', cookie, 'POST', pay);
     console.log('== POST /api/session/prompt →', r.body.slice(0, 500));
     await wait(3000);
+    const ev = await get(`/mobile/api/_dev/events?id=${encodeURIComponent(sid)}`, cookie);
+    writeFileSync('/tmp/dsh-mobile-events.json', ev.body);
+    console.log('== 事件形状 →', ev.body.slice(0, 200));
+    const traj = await get(`/mobile/api/trajectory?id=${encodeURIComponent(sid)}`, cookie);
+    writeFileSync('/tmp/dsh-mobile-traj.json', traj.body);
+    try {
+      const t = JSON.parse(traj.body);
+      console.log('== 轨迹 → count=', t.count, (t.events || []).slice(0, 4).map((e) => e.label).join(' / '));
+    } catch (e) {}
     const back = await get(`/mobile/api/session?id=${encodeURIComponent(sid)}`, cookie);
     writeFileSync('/tmp/dsh-mobile-probe-out.json', back.body);   // 完整正文落盘（打印会被控制字符截断）
     console.log('== 我们的接口读回 →', back.body.slice(0, 300));

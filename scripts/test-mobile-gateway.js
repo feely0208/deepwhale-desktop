@@ -146,6 +146,15 @@ function firstChunkMs(port, token) {
     ok(/token=dsh-secret-token/.test(last.url || ''), `上游看到 DSH 自己的令牌（实际 ${last.url}）`);
     ok(!/x=1/.test(last.url) === false, '其他查询参数原样保留');
 
+    // ④b 额外查询参数必须与 token 剥离正确共存（2026-10-17 真机踩到的回归）
+    //    朴素替换会把 `/mobile/?token=X&dshApp=1` 变成 `/mobile/&dshApp=1` → 上游把整串当路径 → 404
+    // ⚠️ 必须用**真正会坏的形状**：路径以 `/` 结尾、且 token 是第一个参数。
+    //    （`/hello?token=X` 那种有前导 `?` 的形状，朴素剥离也不会坏 —— 那样的断言是假保护。）
+    const extra = await req({ host: '127.0.0.1', port: P, path: `/?token=${token}&dshApp=1`, method: 'GET' });
+    const seen2 = stub.seen[stub.seen.length - 1] || {};
+    ok(extra.status === 200, `带额外参数仍能反代（实际 ${extra.status}）`);
+    ok(/^\/\?dshApp=1/.test(String(seen2.url || '')), `上游路径未被破坏（实际 ${seen2.url}）`);
+
     // ⑤ POST body 透传
     const post = await req(
       { host: '127.0.0.1', port: P, path: `/api?token=${token}`, method: 'POST', headers: { 'content-type': 'application/json' } },

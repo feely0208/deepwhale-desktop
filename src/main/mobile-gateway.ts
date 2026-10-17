@@ -109,7 +109,11 @@ function upstreamPath(rawUrl: string, dshToken: string, hasDshCookie: boolean): 
   //    手机端就是白屏（直连 DSH 同一路径实测 200 / 40KB）。
   //    所以：只在原始串上摘掉"我们自己的 token 参数"，必要时再追加 DSH 的令牌。
   let out = rawUrl.replace(/([?&])token=[^&]*/g, '$1');
-  out = out.replace(/[?&]+(?=&|$)/g, '').replace(/\?&/g, '?').replace(/&&+/g, '&');
+  // ⚠️ 剥掉 token 后必须把**分隔符收拾干净**（2026-10-17 实测踩到）：
+  //    `/mobile/?token=X&dshApp=1` → 朴素替换会变成 `/mobile/&dshApp=1`
+  //    → 插件把整串当文件名 → 404「mobile ui not found」→ 手机端白屏。
+  //    规则：`/&` → `/?`（路径后重新开查询），`?&`/`&&` 收敛，尾部 `?`/`&` 去掉。
+  out = out.replace('/&', '/?').replace(/\?&+/g, '?').replace(/&&+/g, '&').replace(/[?&]+$/, '');
   if (out === '') out = '/';
   if (!out.startsWith('/')) out = '/' + out;
   if (dshToken && !hasDshCookie) {

@@ -75,6 +75,21 @@ if (isLinux) {
       removed += 1;
     }
   }
+  // 兜底：清除**任何**没有 package.json 的引擎目录（npm 给不可用 optionalDependency
+  // 建出来的空壳）。kit 的 installedPackageExists 只看目录在不在，空壳会被判成
+  // 「incomplete」而不是回退 wasm —— 这正是 Linux CI 红的原因。
+  if (exists(KIT_DIR)) {
+    for (const name of fs.readdirSync(KIT_DIR)) {
+      if (!name.startsWith('libreoffice-kit-')) continue;
+      if (!exists(path.join(KIT_DIR, name, 'package.json'))) {
+        fs.rmSync(engineDir(name), { recursive: true, force: true });
+        console.log(`   清除空壳引擎目录: ${name}`);
+      }
+    }
+    const remain = fs.readdirSync(KIT_DIR).filter((n) => n.startsWith('libreoffice-kit'));
+    console.log(`   @deepseek-ai 下引擎目录: ${remain.join(', ') || '(无)'}`);
+    if (process.env.GITHUB_ACTIONS === 'true') console.log(`::notice::${target} 引擎目录: ${remain.join(', ') || '(无)'}`);
+  }
   const wasmPkg = path.join(KIT_DIR, 'libreoffice-kit-wasm', 'package.json');
   if (!exists(wasmPkg)) die('Linux 需要 libreoffice-kit-wasm 兜底，但它没装上');
   const wv = JSON.parse(fs.readFileSync(wasmPkg, 'utf8')).version;

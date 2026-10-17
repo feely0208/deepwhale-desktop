@@ -209,7 +209,7 @@ const probe = `
   }
   const kit = require(resolved);
   let conv;
-  try { conv = await kit.createConverter({ timeoutMs: 120000 }); }
+  try { conv = await kit.createConverter({ timeoutMs: 300000 }); }
   catch (e) { console.log('CONVERTER_FAIL ' + String((e && e.message) || e)); process.exit(4); }
   try {
     const r = await conv.render({
@@ -231,9 +231,24 @@ const probe = `
 const env = { ...process.env, ELECTRON_RUN_AS_NODE: '1' };
 if (kitModules) env.NODE_PATH = env.NODE_PATH ? `${kitModules}${path.delimiter}${env.NODE_PATH}` : kitModules;
 
-const r = spawnSync(exe, ['-e', probe], { env, encoding: 'utf-8', timeout: 180000 });
+// 2026-10-17：180s 太紧 —— mac x64 的引擎在 arm64 runner 上要走 Rosetta，
+// 首次转换更慢，实测被 SIGTERM 杀掉后表现为「没有产出 PDF」而无任何 CONVERT_FAIL。
+const r = spawnSync(exe, ['-e', probe], { env, encoding: 'utf-8', timeout: 600000 });
 const out = `${r.stdout || ''}${r.stderr || ''}`;
 
+// 2026-10-17：探针原始状态也发成 notice —— 失败时最需要的恰恰是
+// 「RENDER 打了没 / 是不是超时被杀 / kit 目录里到底有什么」，而这些在 CI 日志里看不到。
+if (process.env.GITHUB_ACTIONS === 'true') {
+  const one = (s) => String(s == null ? '' : s).replace(/\r?\n/g, ' ').slice(0, 800);
+  const render = (out.match(/^RENDER (.*)$/m) || [])[1];
+  console.log(`::notice::probe status=${r.status} signal=${r.signal} render=${one(render || '(无 RENDER 行)')}`);
+  if (r.error) console.log(`::notice::spawn error ${one(r.error.message)}`);
+  try {
+    const scope = path.join(kitModules || '', '@deepseek-ai');
+    const names = fs.readdirSync(scope).filter((n) => n.startsWith('libreoffice-kit'));
+    console.log(`::notice::kit 目录内: ${one(names.join(', ') || '(空)')}`);
+  } catch { console.log('::notice::kit 目录不可读'); }
+}
 const resolvedLine = (out.match(/^RESOLVED (.*)$/m) || [])[1] || '';
 const inAsar = /app\.asar[/\\]/.test(resolvedLine);
 const produced = fs.existsSync(outPdf) && fs.statSync(outPdf).size > 1000;

@@ -20,3 +20,14 @@
 *.webp binary
 *.icns binary
 *.ico binary
+
+# ⚠️ 2026-10-17 事故：Windows runner 会把未显式声明 eol 的文本转成 CRLF，
+# 而 build/installer.nsh 参与按行正则校验（scripts/check-installer-close-app.js），
+# CRLF 让它连续红了三轮。所有会被脚本按行解析的文本都必须显式 eol=lf。
+*.nsh   text eol=lf
+*.etx  text eol=lf
+*.sh    text eol=lf
+*.mjs   text eol=lf
+*.cjs   text eol=lf
+*.css   text eol=lf
+*.txt   text eol=lf

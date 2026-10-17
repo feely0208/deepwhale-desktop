@@ -34,6 +34,11 @@ const YML = path.join(REPO, 'electron-builder.yml');
 /** 去掉 NSIS 注释（行首 `;` 或 `#`）与行尾注释，只留代码 */
 function codeLines(text) {
   return text
+    // ⚠️ 2026-10-17（Windows CI 实测）必须先统一换行：
+    //    CRLF 下行是 `; 注释\r`，而 **JS 的 `.` 不匹配 `\r`**（\r 是行终止符），
+    //    于是 `/;.*$/` 既不匹配到行尾、`$` 也不在 `\r` 前匹配 → **整条正则失配**，
+    //    注释没被剥掉 → 注释里的 `$pid` / `GetProcessInfo` 被当成代码 → Windows 假红。
+    .replace(/\r\n?/g, '\n')
     .split('\n')
     .map((l) => l.replace(/;.*$/, '').trim())
     .filter((l) => l.length > 0 && !l.startsWith('#'));

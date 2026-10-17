@@ -218,7 +218,12 @@ const probe = `
   // 诊断：linux 上 kit 会因「某个解析路径下存在同名目录（哪怕空壳）」而抛 incomplete。
   // 把 require.resolve.paths 与实际命中的候选打出来，才能知道空壳藏在哪里。
   try {
-    const paths = req.resolve.paths('@deepseek-ai/libreoffice-kit-linux-x64-glibc') || [];
+    // ⚠️ 必须用 **kit 自己**的 require 上下文：kit 的 installedPackageExists 用的是
+    //    它自己模块的 require.resolve.paths（从 libreoffice-kit/lib/ 往上找），
+    //    与 dsh-office-to-pdf 的解析路径并不相同 —— 上一轮用错上下文，结果 hit 为空。
+    const kitFile = req.resolve('@deepseek-ai/libreoffice-kit');
+    const kitReq = Module.createRequire(pathToFileURL(kitFile));
+    const paths = kitReq.resolve.paths('@deepseek-ai/libreoffice-kit-linux-x64-glibc') || [];
     const hit = paths
       .map((d) => require('path').join(d, '@deepseek-ai', 'libreoffice-kit-linux-x64-glibc'))
       .filter((q) => { try { fs.lstatSync(q); return true; } catch { return false; } });

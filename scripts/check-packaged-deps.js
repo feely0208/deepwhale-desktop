@@ -180,7 +180,10 @@ for (const mod of REQUIRED) {
 }
 
 if (problems.length) {
-  console.error('\n::error::打包产物缺少生产依赖，禁止发布：' + problems.join('；'));
+  // ⚠️ 2026-10-17：workflow 命令（::error::）必须写 **stdout** —— 之前写的是 stderr
+  //    （console.error），GitHub 不解析，于是 CI 红了但注解里看不到原因，只能干猜。
+  console.log('\n::error::打包产物缺少生产依赖，禁止发布：' + problems.join('；'));
+  for (const pr of problems) console.log('::error::' + String(pr).slice(0, 900));
   process.exitCode = 1;
 } else {
   console.log('✅ 打包完整性检查通过（生产依赖确实进了包）');

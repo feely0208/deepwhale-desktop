@@ -101,6 +101,11 @@ if (registrations < 2) {
 }
 
 if (problems.length) {
+  // 2026-10-17：workflow 命令必须写 stdout —— 之前用 console.error(stderr)，
+  // GitHub 不解析，CI 红了却看不到原因（Windows step17 因此查了两轮）。
+  if (process.env.GITHUB_ACTIONS === 'true') {
+    for (const pr of problems) console.log('::error::' + String(pr).slice(0, 900));
+  }
   console.error('❌ 「本版更新内容」入口守卫失败：\n');
   problems.forEach((p, i) => console.error(`   ${i + 1}. ${p}`));
   process.exitCode = 1;

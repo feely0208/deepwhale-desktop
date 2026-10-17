@@ -318,6 +318,7 @@ jobs:
           # `find release dist -type d -ipath "*resources/app/node_modules/$mod"`
           # 在四个平台同时报红（Release run 38567857212）。脚本同时认"真实目录"与"asar 条目"。
           # 「本版更新内容」在 Windows/Linux 必须有够得着的入口（不能只靠会被隐藏的菜单栏）
+          run_guard "手机连接 webserver 配置（不能用通配地址）" node scripts/test-mobile-connect-host.js
           run_guard "本版更新内容入口" node scripts/check-whatsnew-entry.js
           # 安装器必须能自己关掉运行中的旧版（托盘应用 + 默认温和关闭 = 用户被要求手动关）
           run_guard "安装器能关掉旧版" node scripts/check-installer-close-app.js

@@ -13,6 +13,40 @@
 >（App 内「本版更新内容」与官网同源）。本文件只记录对开发者有影响的变更；
 > 1.0.39~1.0.54 未逐条维护，**自 1.0.55 起恢复**。
 
+## [1.0.59] - 2026-10-18
+
+**紧急修复：1.0.58 升级后「无法连接到 DSH 服务」（发布级事故，升级即砖）。**
+
+### 根因
+1.0.58 把随包运行时升到 DSH 0.2.1-rc.1，新版 `@deepseek-ai/dsh-host-webserver` 收紧了安全策略：
+**拒绝通配地址** ——
+`host "0.0.0.0" is an unspecified (wildcard) address, which is not supported;
+binding every interface would expose remote code execution to the network`。
+而壳的「手机连接」（`mobile-connect.ts` 的 `bindingBlock()`）把 `host: 0.0.0.0` **写死**进
+`<home>/cordis.patch.yml`，于是：webserver 插件 `Schema.validate` 失败 → webServer 起不来 →
+web-runtime / shell-canvas / shell-mobile 等 **8 个插件全在等它** → DSH 进程 `exit 1` →
+壳弹「无法连接到 DSH 服务」。**点「重试」无效** —— 每次启动都会把 0.0.0.0 再写回去。
+
+**影响面**：`lanAccess=true` 的升级用户（`store.ts` 里 `lanAccessMigrated` 会把老用户强制置 true）。
+**当时所有守卫都是绿的** —— 因为没一条覆盖「升级用户的历史配置」这条路径。
+
+### 修法
+1. `bindingBlock()`：`host: 0.0.0.0` → **`127.0.0.1`**（局域网那条路已由壳自己的
+   `mobile-gateway.ts` 接管：它自己监听 0.0.0.0 + 配对码 + 会话令牌，不受 DSH 这条限制）。
+2. 新增 `sanitizeWebserverHost()`：启动时**在拉起 DSH 之前**、**无条件**把
+   `cordis.patch.yml` 里 webserver 块的 `0.0.0.0` 改写为 `127.0.0.1`。
+   必须无条件 —— 把 `lanAccess` 关掉没用：**污染的是文件，不是开关**。
+   只动 host 那一行，feedback 等其它 insert 块一行不碰；内容没变不写盘。
+3. 新增守卫 `scripts/test-mobile-connect-host.js`（接进 release.yml）：断言
+   `bindingBlock()` 永不产出通配地址、老配置能被迁移、**其它配置块不被误伤**、幂等。
+
+### 另两个体验修复
+- 「本版更新内容」偶发显示「暂未获取到」：弹窗打开时本地缓存还没刷到新版本；
+  现在会强制回源一次再判定。
+- 更新下载卡在某个百分比：`electron-updater` 的 `pending/` 里残留着**旧版本**的半截安装包，
+  新版本误以为可续传（实测卡在 79%，`pending/DeepWhale-Desktop-1.0.57-arm64.zip` 289MB），
+  校验永远对不上。现在开始下载前会清掉不属于当前目标版本的残留。
+
 ## [1.0.58] - 2026-10-17
 
 **本版主体是「手机端」：桌面壳内置手机访问网关 + 手机端 App 打通核心回路。** 同时随包运行时升级到 DSH 0.2.1-rc.1。

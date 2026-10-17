@@ -32,6 +32,7 @@ import { ensureFeedbackEntry, feedbackUrlForSession } from './feedback';
 import {
   buildMobileUrls,
   ensureMobileAccess,
+  sanitizeWebserverHost,
   lanAddresses,
   mobileAddressFileText,
   writeMobileAddressFile,
@@ -1621,6 +1622,19 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
     //    做到那一步还需要把「地址 + token」露到界面上（用户从来没见过 token）。
     //    只开端口、不给钥匙 = 用户拿不到任何好处，同 WiFi 下的其他人却多了一个入口。
     //    开关是设置里的 lanAccess；等手机端一次做全（绑 0.0.0.0 + 探测地址 + 露出凭据 + 发版）再打开。
+    // ⚠️ 2026-10-17 发布级事故的修复（必须**无条件**跑，不能放进下面的 lanAccess 分支）：
+    //    1.0.58 把 DSH 升到 0.2.1-rc.1 后，新版 dsh-host-webserver **拒绝 host: 0.0.0.0**，
+    //    而旧壳已经把这个值写进了用户的 cordis.patch.yml → webserver 起不来 →
+    //    依赖它的 8 个插件全在等 → DSH 进程 exit 1 → 壳弹「无法连接到 DSH 服务」。
+    //    把 lanAccess 关掉也没用：**污染的是文件，不是开关**，必须主动改写那次遗留。
+    try {
+      if (sanitizeWebserverHost(legalHome)) {
+        console.log('[mobile] 已把历史遗留的 host: 0.0.0.0 改写为 127.0.0.1（DSH 0.2.1+ 拒绝通配地址）');
+      }
+    } catch (error) {
+      logInjectionFailure('mobile', 'webserver host 迁移', error);
+    }
+
     if (!store.get('lanAccess')) {
       if (SMOKE) console.log('[smoke] mobile access: disabled（lanAccess=false，默认）');
     } else {

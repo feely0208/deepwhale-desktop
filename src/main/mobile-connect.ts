@@ -62,11 +62,70 @@ export function bindingBlock(port: number, addresses: string[]): string {
     "      name: '@deepseek-ai/dsh-host-webserver'",
     '      config:',
     `        port: ${port}`,
-    '        host: 0.0.0.0',
+    // ⚠️ 2026-10-17 发布级事故：DSH 0.2.1-rc.1 的 dsh-host-webserver 收紧了安全策略，
+    //    **拒绝通配地址**（原话：`host "0.0.0.0" is an unspecified (wildcard) address,
+    //    which is not supported; binding every interface would expose remote code
+    //    execution to the network`）。写 0.0.0.0 → webserver 插件 Schema.validate 失败
+    //    → webServer 起不来 → 依赖它的 8 个插件全部等待 → DSH 进程 exit 1
+    //    → 壳弹「无法连接到 DSH 服务」，点「重试」也没用（每次启动都会再写回去）。
+    //    只绑回环即可：局域网那条路已由壳自己的「手机连接」网关接管
+    //    （src/main/mobile-gateway.ts：自己监听 0.0.0.0 + 配对码 + 会话令牌）。
+    '        host: 127.0.0.1',
     '        trustedHosts:',
     trusted,
     '',
   ].join('\n');
+}
+
+/**
+ * 把历史遗留的 `host: 0.0.0.0` 改写成 `127.0.0.1`（必须在**拉起 DSH 之前**调用）。
+ *
+ * ── 为什么必须做（2026-10-17 发布级事故）──────────────────────────────
+ *   1.0.58 把随包运行时升到 DSH 0.2.1-rc.1，新版 dsh-host-webserver **不再接受通配地址**；
+ *   而**旧版本壳已经把这个值写进了用户的 `<home>/cordis.patch.yml`**。
+ *   老用户升级到 0.2.1 后：webserver 校验失败 → webServer 起不来 →
+ *   web-runtime / shell-canvas / shell-mobile 等 8 个插件全在等它 → DSH 进程 exit 1
+ *   → 壳弹「无法连接到 DSH 服务」。**点重试没用** —— 每次启动都会把 0.0.0.0 又写回去。
+ *
+ *   两层修法：① bindingBlock() 不再写 0.0.0.0；② 本函数把**已经写进去的**改掉 ——
+ *   只动 webserver 块里的 host 行，其它配置一行不碰；内容没变就不写盘。
+ *
+ * @returns 是否真的改写了文件
+ */
+export function sanitizeWebserverHost(home: string): boolean {
+  const file = path.join(home, 'cordis.patch.yml');
+  let current = '';
+  try {
+    current = fs.readFileSync(file, 'utf8');
+  } catch {
+    return false;
+  }
+  if (!current.includes('0.0.0.0')) return false;
+
+  const lines = current.split('\n');
+  let inWebserver = false;
+  let changed = false;
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (/^\s*- id:\s*webserver\s*$/.test(line)) {
+      inWebserver = true;
+      continue;
+    }
+    if (inWebserver && /^\s*- id:\s*/.test(line)) {
+      inWebserver = false;
+    }
+    if (inWebserver && /^(\s*)host:\s*0\.0\.0\.0\s*$/.test(line)) {
+      lines[i] = line.replace('0.0.0.0', '127.0.0.1');
+      changed = true;
+    }
+  }
+  if (!changed) return false;
+  try {
+    fs.writeFileSync(file, lines.join('\n'));
+  } catch {
+    return false;
+  }
+  return true;
 }
 
 /**

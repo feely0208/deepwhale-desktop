@@ -69,15 +69,7 @@
       '    <div class="dsh-ext-grid">' +
       '      <div class="row"><span class="k">状态</span><span id="dsh-ext-u-status">…</span></div>' +
       '      <div class="row"><span class="k">API Key</span><span id="dsh-ext-u-key">—</span></div>' +
-      '      <div class="dsh-ext-row">配置 API Key（加密保存）：</div>' +
-      '      <input type="password" class="dsh-ext-key-input" id="dsh-ext-u-key-input" placeholder="sk-..." spellcheck="false" autocomplete="off" />' +
-      '      <div class="dsh-ext-btns">' +
-      '        <button class="dsh-ext-btn" id="dsh-ext-u-key-save">保存 Key</button>' +
-      '        <button class="dsh-ext-btn" id="dsh-ext-u-key-clear">清除</button>' +
-      '      </div>' +
-      '      <label class="dsh-ext-check"><input type="checkbox" id="dsh-ext-u-keepdsh" /> 退出时保留 DSH 服务（下次启动秒开）</label>' +
-      '      <div class="row"><span class="k">总余额</span><span id="dsh-ext-u-total">—</span></div>' +
-      '      <div class="row"><span class="k">赠送 / 充值</span><span id="dsh-ext-u-split">—</span></div>' +
+      '      <div class="dsh-ext-row">余额与充值请到设置里的「账号与余额」看（官方页面，数字同源）。这里只留官方没有的：今日请求、累计 tokens、可视化。</div>' +
       '      <div class="row"><span class="k">今日请求</span><span id="dsh-ext-u-req">0</span></div>' +
       '      <div class="row"><span class="k">累计 tokens（估）</span><span id="dsh-ext-u-tok">0</span></div>' +
       '    </div>' +
@@ -89,6 +81,14 @@
       '    </div>' +
       '    <div class="dsh-ext-err" id="dsh-ext-u-err" hidden></div>' +
       '    <button class="dsh-ext-btn" id="dsh-ext-u-refresh">立即刷新</button>' +
+      '    <label class="dsh-ext-check"><input type="checkbox" id="dsh-ext-u-keepdsh" /> 退出时保留 DSH 服务（下次启动秒开）</label>' +
+      '    <details class="dsh-ext-adv"><summary>高级：手动配置 API Key（一般不需要，登录后自动读取）</summary>' +
+      '      <input type="password" class="dsh-ext-key-input" id="dsh-ext-u-key-input" placeholder="sk-..." spellcheck="false" autocomplete="off" />' +
+      '      <div class="dsh-ext-btns">' +
+      '        <button class="dsh-ext-btn" id="dsh-ext-u-key-save">保存 Key</button>' +
+      '        <button class="dsh-ext-btn" id="dsh-ext-u-key-clear">清除</button>' +
+      '      </div>' +
+      '    </details>' +
       '  </section>' +
       '  <section class="dsh-ext-section" id="' + SEC_PREFIX + 'skin">' +
       '    <h3>皮肤（背景）</h3>' +
@@ -286,10 +286,12 @@
       var low = !!data.lowBalance;
       var unavailable = data.available === false;
       uStatus.textContent = unavailable ? '不可用' : low ? '余额偏低' : '正常';
+      // 2026-10-18 瘦身：余额那两行已删（官方「账号与余额」页已有且数字同源），
+      // 数据仍保留给「余额充足度 / 额度构成」两条可视化；元素不在就跳过（不能抛）。
       var first = data.balanceInfos && data.balanceInfos[0];
       if (first) {
-        uTotal.textContent = first.totalBalance + ' ' + first.currency;
-        uSplit.textContent = '赠 ' + first.grantedBalance + ' / 充 ' + first.toppedUpBalance;
+        if (uTotal) uTotal.textContent = first.totalBalance + ' ' + first.currency;
+        if (uSplit) uSplit.textContent = '赠 ' + first.grantedBalance + ' / 充 ' + first.toppedUpBalance;
       }
       uReq.textContent = String(data.todayRequests || 0);
       uTok.textContent = fmtTokens((data.totalInputTokens || 0) + (data.totalOutputTokens || 0));

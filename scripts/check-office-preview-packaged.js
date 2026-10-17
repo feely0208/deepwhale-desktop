@@ -129,6 +129,15 @@ function findApp(arg) {
 const found = findApp(process.argv[2]);
 if (found === null) {
   console.error('❌ 找不到打包产物（release/ 或 dist/ 下的 app.asar + 可执行文件）—— 先 npm run dist');
+  if (process.env.GITHUB_ACTIONS === 'true') {
+    console.log('::error::找不到打包产物 —— findApp() 没有匹配到任何 app.asar + 主可执行文件');
+    try {
+      for (const root of ['release', 'dist']) {
+        const d2 = path.join(REPO, root);
+        if (fs.existsSync(d2)) console.log(`::error::${root}/ 内容: ${fs.readdirSync(d2).slice(0, 12).join(', ')}`);
+      }
+    } catch { /* ignore */ }
+  }
   process.exit(1);
 }
 const { app, res, exe, isMac } = found;
@@ -173,6 +182,7 @@ function asarHas(inner) {
 }
 if (!asarHas(innerPlugin)) {
   console.error(`❌ 打包产物里没有 dsh-office-to-pdf（${innerPlugin}）`);
+  if (process.env.GITHUB_ACTIONS === 'true') console.log(`::error::打包产物里没有 dsh-office-to-pdf（${innerPlugin}）`);
   process.exit(1);
 }
 const outPdf = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'office-cap-')), 'out.pdf');
@@ -200,6 +210,15 @@ const probe = `
     }
   } catch {}
   console.log('ENGINE ' + (engine || 'NONE'));
+  // 诊断：linux 上 kit 会因「某个解析路径下存在同名目录（哪怕空壳）」而抛 incomplete。
+  // 把 require.resolve.paths 与实际命中的候选打出来，才能知道空壳藏在哪里。
+  try {
+    const paths = req.resolve.paths('@deepseek-ai/libreoffice-kit-linux-x64-glibc') || [];
+    const hit = paths
+      .map((d) => require('path').join(d, '@deepseek-ai', 'libreoffice-kit-linux-x64-glibc'))
+      .filter((q) => { try { fs.lstatSync(q); return true; } catch { return false; } });
+    console.log('LINUXPEEK ' + JSON.stringify({ paths: paths.slice(0, 12), hit: hit.slice(0, 5) }));
+  } catch (e) { console.log('LINUXPEEK_FAIL ' + String((e && e.message) || e)); }
   if (engine) {
     const root = path.dirname(engine);
     const bin = require('path').join(root, 'bin', 'libreoffice-kit');
@@ -287,7 +306,7 @@ if (problems.length) {
     for (const p of problems) console.log(`::error::${one(p)}`);
     const diag = String(out || '')
       .split('\n')
-      .filter((l) => /^(RESOLVED|ENGINE|ENGINE_MODE|CONVERTER_FAIL|CONVERT_FAIL|FATAL|RESOLVE_FAIL)/.test(l))
+      .filter((l) => /^(RESOLVED|ENGINE|ENGINE_MODE|CONVERTER_FAIL|CONVERT_FAIL|FATAL|RESOLVE_FAIL|LINUXPEEK)/.test(l))
       .join(' | ');
     if (diag) console.log(`::error::诊断 ${one(diag)}`);
     console.log(`::error::产物 ${one(app)}`);

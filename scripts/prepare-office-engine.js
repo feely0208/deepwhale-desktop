@@ -90,6 +90,24 @@ if (isLinux) {
     console.log(`   @deepseek-ai 下引擎目录: ${remain.join(', ') || '(无)'}`);
     if (process.env.GITHUB_ACTIONS === 'true') console.log(`::notice::${target} 引擎目录: ${remain.join(', ') || '(无)'}`);
   }
+  // 深度清理：不只是 @deepseek-ai 那一层，dsh-runtime 下任何位置出现这个名字都要清掉。
+  // kit 的 installedPackageExists 用 require.resolve.paths 逐个试，只要**任一**路径存在
+  // 该名字的目录（哪怕空壳）就会抛 incomplete 而不是回退 wasm —— 所以必须清干净。
+  (function deepClean(dir, depth) {
+    if (depth > 6) return;
+    let entries;
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      if (!e.isDirectory()) continue;
+      const full = path.join(dir, e.name);
+      if (e.name.startsWith('libreoffice-kit-linux-')) {
+        fs.rmSync(full, { recursive: true, force: true });
+        console.log(`   深度清除: ${path.relative(REPO, full)}`);
+        continue;
+      }
+      deepClean(full, depth + 1);
+    }
+  })(path.join(REPO, 'dsh-runtime'), 0);
   const wasmPkg = path.join(KIT_DIR, 'libreoffice-kit-wasm', 'package.json');
   if (!exists(wasmPkg)) die('Linux 需要 libreoffice-kit-wasm 兜底，但它没装上');
   const wv = JSON.parse(fs.readFileSync(wasmPkg, 'utf8')).version;

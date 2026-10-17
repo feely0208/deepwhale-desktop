@@ -1,6 +1,9 @@
 {
   "name": "@deepwhale-cn/dsh-shell-session-actions",
   "version": "1.0.0",
+  "engines": {
+    "dsh": ">=0.1.0-rc.6 <0.3.0"
+  },
   "description": "深鲸桌面：给 DSH 会话右键菜单追加「在访达中打开 / 打开所在文件夹 / 复制文件路径 / 复制会话 ID」四行，经 window.dsh.sessionAction 桥接到 Electron 主进程。",
   "private": true,
   "type": "module",

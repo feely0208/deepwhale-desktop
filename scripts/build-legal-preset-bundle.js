@@ -131,6 +131,12 @@ ${plugins}
     description: '深鲸桌面随包的「法律模式」Agent 预设：以 bundle 声明的方式挂进 DSH 花名册。',
     private: true,
     type: 'module',
+    // 2026-10-16：DSH 判插件兼容性时优先读 engines.dsh（alpha.4 起），
+    // 声明了它 peerDependencies 就被忽略、不满足直接拒载。
+    // 只写下界（>=0.1.0-rc.6）等于声称兼容未来所有版本：0.3 一破会被「放行后运行时炸」，
+    // 比被拒绝更糟。必须带上界，且下界要能覆盖我们当前随包的 0.2.0-rc.2（预发布 < 正式，
+    // 所以不能写成 >=0.2.0）。
+    engines: { dsh: '>=0.1.0-rc.6 <0.3.0' },
     dsh: { bundle: { patch: './cordis.patch.yml' } },
   };
 

@@ -1,6 +1,9 @@
 {
   "name": "@deepwhale-cn/dsh-shell-web-preview",
   "version": "1.1.0",
+  "engines": {
+    "dsh": ">=0.1.0-rc.6 <0.3.0"
+  },
   "description": "深鲸桌面：开启官方右栏「网页预览」，并在站点禁止内嵌时给出可操作的兜底提示（而不是一片空白）。",
   "private": true,
   "type": "module",

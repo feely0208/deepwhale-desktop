@@ -1,6 +1,9 @@
 {
   "name": "@deepwhale-cn/dsh-shell-mobile",
   "version": "0.1.0",
+  "engines": {
+    "dsh": ">=0.1.0-rc.6 <0.3.0"
+  },
   "description": "深鲸手机端接口层：在 DSH 宿主里注册 /mobile/api/*（会话/消息/审批/任务），供深鲸 Mobile 经自家网关调用。DSH 只当底座，接口契约是我们自己的。",
   "private": true,
   "type": "module",

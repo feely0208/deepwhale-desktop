@@ -35,26 +35,90 @@ const { spawnSync } = require('child_process');
 const REPO = path.join(__dirname, '..');
 const FIXTURE = path.join(REPO, 'tests', 'fixtures', 'office-preview-sample.docx');
 
+/** 找产物的主可执行文件。
+ *
+ * ⚠️ 2026-10-17 修：旧实现把非 mac 的主可执行名**写死成 `DeepWhale Desktop.exe`** ——
+ * Linux 的二进制没有 `.exe`，于是 `fs.existsSync(exe)` 恒为 false，
+ * 整个 candidate 被丢弃、findApp() 返回 null，CI 报「找不到打包产物」。
+ * 现在按实际布局探测：mac 取 Contents/MacOS 下第一个；Windows 认 .exe；
+ * Linux 优先认与 productName 同名的可执行文件，否则取根目录第一个带执行位的普通文件。
+ */
+function findMainExe(appRoot, isMac) {
+  if (isMac) {
+    try {
+      const macosDir = path.join(appRoot, 'Contents', 'MacOS');
+      const first = fs.readdirSync(macosDir).find((n) => {
+        try { return fs.statSync(path.join(macosDir, n)).isFile(); } catch { return false; }
+      });
+      return first ? path.join(macosDir, first) : null;
+    } catch { return null; }
+  }
+  let names;
+  try { names = fs.readdirSync(appRoot); } catch { return null; }
+  // Windows：electron-builder 只会产出一个主 .exe
+  const exeName = names.find((n) => n.endsWith('.exe') && !/uninstall/i.test(n));
+  if (exeName) return path.join(appRoot, exeName);
+  // Linux：优先与 productName 同名（可能带空格，或被连字符化）
+  const preferred = ['DeepWhale Desktop', 'deepwhale-desktop', 'deepwhale_desktop'];
+  for (const want of preferred) {
+    if (names.includes(want)) return path.join(appRoot, want);
+  }
+  for (const n of names) {
+    const p = path.join(appRoot, n);
+    try {
+      const st = fs.statSync(p);
+      if (st.isFile() && (st.mode & 0o111)) return p;
+    } catch { /* 跳过 */ }
+  }
+  return null;
+}
+
 /** 找打包产物里的可执行文件与 app.asar */
 function findApp(arg) {
   const candidates = [];
   if (arg) candidates.push(arg);
+  /** electron-builder 的产物布局随平台/架构而变，三种都要认：
+   *    · macOS      release/mac-arm64/<name>.app          ← 2026-10-17 修
+   *    · Linux/Win  release/<name>-unpacked/resources/app.asar
+   *    · 旧布局     release/<name>.app
+   *
+   * 为什么必须修（2026-10-17 实测）：旧实现只认 `release/<name>.app` 与
+   * `release/<name>/resources/app.asar` —— mac 的产物在 `release/mac-arm64/<name>.app`
+   * （`Contents/Resources/` 不是 `resources/`），两个都不匹配 → 返回 null。
+   * 更糟的是：本地 `release/` 里若留着旧的 `win-unpacked`，会挑中 Windows 产物、
+   * 在 mac 上跑 exe → 报「解析 libreoffice-kit 失败」的**假红**，把人带偏。
+   */
+  const pushIfApp = (p) => {
+    if (fs.existsSync(path.join(p, 'Contents', 'Resources', 'app.asar'))) candidates.push(p);
+  };
+  const pushIfUnpacked = (p) => {
+    if (fs.existsSync(path.join(p, 'resources', 'app.asar'))) candidates.push(p);
+  };
   for (const root of ['release', 'dist']) {
     const dir = path.join(REPO, root);
     if (!fs.existsSync(dir)) continue;
     for (const name of fs.readdirSync(dir)) {
-      if (name.endsWith('.app')) candidates.push(path.join(dir, name));
-      const unpacked = path.join(dir, name, 'resources', 'app.asar');
-      if (fs.existsSync(unpacked)) candidates.push(path.join(dir, name));
+      const full = path.join(dir, name);
+      if (name.endsWith('.app')) { pushIfApp(full); continue; }
+      pushIfUnpacked(full);
+      // 再下一层：release/mac-arm64/<name>.app
+      try {
+        if (!fs.statSync(full).isDirectory()) continue;
+        for (const inner of fs.readdirSync(full)) {
+          if (inner.endsWith('.app')) pushIfApp(path.join(full, inner));
+        }
+      } catch { /* 不可读就跳过 */ }
     }
   }
-  for (const c of candidates) {
+  // 主机平台对不上的产物不优先（mac 上不要跑去跑 win-unpacked 里的 exe）
+  const wantsMac = process.platform === 'darwin';
+  const ordered = candidates.filter((c) => (c.endsWith('.app') ? wantsMac : !wantsMac));
+  for (const c of [...ordered, ...candidates]) {
     if (!fs.existsSync(c)) continue;
     const isMac = c.endsWith('.app');
     const res = isMac ? path.join(c, 'Contents', 'Resources') : path.join(c, 'resources');
-    const exe = isMac
-      ? path.join(c, 'Contents', 'MacOS', fs.readdirSync(path.join(c, 'Contents', 'MacOS'))[0])
-      : path.join(c, 'DeepWhale Desktop.exe');
+    const exe = findMainExe(c, isMac);
+    if (!exe) continue;
     if (fs.existsSync(path.join(res, 'app.asar')) && fs.existsSync(exe)) {
       return { app: c, res, exe, isMac };
     }
@@ -200,6 +264,20 @@ if (problems.length) {
   console.error('\n❌ 能力基线失败：**打包态的 Office 预览不可用**（用户看到「Office 预览不可用」）\n');
   problems.forEach((p, i) => console.error(`   ${i + 1}. ${p}`));
   console.error('\n   这正是 1.0.56/1.0.57 在 macOS/Linux 上的真实故障。');
+  // 2026-10-17：失败原因同时发成 GitHub Actions 注解。
+  // 公开仓库的 job log 要 admin 权限才拉得到，但 check-run annotations 不需要 ——
+  // 这样 CI 红了能直接读到根因，不用靠本地猜（这次就猜了很久）。
+  if (process.env.GITHUB_ACTIONS === 'true') {
+    const one = (s) => String(s == null ? '' : s).replace(/\r?\n/g, ' ').slice(0, 900);
+    for (const p of problems) console.log(`::error::${one(p)}`);
+    const diag = String(out || '')
+      .split('\n')
+      .filter((l) => /^(RESOLVED|ENGINE|ENGINE_MODE|CONVERTER_FAIL|CONVERT_FAIL|FATAL|RESOLVE_FAIL)/.test(l))
+      .join(' | ');
+    if (diag) console.log(`::error::诊断 ${one(diag)}`);
+    console.log(`::error::产物 ${one(app)}`);
+    if (kitModules) console.log(`::error::kit 目录 ${one(path.relative(REPO, kitModules))}`);
+  }
   process.exitCode = 1;
 } else {
   const size = fs.statSync(outPdf).size;

@@ -165,6 +165,16 @@ jobs:
         run: node scripts/build-office-runtime.js "${{ matrix.office-target }}"
 
       # 随包插件：从 npm 拉取已发布的正式包（中文合规 + 公文排版），让用户装完即用。
+      # ⚠️ 2026-10-17（P0-0 续）：LibreOffice 引擎包是**架构绑定**的，而 npm 在 runner 上
+      #   只会装「宿主架构」那一份 —— macos-latest 是 arm64，于是 matrix 里的 macos-x64
+      #   job 打出的 x64 包里塞进的是 arm64 引擎 → 用户侧「Office 预览不可用」，
+      #   而所有守卫都是绿的（正是 release-selfcheck 里写的「装得上、用不了」）。
+      #   Linux 没有发布原生引擎，kit 会回退 wasm，但要先清掉 npm 为不存在的
+      #   optionalDependency 建出来的空目录，否则 kit 抛 incomplete 而不是回退。
+      - name: 按目标架构准备 LibreOffice 引擎
+        shell: bash
+        run: node scripts/prepare-office-engine.js "${{ matrix.office-target }}"
+
       - name: Prepare bundled plugins
         shell: bash
         run: node scripts/build-bundled-plugins.js

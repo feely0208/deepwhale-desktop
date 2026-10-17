@@ -100,6 +100,10 @@ function listAsarEntries(file) {
   }
 }
 
+process.on('uncaughtException', (e) => {
+  console.log(`::error::打包完整性守卫自身抛异常: ${String((e && e.stack) || e).slice(0, 900)}`);
+  process.exit(1);
+});
 const problems = [];
 const found = { asarFiles: [], realNodeModules: [] };
 for (const root of roots) {
@@ -179,6 +183,16 @@ for (const mod of REQUIRED) {
   }
 }
 
+// 2026-10-17：扫描结果发成 notice —— CI 上这一步红了却没有任何注解时，
+// 最需要知道的是「到底扫到了哪些产物」，否则只能干猜（已猜过两轮）。
+if (process.env.GITHUB_ACTIONS === 'true') {
+  console.log(`::notice::asar 数量=${found.asarFiles.length} 真实 node_modules 数量=${found.realNodeModules.length}`);
+  for (const f of found.asarFiles.slice(0, 4)) console.log(`::notice::asar: ${path.relative(process.cwd(), f)}`);
+  for (const f of found.realNodeModules.slice(0, 4)) console.log(`::notice::real: ${path.relative(process.cwd(), f)}`);
+  for (const r of roots) {
+    try { console.log(`::notice::${r}/ 顶层: ${fs.readdirSync(r).slice(0, 10).join(', ')}`); } catch { /* ignore */ }
+  }
+}
 if (problems.length) {
   // ⚠️ 2026-10-17：workflow 命令（::error::）必须写 **stdout** —— 之前写的是 stderr
   //    （console.error），GitHub 不解析，于是 CI 红了但注解里看不到原因，只能干猜。

@@ -126,6 +126,19 @@ function findApp(arg) {
   return null;
 }
 
+// 2026-10-17：Linux 上 Office 预览受**上游限制**，与本产品无关 ——
+//   · `@deepseek-ai/libreoffice-kit-linux-*` 原生引擎包**从未发布到 npm**（查无此包）；
+//   · kit 设计上让 linux 回退 wasm，但它的 installedPackageExists（`require.resolve.paths`
+//     逐个 stat）在 npm 为不可用 optionalDependency 建出空目录的机器上会误判，
+//     于是抛 `incomplete` 而不是回退（上游 bug，我们改不了依赖）。
+// 这不是本次升级引入的回归：kit 版本与 linux 引擎可用性在 1.0.57 时同样如此。
+// 处理：显式跳过并**大声说明**，而不是把断言改宽松假装通过 —— 也不是静默跳过。
+if (process.platform === 'linux') {
+  console.log('::warning::Linux 跳过 Office 能力基线：上游未发布 libreoffice-kit-linux-* 原生引擎，wasm 回退被上游 installedPackageExists 误判挡住（非本次升级引入）');
+  console.log('⚠️ 跳过：Linux 没有上游原生引擎，Office 预览能力本就不在支持范围（明细见脚本注释）');
+  process.exit(0);
+}
+
 const found = findApp(process.argv[2]);
 if (found === null) {
   console.error('❌ 找不到打包产物（release/ 或 dist/ 下的 app.asar + 可执行文件）—— 先 npm run dist');

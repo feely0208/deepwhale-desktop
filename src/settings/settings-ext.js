@@ -666,6 +666,19 @@
     var slot =
       document.querySelector('[data-slot="sidebar.footer.action"]') ||
       document.querySelector('[data-slot="sidebar.settings"]');
+    // ⚠️ 关键（2026-10-18 冒烟实测）：slot 本身在 `.footerActions` 里，而那是
+    //    **flex-direction:row + width:100%** 的横排行。直接往里塞一个 width:100% 的节点
+    //    会把同行的「设置」按钮挤成 0 宽（实测 hostW:0、settingsRowVisible:false → 点不动）。
+    //    所以往上找到**列容器**（`.footArea` 是 flex-direction:column）再挂，
+    //    条自己占一行，按钮位置一点不动。
+    var host = slot;
+    for (var up = 0; up < 4 && host.parentElement; up++) {
+      var pe = host.parentElement;
+      var dir = '';
+      try { dir = getComputedStyle(pe).flexDirection; } catch (e) { dir = ''; }
+      host = pe;
+      if (dir === 'column') break;
+    }
     if (!slot) {
       if (!window.__dshExtSidebarWarned) {
         window.__dshExtSidebarWarned = true;
@@ -712,7 +725,7 @@
       'px;background:#7FE3F0;pointer-events:none;';
     track.appendChild(flash);
     wrap.appendChild(track);
-    slot.appendChild(wrap);
+    host.appendChild(wrap);
 
     // ⛔ 这里原来是 row.style.display='flex' / alignItems='center' —— **已删除**。
     //    那是直接改 React 管理节点的内联样式：React 重渲染后样式残留，会把侧栏布局搞崩

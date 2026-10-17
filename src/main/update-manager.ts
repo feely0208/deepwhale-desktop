@@ -285,6 +285,10 @@ export class UpdateManager {
     const version = (this.state as { version?: string }).version ?? '';
     if (version !== '' && version === this.skippedVersion) return;
 
+    // ⚠️ 2026-10-18：先清掉旧版本的下载残留，否则会「秒跳到某百分比然后卡死」
+    //    （用户实测：1.0.57 中断过下载 → 1.0.58 卡片停在 79% 不动）。
+    this.cleanStaleDownloadCache(version);
+
     this.cancelRequested = false;
     this.downloadToken = new CancellationToken();
     this.setState({ phase: 'downloading', message: '正在下载新版本…' });
@@ -389,6 +393,77 @@ export class UpdateManager {
   }
 
   // ── 内部实现 ────────────────────────────────────────────────────────
+
+  /**
+   * 清掉「**不属于当前目标版本**」的下载残留（2026-10-18 修复 58 的「更新卡在固定百分比」）。
+   *
+   * ── 事故 ────────────────────────────────────────────────────────────
+   *   用户 1.0.57 → 1.0.58 时，更新弹窗**秒跳到 79% 然后永远不动**。
+   *   排查发现 `~/Library/Caches/deepwhale-desktop-updater/pending/` 里躺着
+   *   **上一次中断留下的旧版本半截包**（实测 289 MB 的 1.0.57 zip）。
+   *   electron-updater 看到 pending 里已有同族文件就以为「可以续传」，进度直接跳；
+   *   但旧包与新包的 size / sha512 对不上，**校验永远失败 → 卡死，点重试也没用**。
+   *
+   * ── 修法 ────────────────────────────────────────────────────────────
+   *   开始下载前，把 pending 里**文件名不含目标版本号**的残留、和旧的 update.zip 删掉。
+   *   目标版本自己的分片保留（那是合法续传）。目录名按 electron-updater 的规则推，
+   *   找不到就静默跳过 —— **绝不因为清理失败而阻断更新**。
+   */
+  private cleanStaleDownloadCache(targetVersion: string): void {
+    try {
+      const adapter = (autoUpdater as unknown as {
+        app?: { baseCachePath?: string; name?: string };
+      }).app;
+      const cacheRoot = adapter?.baseCachePath;
+      if (!cacheRoot || targetVersion === '') return;
+
+      // electron-updater 的目录名规则：<baseCachePath>/<app.name>-updater；
+      // 打包名可能是 productName 也可能是 package name —— 两种都试。
+      const names = [adapter?.name, 'deepwhale-desktop', 'DeepWhale Desktop'].filter(
+        (n): n is string => typeof n === 'string' && n !== '',
+      );
+      const dir = names
+        .map((n) => path.join(cacheRoot, `${n}-updater`))
+        .find((d) => {
+          try {
+            return fs.existsSync(d);
+          } catch {
+            return false;
+          }
+        });
+      if (!dir) return;
+
+      let removed = 0;
+      const pending = path.join(dir, 'pending');
+      if (fs.existsSync(pending)) {
+        for (const name of fs.readdirSync(pending)) {
+          if (name.includes(targetVersion)) continue; // 目标版本的分片保留（合法续传）
+          try {
+            fs.rmSync(path.join(pending, name), { recursive: true, force: true });
+            removed += 1;
+          } catch {
+            /* 单个删不掉不影响其它 */
+          }
+        }
+      }
+      for (const stale of ['update.zip', 'update.exe', 'update.dmg']) {
+        const p = path.join(dir, stale);
+        if (fs.existsSync(p)) {
+          try {
+            fs.rmSync(p, { force: true });
+            removed += 1;
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+      if (removed > 0) {
+        console.log(`[update] 已清理 ${removed} 个不属于 ${targetVersion} 的下载残留（防止卡在固定百分比）`);
+      }
+    } catch (error) {
+      console.warn('[update] 清理下载残留失败（忽略，继续更新）:', error instanceof Error ? error.message : String(error));
+    }
+  }
 
   private setState(next: UpdateState): void {
     const prevPhase = this.state.phase;

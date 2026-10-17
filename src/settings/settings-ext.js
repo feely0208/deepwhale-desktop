@@ -652,34 +652,34 @@
   function maybeInjectSidebarProgress() {
     renderPrivacyNote();
     if (document.getElementById('dsh-ext-dl')) return;
-    var anchor = findSidebarSettingsAnchor();
-    if (!anchor) {
+    // ⚠️ 2026-10-17 事故后重写（原实现是「打开账号菜单就塌侧栏」的元凶）：
+    //    旧逻辑从「设置」按钮往上找父级、把进度条 append 进去，
+    //    还**直接改 React 管理的行内样式**（row.style.display='flex' / alignItems）。
+    //    结果：打开账号菜单 → React 重渲染那一行 → 我们的节点被 reconcile 掉、
+    //    但写进去的内联样式留着 → 行布局崩 → **侧栏从 280px 塌成 56px**。
+    //    实测证据：before 280px / afterOpenMenu 56px / afterClickSettings 56px。
+    //
+    //    现在只用 DSH 的**官方挂载点** `[data-slot="sidebar.footer.action"]`：
+    //    那是运行时专门留给外部内容的容器，React 不会去 reconcile 它的子节点。
+    //    找不到就**直接不注入** —— 宁可没有进度条，也不碰 React 的树。
+    //    **绝不修改任何非本插件节点的 style** —— 这是这次的根教训。
+    var slot =
+      document.querySelector('[data-slot="sidebar.footer.action"]') ||
+      document.querySelector('[data-slot="sidebar.settings"]');
+    if (!slot) {
       if (!window.__dshExtSidebarWarned) {
         window.__dshExtSidebarWarned = true;
-        console.warn('[dsh-ext] 未找到侧栏「设置」按钮，下载进度未注入（不影响其它功能）');
+        console.warn('[dsh-ext] 没有官方 slot（sidebar.footer.action），下载进度不注入侧栏（不影响其它功能）');
       }
       return;
-    }
-    var row = anchor.btn.parentElement || anchor.label.parentElement;
-    if (!row) return;
-    // ⚠️ 2026-10-03（1.0.47 实测修正）：DSH 侧栏「设置」的真实结构是
-    //     label → div(display:contents) → button.VOzbGW_trigger(≈70px, **overflow:hidden**)
-    //                                    → div(≈70px) → div.VOzbGW_triggerRow(≈260px)
-    //   插在按钮里会被 overflow 裁掉 —— 打包态冒烟实测只量到 62px（用户要的"铺满"根本出不来）。
-    //   所以宿主要**上浮到够宽的那一层**（triggerRow），条才有空间铺满。
-    for (var up = 0; up < 4 && row.parentElement; up++) {
-      var w = row.getBoundingClientRect().width;
-      if (w >= SIDE_BAR_MIN_ROW) break;
-      row = row.parentElement;
     }
 
     var wrap = document.createElement('span');
     wrap.id = 'dsh-ext-dl';
-    // flex:1 → 吃满「设置」右侧的剩余宽度，一直顶到便捷框前（左右各留 GAP）
+    // 在官方 slot 里占满整行；**只设自己这个节点的样式**，不碰任何别人的节点
     wrap.style.cssText =
-      'display:none;align-items:center;gap:7px;' +
-      'margin-left:' + SIDE_BAR_GAP_PX + 'px;margin-right:' + SIDE_BAR_GAP_PX + 'px;' +
-      'flex:1 1 auto;min-width:0;font-size:12px;line-height:1;';
+      'display:none;align-items:center;gap:7px;width:100%;box-sizing:border-box;' +
+      'padding:0 ' + SIDE_BAR_GAP_PX + 'px;min-width:0;font-size:12px;line-height:1;';
     var track = document.createElement('span');
     // 条吃满 wrap 的全部宽度（百分比数字改成叠在条上，不再挤占空间）
     track.style.cssText =
@@ -712,12 +712,11 @@
       'px;background:#7FE3F0;pointer-events:none;';
     track.appendChild(flash);
     wrap.appendChild(track);
-    row.appendChild(wrap);
+    slot.appendChild(wrap);
 
-    try {
-      row.style.display = 'flex';
-      row.style.alignItems = 'center';
-    } catch (e) { /* 行样式动不了也不影响条本身 */ }
+    // ⛔ 这里原来是 row.style.display='flex' / alignItems='center' —— **已删除**。
+    //    那是直接改 React 管理节点的内联样式：React 重渲染后样式残留，会把侧栏布局搞崩
+    //    （280px → 56px）。**绝不修改非本插件节点的样式** 是这次的根教训。
     // 条上不再有文字，无需"折叠时藏文字"的分支（保留条本身铺满即可）
   }
 
@@ -775,9 +774,26 @@
     if (navList) inject(navList);
   }
 
-  var observer = new MutationObserver(function () { maybeInject(); });
+  // ⚠️ 2026-10-17：观察器回调必须 ①整体 try/catch（单次注入失败不能连累其它功能）
+  //    ②去抖（React 一次重渲染会产生几十条 mutation，逐条跑全量 querySelectorAll 又慢、
+  //    又更容易和 React 的 reconcile 抢时序 —— 账号菜单塌侧事故就发生在这一层）。
+  var injectTimer = null;
+  function safeMaybeInject() {
+    try {
+      maybeInject();
+    } catch (e) {
+      console.warn('[dsh-ext] 注入失败（已忽略，不影响其它功能）:', e && e.message);
+    }
+  }
+  var observer = new MutationObserver(function () {
+    if (injectTimer) return;
+    injectTimer = setTimeout(function () {
+      injectTimer = null;
+      safeMaybeInject();
+    }, 120);
+  });
   observer.observe(document.documentElement, { childList: true, subtree: true });
-  maybeInject();
+  safeMaybeInject();
 
   /* ---------- 外部 Key 联动 ----------
    * DSH 模型区等任意位置填入 sk- 开头的 Key（失焦/回车）时，自动同步到用量面板，

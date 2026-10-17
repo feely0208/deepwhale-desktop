@@ -61,6 +61,17 @@ export function createMainWindow(options: MainWindowOptions): BrowserWindow {
   // 而这里原来是 `void shell.openExternal(url)` —— 异常被整个丢掉，用户端表现为
   // "选了法律模式毫无反应"：既分不清是没装、没打开过还是被移走，也没有任何可反馈的线索。
   win.webContents.setWindowOpenHandler(({ url }) => {
+    // ⚠️ 2026-10-18：**必须放行 about:blank**。
+    //    DSH 0.2.1 的账号登录（@deepseek-ai/dsh-client-ui-settings-account 的 BrowserLogin）
+    //    先在用户点击的同一个事件里 `window.open("about:blank","_blank")` 预开一个标签页，
+    //    等 Host 返回 authorizeUrl 后再 `popup.location.replace(...)` 导航过去。
+    //    我们原来一律 deny + 转系统浏览器 → DSH 拿不到 popup 引用 → 登录退化成
+    //    「复制链接」模式（能用但很别扭），与官方桌面端的节奏不一致。
+    //    放行 about:blank 只是给这个空白页一个真实窗口，后续导航仍由 DSH 控制；
+    //    真正的授权页是 DeepSeek Platform（nodeIntegration 已关闭，无提权风险）。
+    if (url === 'about:blank') {
+      return { action: 'allow' };
+    }
     shell.openExternal(url).catch((error: unknown) => {
       console.error('[window] 交系统打开失败:', url, error);
       options.onOpenExternalFailed?.(url, error);

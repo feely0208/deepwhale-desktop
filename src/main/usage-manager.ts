@@ -72,8 +72,54 @@ export class UsageManager {
     this.timer = null;
   }
 
-  /** 解析 API Key：优先环境变量，其次 safeStorage 加密存储 */
+  /**
+   * DSH 自己那份凭证文件（登录、或在 DSH 设置里填的 API Key 都落在这里）。
+   * 路径与 DSH 一致：`$DSH_HOME/.credentials.yaml`，默认 `<userData>/dsh-home`。
+   */
+  private dshCredentialFile(): string | null {
+    try {
+      const home =
+        process.env.DSH_HOME && process.env.DSH_HOME !== ''
+          ? process.env.DSH_HOME
+          : path.join(app.getPath('userData'), 'dsh-home');
+      return path.join(home, '.credentials.yaml');
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * 从 DSH 凭证文件里取 `DEEPSEEK_API_KEY`（只读、失败返回 null）。
+   *
+   * ── 为什么优先用它（2026-10-18）──────────────────────────────────────
+   *   官方 0.2.1 的「账号与余额」页读的是**同一个** `/user/balance` 接口、同一组字段
+   *   （`topped_up_balance` = 充值余额、`granted_balance` = 赠金余额）。
+   *   外展窗口原来只认自己那份 `apiKeyEncrypted` —— 用户登录后那边有凭证、这边没有，
+   *   两处对不上、还得填两次 Key。改成优先读 DSH 这份之后：
+   *   **同一个账户 → 同一个接口 → 必然显示同样的数字**，登录过就不用再填。
+   *   读不到（没登录 / 文件不存在 / 格式变了）就退回原顺序，绝不影响可用性。
+   */
+  private dshApiKey(): string | null {
+    const file = this.dshCredentialFile();
+    if (!file) return null;
+    try {
+      const text = fs.readFileSync(file, 'utf-8');
+      const m = text.match(/^\s*DEEPSEEK_API_KEY:\s*['"]?([^'"\s]+)['"]?\s*$/m);
+      return m ? m[1] : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * 解析 API Key（顺序 = 与官方页面同源优先）：
+   *   ① DSH 凭证文件里的 DEEPSEEK_API_KEY（登录过 / 在 DSH 里填过就有）
+   *   ② 环境变量 DEEPSEEK_API_KEY
+   *   ③ 我们自己 safeStorage 加密存的那份（老用户手动填的 key）
+   */
   resolveApiKey(): string | null {
+    const fromDsh = this.dshApiKey();
+    if (fromDsh) return fromDsh;
     const fromEnv = process.env.DEEPSEEK_API_KEY;
     if (fromEnv) return fromEnv;
     const enc = this.store.get('apiKeyEncrypted');

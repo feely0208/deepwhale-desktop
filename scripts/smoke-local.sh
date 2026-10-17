@@ -177,6 +177,11 @@ if not m:
 items = [x.split('/client.js')[0] for x in m.group(1).split(',') if x]
 print("COUNT=%d" % len(items))
 print("LEGAL=%s" % ("YES" if any('legal' in i for i in items) else "NO"))
+# 诊断：把完整清单落盘，红了能直接看差什么（不留存的话每次都要重跑）
+try:
+    open('/tmp/dsh-smoke-items.txt', 'w', encoding='utf-8').write("\n".join(sorted(items)))
+except Exception:
+    pass
 PY
     grep -q '^COUNT=' "$PLUGIN_OUT" 2>/dev/null && break
     kill -0 "$APP_PID" 2>/dev/null || break

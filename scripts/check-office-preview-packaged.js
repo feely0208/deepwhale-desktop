@@ -174,7 +174,12 @@ const innerPlugin = '/dsh-runtime/node_modules/@deepseek-ai/dsh-office-to-pdf/li
 const asarPlugin = path.join(asarFile, innerPlugin.replace(/^\//, ''));
 function asarHas(inner) {
   try {
-    return require('@electron/asar').listPackage(asarFile).includes(inner);
+    // ⚠️ 2026-10-17：Windows 上 `@electron/asar` 的 listPackage() 可能返回反斜杠路径，
+    // 直接 includes('/dsh-runtime/...') 会假失败（CI 实测：Windows 报
+    // 「打包产物里没有 dsh-office-to-pdf」而 mac/Linux 正常）。比较前统一成正斜杠。
+    const norm = (s) => String(s).replace(/\\/g, '/');
+    const want = norm(inner);
+    return require('@electron/asar').listPackage(asarFile).some((e) => norm(e) === want);
   } catch (e) {
     console.error('❌ 读不了 app.asar：' + e.message);
     process.exit(1);
@@ -217,7 +222,9 @@ const probe = `
     const hit = paths
       .map((d) => require('path').join(d, '@deepseek-ai', 'libreoffice-kit-linux-x64-glibc'))
       .filter((q) => { try { fs.lstatSync(q); return true; } catch { return false; } });
-    console.log('LINUXPEEK ' + JSON.stringify({ paths: paths.slice(0, 12), hit: hit.slice(0, 5) }));
+    // 只打命中项 —— 完整 paths 列表太长，GitHub 注解（约 1KB）会被截断，
+    // 而真正有用的就是「哪几个路径下真的存在这个目录」。
+    console.log('LINUXPEEK_HIT ' + JSON.stringify(hit.slice(0, 4)));
   } catch (e) { console.log('LINUXPEEK_FAIL ' + String((e && e.message) || e)); }
   if (engine) {
     const root = path.dirname(engine);
@@ -306,7 +313,7 @@ if (problems.length) {
     for (const p of problems) console.log(`::error::${one(p)}`);
     const diag = String(out || '')
       .split('\n')
-      .filter((l) => /^(RESOLVED|ENGINE|ENGINE_MODE|CONVERTER_FAIL|CONVERT_FAIL|FATAL|RESOLVE_FAIL|LINUXPEEK)/.test(l))
+      .filter((l) => /^(RESOLVED|ENGINE|ENGINE_MODE|CONVERTER_FAIL|CONVERT_FAIL|FATAL|RESOLVE_FAIL|LINUXPEEK_HIT)/.test(l))
       .join(' | ');
     if (diag) console.log(`::error::诊断 ${one(diag)}`);
     console.log(`::error::产物 ${one(app)}`);

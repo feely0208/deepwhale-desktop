@@ -539,6 +539,29 @@ function renderList(sessions) {
   window.dshMobileSend = send;
   window.dshMobileReload = startOnline;
 
+  // ⚠️ 这三个按钮以前**画了但没接线** ✗（真机反馈"点进会话退不出"）——
+  //    返回 / 新建会话 / 刷新 是手机端最基本的三个动作，必须能点。
+  window.__dshBack = function () {
+    try { stopChatStream(); } catch (e) {}
+    if (window.__dshMobile && window.__dshMobile.showPage) window.__dshMobile.showPage('list');
+    startOnline();   // 回列表时刷新数据（会话可能有新消息）
+  };
+  window.__dshNew = function () {
+    if (!ONLINE) {
+      if (typeof toast === 'function') toast('还没连接，先配对');
+      return;
+    }
+    api.create().then(function (r) {
+      var id = r && (r.id || (r.session && r.session.id));
+      if (id) {
+        openSession(id);
+      } else if (typeof toast === 'function') {
+        toast('新建失败' + (r && r.reason ? '：' + r.reason : ''));
+      }
+    });
+  };
+  window.__dshRefresh = function () { startOnline(); };
+
   // 搜索框：本地过滤（真机上原来点它没反应 ✗）
   (function () {
     var box = document.getElementById('list-search');

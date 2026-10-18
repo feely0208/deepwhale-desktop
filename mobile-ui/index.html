@@ -333,6 +333,15 @@
   };
   document.getElementById('nav-chat').addEventListener('click',()=>window.__dshMobile.showPage('chat'));
   document.getElementById('nav-me').addEventListener('click',()=>window.__dshMobile.showPage('list'));
+  // 返回 / 新建会话 / 刷新 —— 以前**画了没接线**（真机反馈：点进会话退不出 ✗）
+  (function () {
+    var b = document.getElementById('btn-back');
+    if (b) b.addEventListener('click', function () { if (window.__dshBack) window.__dshBack(); });
+    var n = document.getElementById('btn-new');
+    if (n) n.addEventListener('click', function () { if (window.__dshNew) window.__dshNew(); });
+    var r = document.getElementById('btn-refresh');
+    if (r) r.addEventListener('click', function () { if (window.__dshRefresh) window.__dshRefresh(); });
+  })();
   // 连接页：点「连接」→ 配对 → 进列表
   (function () {
     var go = document.getElementById('conn-go');

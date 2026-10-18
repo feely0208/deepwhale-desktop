@@ -67,10 +67,10 @@
 
 /* 2026-10-18：注入到 DSH 页面，必须跟应用主题（data-ds-dark-theme），不跟系统主题 */
 
-html[data-ds-dark-theme] #dsh-usage-panel .uph .arrow {
+body[data-ds-dark-theme] #dsh-usage-panel .uph .arrow {
     color: #3fb950;
   }
-html[data-ds-dark-theme] #dsh-usage-panel .uph:hover .arrow {
+body[data-ds-dark-theme] #dsh-usage-panel .uph:hover .arrow {
     color: #6bd47a;
   }
 
@@ -150,7 +150,7 @@ html[data-ds-dark-theme] #dsh-usage-panel .uph:hover .arrow {
 /* 深色主题跟随（nativeTheme 主题切换时自动生效） */
 /* 2026-10-18：注入到 DSH 页面，必须跟应用主题（data-ds-dark-theme），不跟系统主题 */
 
-html[data-ds-dark-theme] #dsh-usage-panel {
+body[data-ds-dark-theme] #dsh-usage-panel {
     background: rgba(16, 18, 22, 0.94);
     color: #e6e8ec;
     border-color: #2a2f3a;

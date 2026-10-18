@@ -142,6 +142,34 @@
    * 原因：样式依赖 DSH 的 CSS 变量（--dsw-alias-text-1 等），而浅色主题下变量名/取值不同，
    * 我的兜底色又是深色主题的浅灰字 → 白底浅灰字。现在**自己带一套**，两种主题都清楚。
    */
+  /**
+   * 主题变化时重画卡片（2026-10-18）。
+   *
+   * 卡片是**一次性渲染**的：注入那一刻判一次主题、把配色写进内联样式。
+   * 但 DSH 的 data-ds-dark-theme 是挂在 body 上的、而且可能在注入之后才设置/切换，
+   * 于是切到深色后卡片仍是浅色底（实测：浅色对了、深色又白）。
+   * 这里监听 body/html 的 class/attributes，一变就重建卡片。
+   */
+  function watchTheme() {
+    try {
+      var last = isDarkTheme();
+      var re = function () {
+        var now = isDarkTheme();
+        if (now === last) return;
+        last = now;
+        var old = document.getElementById(CARD_ID);
+        if (old && old.parentNode) old.parentNode.removeChild(old);
+        buildCard();
+      };
+      var mo = new MutationObserver(re);
+      [document.body, document.documentElement].forEach(function (el) {
+        if (el) mo.observe(el, { attributes: true, attributeFilter: ['data-ds-dark-theme', 'class'] });
+      });
+    } catch (e) {
+      /* 监听失败不影响主功能 */
+    }
+  }
+
   function isDarkTheme() {
     try {
       // ⚠️ 2026-10-18 修正：**只看 DSH 应用自己的主题属性，不看系统主题**。
@@ -674,6 +702,7 @@
   // ⚠️ 第一版只轮询 30 秒，用户几分钟后才新建会话 → 卡片永远不出现（2026-10-04 实机反馈）。
   //    现在改成**常驻**：MutationObserver 去抖 + 便宜的定时器双保险，只要面板出现就补上。
   void init();
+  watchTheme();
   var lastCheck = 0;
   function ensureCard() {
     var now = Date.now();

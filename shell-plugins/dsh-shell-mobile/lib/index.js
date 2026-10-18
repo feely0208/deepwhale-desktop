@@ -887,6 +887,33 @@ export function apply(ctx) {
       return;
     }
 
+    if (path === `${ROUTE}/tasks`) {
+      // 任务页（真数据）：读 DSH 的定时任务表 <DSH_HOME>/storages/schedule.json
+      // 形状：{tables:{tasks:{<id>:{sessionId, record:{id,kind,title,prompt,...}}}}}
+      const homeT = process.env.DSH_HOME || '';
+      const out = [];
+      try {
+        const sf = joinPath(homeT, 'storages', 'schedule.json');
+        const tables = JSON.parse(readFileSyncFs(sf, 'utf8'))?.tables ?? {};
+        const tasks = tables.tasks ?? {};
+        for (const [id, row] of Object.entries(tasks)) {
+          const r = row?.record ?? {};
+          out.push({
+            id: r.id ?? id,
+            kind: typeof r.kind === 'string' ? r.kind : '',
+            title: typeof r.title === 'string' ? r.title : String(r.prompt ?? '').split('\n')[0].slice(0, 60),
+            prompt: typeof r.prompt === 'string' ? r.prompt.slice(0, 200) : '',
+            nextAt: r.nextAt ?? r.nextRunAt ?? r.at ?? null,
+            enabled: r.enabled !== false,
+          });
+        }
+      } catch {
+        /* 没有定时任务 */
+      }
+      json(res, 200, { ok: true, count: out.length, tasks: out });
+      return;
+    }
+
     if (path === `${ROUTE}/trace`) {
       // 思考过程 + 工具调用（桌面端"思考…"那一块，手机端要用）
       const traceId = url.searchParams.get('id') ?? '';

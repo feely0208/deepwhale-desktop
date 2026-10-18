@@ -346,6 +346,31 @@ function renderList(sessions) {
     }
     function startTracePoll(id) { stopTracePoll(); loadTrace(id); traceTimer = setInterval(function () { loadTrace(id); }, 1500); }
 
+    /** 任务页：真数据（DSH 的定时任务表） */
+    function loadTasks() {
+      var list = document.getElementById('tasks-list');
+      if (!list) return;
+      list.innerHTML = '<div class="list-empty">正在读取…</div>';
+      jfetch('/mobile/api/tasks').then(function (r) {
+        if (!r || !r.ok) { list.innerHTML = '<div class="list-empty">任务列表拿不到</div>'; return; }
+        var ts = r.tasks || [];
+        var sub = document.getElementById('tasks-sub');
+        if (sub) sub.textContent = ts.length + ' 个定时任务';
+        if (!ts.length) { list.innerHTML = '<div class="list-empty">还没有定时任务</div>'; return; }
+        list.textContent = '';
+        ts.forEach(function (t) {
+          var row = el('div', 'plugin-row');
+          var head = el('div');
+          head.appendChild(el('span', 'pn', String(t.title || t.id || '')));
+          if (t.kind) head.appendChild(el('span', 'pv', String(t.kind)));
+          row.appendChild(head);
+          if (t.prompt) row.appendChild(el('div', 'pd', String(t.prompt).slice(0, 90)));
+          list.appendChild(row);
+        });
+      }).catch(function () {});
+    }
+    window.__dshLoadTasks = loadTasks;
+
   function messageNode(m) {
     var wrap = el('div', 'msg' + (m.role === 'user' ? ' me' : ''));
     var text = m.text || '';

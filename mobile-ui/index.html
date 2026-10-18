@@ -273,6 +273,11 @@
 
   <!-- 会话页（默认隐藏，供断言/联调切换） -->
 
+  <main class="scroll" id="page-tasks" hidden>
+    <div class="page-head"><span class="page-title">任务</span><span class="page-sub" id="tasks-sub">定时任务</span></div>
+    <div id="tasks-list" class="plugins-list"></div>
+  </main>
+
   <main class="scroll" id="page-chat" hidden>
     <div class="tabs"><button class="icon-btn" id="btn-back" aria-label="返回"><svg class="ic" viewBox="0 0 24 24" width="20" height="20"><path d="M15 5l-7 7 7 7"/></svg></button>
       <button class="tab" id="tab-chat" aria-selected="true">对话</button>
@@ -321,6 +326,8 @@
     showPage(name){
       document.getElementById('page-list').hidden = name !== 'list';
       document.getElementById('page-chat').hidden = name !== 'chat';
+      var pt = document.getElementById('page-tasks');
+      if (pt) pt.hidden = name !== 'tasks';
       var c = document.getElementById('page-connect');
       if (c) c.hidden = name !== 'connect';
       // 未连接时不该出现输入区与标签栏（那是"已在用"的界面，会对不上）
@@ -339,6 +346,10 @@
     },
   };
   document.getElementById('nav-chat').addEventListener('click',()=>window.__dshMobile.showPage('chat'));
+  document.getElementById('nav-tasks').addEventListener('click',function(){
+    window.__dshMobile.showPage('tasks');
+    if (window.__dshLoadTasks) window.__dshLoadTasks();
+  });
   document.getElementById('nav-me').addEventListener('click',()=>window.__dshMobile.showPage('list'));
   // 返回 / 新建会话 / 刷新 —— 以前**画了没接线**（真机反馈：点进会话退不出 ✗）
   (function () {

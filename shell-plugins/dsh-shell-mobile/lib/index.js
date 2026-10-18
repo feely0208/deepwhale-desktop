@@ -322,6 +322,24 @@ export function apply(ctx) {
         ? arr[0].content.slice(0, 4).map((p) => (p && typeof p === 'object' ? Object.keys(p) : null))
         : null,
       allRoles: arr ? arr.map((m) => m.role ?? null) : null,
+      // ⚠️ 真机实测：`deriveMessages()` 只有"输入侧"（allRoles 里一个 assistant 都没有），
+      //    助手回复在 DSH 的**投影**里：rows.turnOutline.val.turns[] = {turn, prompt, response}。
+      //    手机端聊天必须用这个，否则只能看到用户自己说的话（用户实测反馈）。
+      turns: (() => {
+        try {
+          const proj = typeof ctx.get === "function" ? ctx.get("sessionProjections") : undefined;
+          const st = proj?.stateOf ? proj.stateOf(id) : null;
+          const outline = st?.rows?.turnOutline?.val ?? st?.turnOutline?.val ?? null;
+          if (!outline || !Array.isArray(outline.turns)) return [];
+          return outline.turns.map((t) => ({
+            turn: t?.turn ?? null,
+            prompt: String(t?.prompt ?? ""),
+            response: String(t?.response ?? ""),
+          }));
+        } catch (e) {
+          return [];
+        }
+      })(),
       messagesError,
     };
   }

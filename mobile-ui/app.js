@@ -206,6 +206,30 @@
     return (d.getMonth() + 1) + '/' + d.getDate();
   }
 
+  /**
+   * 轻提示（toast）。
+   *
+   * ⚠️ 为什么必须有：真机实测用户点了「任务/插件/我的/附件」**完全没反应** ✗ ——
+   * 死按钮比"提示暂未开放"更糟（用户会以为 App 卡死）。凡是还没做的入口，
+   * 一律给一句明确反馈，别让它看起来像坏了。
+   */
+  function toast(msg) {
+    var box = document.getElementById('dsh-toast');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'dsh-toast';
+      box.style.cssText = 'position:fixed;left:50%;bottom:96px;transform:translateX(-50%);' +
+        'max-width:80vw;padding:10px 16px;border-radius:12px;background:rgba(20,28,40,.94);' +
+        'color:#e8eefc;font-size:13px;line-height:1.5;text-align:center;z-index:99;' +
+        'box-shadow:0 8px 24px rgba(0,0,0,.35);opacity:0;transition:opacity .18s ease;pointer-events:none';
+      document.body.appendChild(box);
+    }
+    box.textContent = msg;
+    box.style.opacity = '1';
+    clearTimeout(box.__t);
+    box.__t = setTimeout(function () { box.style.opacity = '0'; }, 2400);
+  }
+
   function el(tag, cls, text) {
     var n = document.createElement(tag);
     if (cls) n.className = cls;
@@ -324,17 +348,29 @@
       return;
     }
     api.session(id).then(function (r) {
-      // 我们的接口已把消息规范化成 {role,text,source}（见插件里的契约注释）
+      // ⚠️ 真机实测（用户反馈）：只看 messages 时**只有用户自己说的话**——DSH 的
+      //    deriveMessages() 不含助手回复（回复在投影的 turnOutline 里）。
+      //    所以优先用接口返回的 turns（每轮 prompt + response），没有再退回 messages。
+      var turns = (r && r.turns) || [];
+      if (turns.length) {
+        var pairs = [];
+        turns.forEach(function (t) {
+          var q = (t.prompt || "").trim();
+          var a = (t.response || "").trim();
+          if (q) pairs.push({ role: "user", text: q });
+          if (a) pairs.push({ role: "assistant", text: a });
+        });
+        renderChat({ messages: pairs });
+        return;
+      }
       var msgs = (r && r.messages) || [];
       renderChat({
-        // system 提示词不是聊天内容（实测第一条就是"You are an AI agent…"）→ 过滤掉
         messages: msgs
           .filter(function (m) {
-            // 只显示真正的聊天：system 角色与 kind=context（运行时上下文/skill 清单）都不是聊天
-            return m.role !== 'system' && m.kind !== 'context' && (m.text || '').trim() !== '';
+            return m.role !== "system" && m.kind !== "context" && (m.text || "").trim() !== "";
           })
           .map(function (m) {
-            return { role: m.role === 'user' ? 'user' : 'assistant', text: m.text || '' };
+            return { role: m.role === "user" ? "user" : "assistant", text: m.text || "" };
           }),
       });
     });
@@ -399,7 +435,33 @@
       });
   }
   window.dshMobileSend = send;
-  window.dshMobileReload = startOnline;   // 配对成功后由外壳/测试调用，或本文件内部调用
+  window.dshMobileReload = startOnline;
+
+  // 还没做的入口：给明确反馈（别让用户以为按钮坏了）
+  (function wireUnimplemented() {
+    var items = [
+      ['nav-tasks', '任务：还没做，下一步接'],
+      ['nav-plugins', '插件：还没做，下一步接'],
+      ['nav-me', ''],
+      ['chip-attach', '附件：还没做，下一步接'],
+      ['chip-ws', '工作区分组：还没做'],
+      ['ws-chip', '工作区：还没做'],
+      ['chip-model', '模型选择：还没做'],
+      ['chip-effort', '强度选择：还没做'],
+    ];
+    items.forEach(function (it) {
+      var node = document.getElementById(it[0]);
+      if (!node) return;
+      node.addEventListener('click', function () {
+        if (it[0] === 'nav-me') {
+          var o = (conn && conn.origin) || (ONLINE ? location.origin : '');
+          toast(o ? '已连接：' + o + '\n要换服务器：「切换服务器」重新配对' : '还没连接：回到连接页配对');
+          return;
+        }
+        toast(it[1]);
+      });
+    });
+  })();   // 配对成功后由外壳/测试调用，或本文件内部调用
 
   // ── 启动 ─────────────────────────────────────────────────────────
   function boot() {

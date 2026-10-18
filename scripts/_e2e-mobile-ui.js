@@ -55,6 +55,8 @@ app.whenReady().then(async () => {
   const chat = await w.webContents
     .executeJavaScript(`JSON.stringify({
       messages: document.querySelectorAll('#page-chat .msg').length,
+      // 助手回复气泡：手机端必须能看到"我(助手)说的话"，否则等于只有输入记录
+      chatAssistant: document.querySelectorAll('#page-chat .msg:not(.me)').length,
       firstText: ((document.querySelector('#page-chat .msg')||{}).textContent || '').slice(0, 60),
       page: (document.getElementById('page-chat')||{}).hidden === false ? 'chat' : 'other',
     })`)

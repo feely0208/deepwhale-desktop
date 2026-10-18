@@ -95,6 +95,7 @@
     // 跨域（独立 App）时必须带凭据：DSH 的鉴权是 cookie，omit 会让网关拿到 403（实测）
     return fetch(url, Object.assign({ credentials: base() ? 'include' : 'same-origin' }, opts || {})).then(function (r) {
       return r.json().catch(function () {
+        if (typeof toast === 'function') toast('接口 ' + r.status + '：' + String(path).slice(0, 46));
         return { ok: false, reason: 'bad-json', status: r.status };
       });
     });

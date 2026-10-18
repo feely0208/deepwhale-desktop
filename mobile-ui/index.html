@@ -265,10 +265,6 @@
   </main>
 
   <!-- 会话页（默认隐藏，供断言/联调切换） -->
-  <main class="scroll" id="page-plugins" hidden>
-    <div class="page-head"><span class="page-title">插件</span><span class="page-sub" id="plugins-sub">已安装</span></div>
-    <div id="plugins-list" class="plugins-list"></div>
-  </main>
 
   <main class="scroll" id="page-chat" hidden>
     <div class="tabs"><button class="icon-btn" id="btn-back" aria-label="返回"><svg class="ic" viewBox="0 0 24 24" width="20" height="20"><path d="M15 5l-7 7 7 7"/></svg></button>
@@ -308,7 +304,6 @@
   <nav class="tabbar">
     <button id="nav-chat" aria-current="page"><svg class="ic" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H7l-4 3V12a8 8 0 0 1 8-8h2a8 8 0 0 1 8 8Z"/></svg>会话</button>
     <button id="nav-tasks"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/></svg>任务</button>
-    <button id="nav-plugins"><svg class="ic" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><path d="M16.5 13v7M13 16.5h7"/></svg>插件</button>
     <button id="nav-me"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/></svg>我的</button>
   </nav>
 </div>
@@ -316,12 +311,9 @@
 <script>
   // 仅用于骨架/断言联调：切换两个主页面
   window.__dshMobile = {
-    loadPlugins: function(){ if (window.__dshLoadPlugins) window.__dshLoadPlugins(); },
     showPage(name){
       document.getElementById('page-list').hidden = name !== 'list';
       document.getElementById('page-chat').hidden = name !== 'chat';
-      var pp = document.getElementById('page-plugins');
-      if (pp) pp.hidden = name !== 'plugins';
       var c = document.getElementById('page-connect');
       if (c) c.hidden = name !== 'connect';
       // 未连接时不该出现输入区与标签栏（那是"已在用"的界面，会对不上）
@@ -340,12 +332,6 @@
     },
   };
   document.getElementById('nav-chat').addEventListener('click',()=>window.__dshMobile.showPage('chat'));
-  document.getElementById('nav-plugins').addEventListener('click',function(){
-    document.getElementById('nav-chat').removeAttribute('aria-current');
-    this.setAttribute('aria-current','page');
-    window.__dshMobile.showPage('plugins');
-    if (window.__dshMobile.loadPlugins) window.__dshMobile.loadPlugins();
-  });
   document.getElementById('nav-me').addEventListener('click',()=>window.__dshMobile.showPage('list'));
   // 连接页：点「连接」→ 配对 → 进列表
   (function () {

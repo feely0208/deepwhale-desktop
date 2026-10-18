@@ -1,3 +1,34 @@
+/* JS_ERROR_BAR：真机调试 —— 页面里任何未捕获的 JS 错误都**常驻显示**在顶部。
+ *
+ * 为什么需要：用户报"所有按钮都没用" ✗ —— 这几乎一定是 JS 在绑定事件前就抛错了。
+ * 以前只能靠 a) 我抓手机日志（需要 WiFi/USB 连通）b) 猜。现在错误直接显示在屏幕上，
+ * 用户拍一眼就知道哪一行炸了。
+ */
+(function () {
+  function bar(text) {
+    try {
+      var el = document.getElementById('dsh-js-error');
+      if (!el) {
+        el = document.createElement('div');
+        el.id = 'dsh-js-error';
+        el.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:99999;padding:8px 12px;' +
+          'background:#7f1d1d;color:#fff;font:12px/1.5 -apple-system,system-ui,sans-serif;' +
+          'white-space:pre-wrap;word-break:break-all;max-height:45vh;overflow:auto';
+        (document.body || document.documentElement).appendChild(el);
+      }
+      el.textContent += (el.textContent ? '\n' : '') + String(text).slice(0, 400);
+    } catch (e) { /* 连错误条都建不出来就只能认了 */ }
+  }
+  window.addEventListener('error', function (ev) {
+    bar('JS 错误：' + (ev.message || '') + '\n@' + String(ev.filename || '').split('/').pop() + ':' + ev.lineno);
+  });
+  window.addEventListener('unhandledrejection', function (ev) {
+    var r = ev.reason;
+    bar('未捕获 Promise：' + String((r && (r.message || r)) || ''));
+  });
+  window.__dshErrorBar = bar;
+})();
+
 /**
  * 深鲸 Mobile · 数据层（手机端 1.1.0）
  *

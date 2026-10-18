@@ -442,6 +442,14 @@ function renderList(sessions) {
       return;
     }
     api.session(id).then(function (r) {
+    // chips 显示**真值**（模型/强度/工作区来自投影 modelSelection 等，不是写死的假标签）
+    var meta = (r && r.meta) || {};
+    var cm = document.getElementById('chip-model');
+    if (cm && meta.model) cm.textContent = String(meta.model);
+    var ce = document.getElementById('chip-effort');
+    if (ce && meta.effort) ce.textContent = String(meta.effort);
+    var cw = document.getElementById('chip-ws');
+    if (cw && meta.workspace) { var parts = String(meta.workspace).split('/'); cw.textContent = parts[parts.length-1] || '未分组'; }
       // ⚠️ 真机实测（用户反馈）：只看 messages 时**只有用户自己说的话**——DSH 的
       //    deriveMessages() 不含助手回复（回复在投影的 turnOutline 里）。
       //    所以优先用接口返回的 turns（每轮 prompt + response），没有再退回 messages。
@@ -545,10 +553,10 @@ function renderList(sessions) {
       ['nav-plugins', '插件：还没做，下一步接'],
       ['nav-me', ''],
       ['chip-attach', '附件：还没做，下一步接'],
-      ['chip-ws', '工作区分组：还没做'],
+      ['chip-ws', '当前值：' + (this && this.textContent || '') + '（切换还没做）'],
       ['ws-chip', '工作区：还没做'],
-      ['chip-model', '模型选择：还没做'],
-      ['chip-effort', '强度选择：还没做'],
+      ['chip-model', '当前值：' + (this && this.textContent || '') + '（切换还没做）'],
+      ['chip-effort', '当前值：' + (this && this.textContent || '') + '（切换还没做）'],
     ];
     items.forEach(function (it) {
       var node = document.getElementById(it[0]);

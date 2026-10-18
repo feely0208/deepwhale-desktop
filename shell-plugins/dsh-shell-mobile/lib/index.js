@@ -199,6 +199,32 @@ export function readProjectionTurns(id, home) {
   }
 }
 
+/**
+ * 读会话投影里的「模型 / 强度 / 预设 / 工作区」——手机端 chips 显示真值用。
+ *
+ * 为什么读投影文件：这些值在 DSH 内部服务里是活对象，形状随版本变；投影是稳定的落盘快照，
+ * 且手机端本来就是只读展示（切换模型以后再说），读文件最稳、可核对。
+ */
+export function readProjectionMeta(id, home) {
+  const empty = { model: '', effort: '', preset: '', workspace: '' };
+  try {
+    const base = home || process.env.DSH_HOME || '';
+    if (!base || !id) return empty;
+    const file = joinPath(base, 'storages', 'session_projcache', 'sessions', `${id}.json`);
+    const rows = JSON.parse(readFileSyncFs(file, 'utf8'))?.record?.rows ?? {};
+    const sel = rows.modelSelection?.val ?? {};
+    return {
+      model: typeof sel.model === 'string' ? sel.model : '',
+      effort: typeof sel.reasoningEffort === 'string' ? sel.reasoningEffort : '',
+      preset: typeof rows.agentPreset?.val === 'string' ? rows.agentPreset.val : '',
+      workspace: typeof rows.workingDirectory?.val === 'string' ? rows.workingDirectory.val : '',
+    };
+  } catch {
+    return empty;
+  }
+}
+
+
 export function apply(ctx) {
   const log = (m) => {
     try {
@@ -741,7 +767,10 @@ export function apply(ctx) {
         });
         return;
       }
-      json(res, 200, await getSession(url.searchParams.get('id') ?? ''));
+      const sid = url.searchParams.get('id') ?? '';
+        const detail = await getSession(sid);
+        // 模型/强度/预设/工作区：chips 显示真值（读投影，稳定可核对）
+        json(res, 200, { ...detail, meta: readProjectionMeta(sid) });
       return;
     }
 

@@ -326,20 +326,29 @@ export function apply(ctx) {
       //    助手回复在 DSH 的**投影**里：rows.turnOutline.val.turns[] = {turn, prompt, response}。
       //    手机端聊天必须用这个，否则只能看到用户自己说的话（用户实测反馈）。
       turns: (() => {
-        try {
-          const proj = typeof ctx.get === "function" ? ctx.get("sessionProjections") : undefined;
-          const st = proj?.stateOf ? proj.stateOf(id) : null;
-          const outline = st?.rows?.turnOutline?.val ?? st?.turnOutline?.val ?? null;
-          if (!outline || !Array.isArray(outline.turns)) return [];
-          return outline.turns.map((t) => ({
-            turn: t?.turn ?? null,
-            prompt: String(t?.prompt ?? ""),
-            response: String(t?.response ?? ""),
-          }));
-        } catch (e) {
-          return [];
-        }
-      })(),
+          // 助手回复只有这里拿得到（deriveMessages 只有输入侧，实测 allRoles 无 assistant）。
+          // 来源：DSH 投影缓存文件 <DSH_HOME>/storages/session_projcache/sessions/<id>.json
+          //       record.rows.turnOutline.val.turns[] = { turn, prompt, response }
+          // 为什么不走 sessionProjections.stateOf()：服务返回的形状与磁盘缓存不一致（实测拿不到 turns）。
+          try {
+            const fsx = require('node:fs');
+            const pathx = require('node:path');
+            const home = process.env.DSH_HOME || '';
+            if (!home) return [];
+            const file = pathx.join(home, 'storages', 'session_projcache', 'sessions', `${id}.json`);
+            if (!fsx.existsSync(file)) return [];
+            const rec = JSON.parse(fsx.readFileSync(file, 'utf8'));
+            const outline = rec?.record?.rows?.turnOutline?.val ?? rec?.rows?.turnOutline?.val ?? null;
+            if (!outline || !Array.isArray(outline.turns)) return [];
+            return outline.turns.map((t) => ({
+              turn: t?.turn ?? null,
+              prompt: String(t?.prompt ?? ''),
+              response: String(t?.response ?? ''),
+            }));
+          } catch (e) {
+            return [];
+          }
+        })(),
       messagesError,
     };
   }

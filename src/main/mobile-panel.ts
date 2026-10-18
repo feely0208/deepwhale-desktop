@@ -16,12 +16,58 @@
  *   ③ 必须带令牌才能访问（无令牌 401，且有断言守着）；DSH 的凭据留在网关内、不下发手机。
  */
 
-import { BrowserWindow, clipboard, ipcMain, shell } from 'electron';
+import { BrowserWindow, app, clipboard, ipcMain, shell } from 'electron';
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { startMobileGateway, qrSvg, pairPayload, detectLanHost } from './mobile-gateway';
 import type { GatewayHandle } from './mobile-gateway';
 
 let panel: BrowserWindow | null = null;
+
+/**
+ * 记住上次用的网关端口。
+ *
+ * 为什么必须记住（2026-10-18 真机踩到）：网关每次开随机端口 → 手机里存的地址下次就失效 ✗
+ * → 每次重启应用都要重新配对一次（用户被迫反复操作）。记住端口后，手机端不用重配。
+ */
+function portFile(): string {
+  try {
+    return path.join(app.getPath('userData'), 'mobile-gateway.json');
+  } catch {
+    return '';
+  }
+}
+/** 上次使用的令牌（与端口一起持久化：否则重启后手机存的令牌失效 → 每次都要重新配对） */
+let gatewaySessionToken: string | null = null;
+function lastGatewayToken(): string | null {
+  try {
+    const f = portFile();
+    if (!f || !fs.existsSync(f)) return null;
+    const t = JSON.parse(fs.readFileSync(f, 'utf8'))?.token;
+    return typeof t === 'string' && t.length >= 16 ? t : null;
+  } catch {
+    return null;
+  }
+}
+function lastGatewayPort(): number | null {
+  try {
+    const f = portFile();
+    if (!f || !fs.existsSync(f)) return null;
+    const j = JSON.parse(fs.readFileSync(f, 'utf8'));
+    const p = Number(j?.port);
+    return Number.isInteger(p) && p > 1024 && p < 65536 ? p : null;
+  } catch {
+    return null;
+  }
+}
+function rememberGatewayPort(port: number): void {
+  try {
+    const f = portFile();
+    if (f) fs.writeFileSync(f, JSON.stringify({ port, updatedAt: new Date().toISOString() }, null, 2));
+  } catch {
+    /* 记不住不影响使用，只是下次要重新配对 */
+  }
+}
 let gateway: GatewayHandle | null = null;
 /** 拿 DSH 的地址与令牌（由 index.ts 注入：只有那里知道 service-manager 的实例） */
 let resolveDshEndpoint: (() => { base: string; token: string } | null) | null = null;
@@ -46,7 +92,17 @@ export function initMobilePanel(getEndpoint: () => { base: string; token: string
       return { ok: false, reason: 'dsh-not-ready' };
     }
     try {
-      gateway = await startMobileGateway({ dshBase: ep.base, dshToken: ep.token });
+      const remembered = lastGatewayPort();
+      const rememberedToken = lastGatewayToken() ?? undefined;
+      try {
+        gateway = await startMobileGateway({ dshBase: ep.base, dshToken: ep.token, port: remembered ?? undefined, token: rememberedToken });
+      } catch (e) {
+        // 上次的端口被别的程序占了 → 回落到随机端口（这次记新端口）
+        if (remembered) gateway = await startMobileGateway({ dshBase: ep.base, dshToken: ep.token, token: rememberedToken });
+        else throw e;
+      }
+      gatewaySessionToken = gateway.session.token;
+      rememberGatewayPort(gateway.session.origin ? Number(new URL(gateway.session.origin).port) : 0);
       if (panel && !panel.isDestroyed()) panel.webContents.send('mobile:state', { running: true, ...sessionInfo() });
       return { ok: true, ...sessionInfo() };
     } catch (e) {

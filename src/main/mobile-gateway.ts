@@ -35,6 +35,8 @@ import * as os from 'node:os';
 
 export interface GatewayOptions {
   /** DSH 本机地址，形如 http://127.0.0.1:8080 */
+  /** 复用上一次的令牌（持久化后手机端不必重新配对） */
+  token?: string;
   dshBase: string;
   /** DSH 自己的访问令牌（从它打印的 `dsh web: …?token=…` 里取的） */
   dshToken: string;
@@ -162,7 +164,7 @@ export function startMobileGateway(opts: GatewayOptions): Promise<GatewayHandle>
   const agent = isHttps ? https : http;
   const pairTtlMs = opts.pairTtlMs ?? 5 * 60 * 1000;
 
-  let token = randomBytes(24).toString('base64url');
+  let token = (opts.token && opts.token.length >= 16) ? opts.token : randomBytes(24).toString('base64url');
   let pairCode = makePairCode();
   let pairExpiresAt = Date.now() + pairTtlMs;
 
@@ -178,6 +180,8 @@ export function startMobileGateway(opts: GatewayOptions): Promise<GatewayHandle>
     };
   };
 
+  /** 当前配对会话（实时；rotate 会替换） */
+  let currentSession: GatewaySession = { origin: "", token: "", pairCode: "", pairExpiresAt: 0 };
   let currentPort = opts.port ?? 0;
   let currentHostForDisplay = detectLanHost();
 
@@ -392,12 +396,15 @@ export function startMobileGateway(opts: GatewayOptions): Promise<GatewayHandle>
       const addr = server.address();
       currentPort = typeof addr === 'object' && addr ? addr.port : currentPort;
       currentHostForDisplay = detectLanHost();
+      currentSession = {
+        origin: `http://${currentHostForDisplay}:${String(currentPort)}`,
+        token,
+        pairCode,
+        pairExpiresAt,
+      };
       resolve({
-        session: {
-          origin: `http://${currentHostForDisplay}:${String(currentPort)}`,
-          token,
-          pairCode,
-          pairExpiresAt,
+        get session() {
+          return currentSession;
         },
         port: currentPort,
         stop: () =>
@@ -406,7 +413,10 @@ export function startMobileGateway(opts: GatewayOptions): Promise<GatewayHandle>
             // 关掉残留连接，端口立刻释放
             server.closeAllConnections?.();
           }),
-        rotate: () => newSession(),
+        rotate: () => {
+          currentSession = newSession();
+          return currentSession;
+        },
         listening: () => server.listening,
       });
     });

@@ -15,6 +15,15 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 export ELECTRON_MIRROR="${ELECTRON_MIRROR:-https://npmmirror.com/mirrors/electron/}"
 export ELECTRON_BUILDER_BINARIES_MIRROR="${ELECTRON_BUILDER_BINARIES_MIRROR:-https://npmmirror.com/mirrors/electron-builder-binaries/}"
+# ⚠️ 打包前必须**先编译 + 拷随包插件**（2026-10-18 踩坑）：
+#    之前这里直接 electron-builder，于是"重新打包"其实是空转 —— 包里带的还是上一次
+#    的 dist 与 mobile-ui 副本，真机上看起来"修了跟没修一样"（用户白重启两次）。
+#    以后凡是走 dist-local.sh，都保证产物反映当前源码。
+echo "[dist-local] 编译（tsc + 静态资源）…"
+npm run build >/dev/null
+echo "[dist-local] 拷随包插件（含 mobile-ui）…"
+node scripts/build-bundled-plugins.js >/dev/null
+
 echo "使用镜像：ELECTRON_MIRROR=$ELECTRON_MIRROR"
 echo "          ELECTRON_BUILDER_BINARIES_MIRROR=$ELECTRON_BUILDER_BINARIES_MIRROR"
 ./node_modules/.bin/electron-builder "$@"

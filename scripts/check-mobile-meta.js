@@ -10,6 +10,7 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 
 const HOME_DIR = process.env.DSH_HOME
   || path.join(os.homedir(), 'Library/Application Support/DeepWhale Desktop/dsh-home');
@@ -25,9 +26,10 @@ const DIR = path.join(HOME_DIR, 'storages', 'session_projcache', 'sessions');
     console.log('✅ 跳过：投影目录为空');
     return;
   }
-  const { readProjectionMeta } = await import(
-    new URL('../shell-plugins/dsh-shell-mobile/lib/index.js', import.meta.url).href
-  );
+  const plugUrl = pathToFileURL(
+    path.join(__dirname, '..', 'shell-plugins', 'dsh-shell-mobile', 'lib', 'index.js')
+  ).href;
+  const { readProjectionMeta } = await import(plugUrl);
   const latest = files
     .map((f) => [f, fs.statSync(path.join(DIR, f)).mtimeMs])
     .sort((a, b) => b[1] - a[1])[0][0];

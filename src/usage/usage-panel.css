@@ -65,14 +65,15 @@
   transform: rotate(-90deg);
 }
 
-@media (prefers-color-scheme: dark) {
-  #dsh-usage-panel .uph .arrow {
+/* 2026-10-18：注入到 DSH 页面，必须跟应用主题（data-ds-dark-theme），不跟系统主题 */
+
+html[data-ds-dark-theme] #dsh-usage-panel .uph .arrow {
     color: #3fb950;
   }
-  #dsh-usage-panel .uph:hover .arrow {
+html[data-ds-dark-theme] #dsh-usage-panel .uph:hover .arrow {
     color: #6bd47a;
   }
-}
+
 
 #dsh-usage-panel .upb {
   padding: 2px 12px 10px;
@@ -147,8 +148,9 @@
 }
 
 /* 深色主题跟随（nativeTheme 主题切换时自动生效） */
-@media (prefers-color-scheme: dark) {
-  #dsh-usage-panel {
+/* 2026-10-18：注入到 DSH 页面，必须跟应用主题（data-ds-dark-theme），不跟系统主题 */
+
+html[data-ds-dark-theme] #dsh-usage-panel {
     background: rgba(16, 18, 22, 0.94);
     color: #e6e8ec;
     border-color: #2a2f3a;
@@ -163,7 +165,7 @@
   #dsh-usage-panel .err-line { color: #f85149; }
   #dsh-usage-panel .refresh-btn { color: #7aa2ff; }
   #dsh-usage-panel .refresh-btn:hover { background: rgba(122, 162, 255, 0.15); }
-}
+
 
 /* 用量绿色进度条 */
 #dsh-usage-panel .bars {
@@ -213,7 +215,8 @@
   background: #1a7f37;
 }
 
-@media (prefers-color-scheme: dark) {
+/* 2026-10-18：注入到 DSH 页面，必须跟应用主题（data-ds-dark-theme），不跟系统主题 */
+
   #dsh-usage-panel .bar-caption { color: #9aa1ad; }
   #dsh-usage-panel .bar { background: #23262e; }
   #dsh-usage-panel .bar-fill { background: #3fb950; }
@@ -221,5 +224,5 @@
   #dsh-usage-panel .bar-fill.err { background: #f85149; }
   #dsh-usage-panel .bar.seg .seg-granted { background: #6ec27c; }
   #dsh-usage-panel .bar.seg .seg-topped { background: #3fb950; }
-}
+
 

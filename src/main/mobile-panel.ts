@@ -20,6 +20,8 @@ import { BrowserWindow, app, clipboard, ipcMain, shell } from 'electron';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { startMobileGateway, qrSvg, pairPayload, detectLanHost } from './mobile-gateway';
+import { startMobileTunnel, makeTunnelSecret } from './mobile-tunnel';
+import type { TunnelHandle } from './mobile-tunnel';
 import type { GatewayHandle } from './mobile-gateway';
 
 let panel: BrowserWindow | null = null;
@@ -49,6 +51,29 @@ function lastGatewayToken(): string | null {
     return null;
   }
 }
+function lastTunnelSecret(): string | null {
+  try {
+    const f = portFile();
+    if (!f || !fs.existsSync(f)) return null;
+    const sec = JSON.parse(fs.readFileSync(f, 'utf8'))?.secret;
+    return typeof sec === 'string' && sec.length >= 16 ? sec : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 记下密钥（与 port/token 同一个文件，免得又多一个状态文件） */
+function rememberTunnelSecret(secret: string): void {
+  try {
+    const f = portFile();
+    if (!f) return;
+    const cur = fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : {};
+    fs.writeFileSync(f, JSON.stringify({ ...cur, secret, updatedAt: new Date().toISOString() }, null, 2));
+  } catch {
+    /* 记不住就下次换新隧道 ID（手机会需要重新填地址） */
+  }
+}
+
 function lastGatewayPort(): number | null {
   try {
     const f = portFile();
@@ -69,6 +94,8 @@ function rememberGatewayPort(port: number): void {
   }
 }
 let gateway: GatewayHandle | null = null;
+/** 在外面用的隧道（随网关启停；手机连中继再回到本机） */
+let tunnel: TunnelHandle | null = null;
 /** 拿 DSH 的地址与令牌（由 index.ts 注入：只有那里知道 service-manager 的实例） */
 let resolveDshEndpoint: (() => { base: string; token: string } | null) | null = null;
 
@@ -102,7 +129,20 @@ export function initMobilePanel(getEndpoint: () => { base: string; token: string
         else throw e;
       }
       gatewaySessionToken = gateway.session.token;
-      rememberGatewayPort(gateway.session.origin ? Number(new URL(gateway.session.origin).port) : 0);
+      const gwPort = gateway.session.origin ? Number(new URL(gateway.session.origin).port) : 0;
+      rememberGatewayPort(gwPort);
+      // 隧道：手机在外面用（连中继 → 回到本机网关）。密钥持久化，重启后隧道 ID 不变。
+      try {
+        const secret = lastTunnelSecret() ?? makeTunnelSecret();
+        rememberTunnelSecret(secret);
+        tunnel = startMobileTunnel({
+          gatewayPort: gwPort,
+          secret,
+          onLog: (line) => console.log(line),
+        });
+      } catch (e) {
+        console.log('[mobile-panel] 隧道启动失败（不影响局域网使用）:', String((e as Error)?.message ?? e));
+      }
       if (panel && !panel.isDestroyed()) panel.webContents.send('mobile:state', { running: true, ...sessionInfo() });
       return { ok: true, ...sessionInfo() };
     } catch (e) {
@@ -113,6 +153,12 @@ export function initMobilePanel(getEndpoint: () => { base: string; token: string
 
   ipcMain.handle('mobile:stop', async () => {
     if (!gateway) return { ok: true, already: true };
+    try {
+      tunnel?.stop();
+      tunnel = null;
+    } catch {
+      /* 隧道停止失败不影响网关停止 */
+    }
     try {
       await gateway.stop();
     } catch {
@@ -140,11 +186,19 @@ export function initMobilePanel(getEndpoint: () => { base: string; token: string
   });
 }
 
-function sessionInfo(): { origin: string; pairCode: string; qr: string; payload: string } {
-  if (!gateway) return { origin: '', pairCode: '', qr: '', payload: '' };
+function sessionInfo(): { origin: string; pairCode: string; qr: string; payload: string; remoteOrigin: string; tunnelConnected: boolean } {
+  if (!gateway) return { origin: '', pairCode: '', qr: '', payload: '', remoteOrigin: '', tunnelConnected: false };
   const s = gateway.session;
   const payload = pairPayload(s);
-  return { origin: s.origin, pairCode: s.pairCode, qr: qrSvg(payload), payload };
+  return {
+    origin: s.origin,
+    pairCode: s.pairCode,
+    qr: qrSvg(payload),
+    payload,
+    // 在外面用的地址（同一套配对码/令牌，只是入口换成中继）
+    remoteOrigin: tunnel?.remoteOrigin ?? '',
+    tunnelConnected: tunnel?.connected() ?? false,
+  };
 }
 
 /** 打开（或聚焦）面板窗口 */
@@ -178,6 +232,12 @@ export function showMobilePanel(): void {
 
 /** 应用退出时收掉网关（否则端口留着、别人还能连） */
 export async function disposeMobileGateway(): Promise<void> {
+  try {
+    tunnel?.stop();
+  } catch {
+    /* 退出路径不阻塞 */
+  }
+  tunnel = null;
   if (!gateway) return;
   try {
     await gateway.stop();

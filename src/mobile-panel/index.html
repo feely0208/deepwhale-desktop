@@ -73,6 +73,15 @@
     <p class="sub" id="idle-hint">点「开启手机访问」后会在这里显示二维码。</p>
   </div>
 
+  <div class="card" id="remote-card" style="display:none">
+    <div class="state"><span class="dot" id="remote-dot"></span><span id="remote-state">远程访问（在外面用）：连接中…</span></div>
+    <div class="addr" id="remote-origin" style="margin-top:8px">—</div>
+    <div class="row" style="margin-top:10px">
+      <button id="btn-copy-remote">复制远程地址</button>
+    </div>
+    <p class="sub" style="margin-top:8px">人在外面时：手机填这个地址 + 同一个配对码。走我们自己的中继，不开放任何端口、不需要公网 IP。</p>
+  </div>
+
 <script>
   var api = window.mobilePanel;
   var $ = function (id) { return document.getElementById(id); };
@@ -88,6 +97,20 @@
     $('qr-box').className = 'qr' + (running ? ' show' : '');
     $('steps').style.display = running ? '' : 'none';
     $('idle-hint').style.display = running ? 'none' : '';
+    // 远程地址（外面用）：有隧道就显示；连没连上用灯标出来
+    var rc = $('remote-card');
+    if (rc) {
+      var hasRemote = !!(st && st.remoteOrigin);
+      rc.style.display = running && hasRemote ? '' : 'none';
+      if (hasRemote) {
+        $('remote-origin').textContent = st.remoteOrigin;
+        var on = !!(st && st.tunnelConnected);
+        $('remote-dot').className = 'dot' + (on ? ' on' : '');
+        $('remote-state').textContent = on
+          ? '远程访问（在外面用）：已连接中继 ✓'
+          : '远程访问（在外面用）：连接中继中…';
+      }
+    }
     if (running) {
       if (st.qr) $('qr-svg').innerHTML = st.qr;
       if (st.pairCode) $('pair-code').textContent = st.pairCode;
@@ -124,6 +147,13 @@
   });
   $('btn-copy').addEventListener('click', function () { api.copy(current.origin); });
   $('btn-copy-link').addEventListener('click', function () { api.copy(current.payload || current.origin); });
+  (function () {
+    var b = $('btn-copy-remote');
+    if (b) b.addEventListener('click', function () {
+      var o = ($('remote-origin') || {}).textContent || '';
+      api.copy(o);
+    });
+  })();
   api.onState(function (st) { render(st); });
   api.status().then(function (st) { render(st || { running: false }); });
 </script>

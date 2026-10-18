@@ -279,22 +279,13 @@
 
   <!-- 输入区 + 标签栏 -->
   <div class="composer">
-    <div class="chips-wrap"><div class="chips" id="chips">
-      <button class="chip" id="chip-attach">📎 附件</button>
-      <button class="chip" id="chip-ws">未分组</button>
-      <button class="chip" id="chip-model">DeepSeek-V4</button>
-      <button class="chip" id="chip-effort">High</button>
-    </div></div>
     <div class="input-row">
-      <button class="icon-44" id="btn-plus" aria-label="更多"><svg class="ic" viewBox="0 0 24 24" width="20" height="20"><path d="M12 5v14M5 12h14"/></svg></button>
       <textarea id="input" rows="1" placeholder="描述你想要构建的内容"></textarea>
       <button class="send" id="btn-send" aria-label="发送"><svg class="ic" viewBox="0 0 24 24" width="20" height="20"><path d="M5 4l14 8-14 8z" fill="currentColor" stroke="none"/></svg></button>
     </div>
   </div>
   <nav class="tabbar">
     <button id="nav-chat" aria-current="page"><svg class="ic" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H7l-4 3V12a8 8 0 0 1 8-8h2a8 8 0 0 1 8 8Z"/></svg>会话</button>
-    <button id="nav-tasks"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/></svg>任务</button>
-    <button id="nav-plugins"><svg class="ic" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><path d="M16.5 13v7M13 16.5h7"/></svg>插件</button>
     <button id="nav-me"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/></svg>我的</button>
   </nav>
 </div>
@@ -323,7 +314,13 @@
     },
   };
   document.getElementById('nav-chat').addEventListener('click',()=>window.__dshMobile.showPage('chat'));
-  document.getElementById('nav-me').addEventListener('click',()=>window.__dshMobile.showPage('list'));
+  // 「我的」：显示真实连接信息（以前点了只是切回列表，用户莫名其妙 ✗）
+  document.getElementById('nav-me').addEventListener('click',function(){
+    var origin = '';
+    try { origin = (JSON.parse(localStorage.getItem('dshMobile.conn')||'{}').origin)||''; } catch(e){}
+    if (window.__dshMobile && window.__dshMobile.showMe) { window.__dshMobile.showMe(origin); return; }
+    alert('已连接：' + (origin || '未连接') + '\n版本：1.1.0');
+  });
   // 连接页：点「连接」→ 配对 → 进列表
   (function () {
     var go = document.getElementById('conn-go');

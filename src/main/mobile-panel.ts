@@ -107,6 +107,17 @@ function rememberEnabled(enabled: boolean): void {
   }
 }
 
+function rememberPairCode(code: string): void {
+  try {
+    const f = portFile();
+    if (!f) return;
+    const cur = fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : {};
+    fs.writeFileSync(f, JSON.stringify({ ...cur, pairCode: code, pairCodeAt: Date.now() }, null, 2));
+  } catch {
+    /* 记不住不影响配对 */
+  }
+}
+
 function rememberGatewayPort(port: number): void {
   try {
     const f = portFile();
@@ -233,6 +244,7 @@ export function initMobilePanel(getEndpoint: () => { base: string; token: string
   ipcMain.handle('mobile:rotate', () => {
     if (!gateway) return { ok: false, reason: 'not-running' };
     gateway.rotate();
+    rememberPairCode(gateway.session.pairCode);
     return { ok: true, ...sessionInfo() };
   });
 

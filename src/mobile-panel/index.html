@@ -139,6 +139,7 @@
   });
   $('btn-stop').addEventListener('click', async function () {
     await api.stop();
+    stopPolling();
     render({ running: false });
   });
   $('btn-rotate').addEventListener('click', async function () {
@@ -156,6 +157,20 @@
   })();
   api.onState(function (st) { render(st); });
   api.status().then(function (st) { render(st || { running: false }); });
+
+  // ⚠️ 隧道连接是异步的（约 1 秒），面板原来只在"开启"那一刻渲染一次 →
+  //    远程状态永远停在"连接中…"（用户实测）。这里定时刷新状态（2 秒一次）。
+  var pollTimer = null;
+  function startPolling() {
+    if (pollTimer) return;
+    pollTimer = setInterval(function () {
+      api.status().then(function (st) { if (st) render(st); });
+    }, 2000);
+  }
+  function stopPolling() {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  }
+  startPolling();
 </script>
 </body>
 </html>

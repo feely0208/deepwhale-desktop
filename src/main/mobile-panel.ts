@@ -141,6 +141,8 @@ let resolveDshEndpoint: (() => { base: string; token: string } | null) | null = 
 /** 开网关+隧道（IPC 与「自动开启」共用） */
 async function startGatewayInternal(): Promise<Record<string, unknown>> {
     if (gateway) {
+    // 已开着时也把配对码写进状态文件（否则自动化/排障读不到码 ✗）
+    rememberPairCode(gateway.session.pairCode);
     return { ok: true, already: true, ...sessionInfo() };
     }
     const ep = resolveDshEndpoint?.() ?? null;

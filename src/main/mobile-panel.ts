@@ -16,7 +16,7 @@
  *   ③ 必须带令牌才能访问（无令牌 401，且有断言守着）；DSH 的凭据留在网关内、不下发手机。
  */
 
-import { BrowserWindow, app, clipboard, ipcMain, shell } from 'electron';
+import { BrowserWindow, app, clipboard, ipcMain, shell, powerSaveBlocker } from 'electron';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { startMobileGateway, qrSvg, pairPayload, detectLanHost } from './mobile-gateway';
@@ -134,6 +134,8 @@ let gateway: GatewayHandle | null = null;
 const CLOUDFLARE_ORIGIN = 'https://mnkuil8bitiy.deepwhale.org';
 /** 在外面用的隧道（随网关启停；手机连中继再回到本机） */
 let tunnel: TunnelHandle | null = null;
+/** 阻止系统睡眠的句柄：开着「手机连接」时电脑不能睡（合盖/待机 → 手机就全断了 ✗） */
+let sleepBlockerId: number | null = null;
 /** 拿 DSH 的地址与令牌（由 index.ts 注入：只有那里知道 service-manager 的实例） */
 let resolveDshEndpoint: (() => { base: string; token: string } | null) | null = null;
 
@@ -306,7 +308,15 @@ export function showMobilePanel(): void {
 }
 
 /** 应用退出时收掉网关（否则端口留着、别人还能连） */
+function releaseSleepBlocker(): void {
+  if (sleepBlockerId !== null) {
+    try { powerSaveBlocker.stop(sleepBlockerId); } catch { /* 已停 */ }
+    sleepBlockerId = null;
+  }
+}
+
 export async function disposeMobileGateway(): Promise<void> {
+  releaseSleepBlocker();
   try {
     tunnel?.stop();
   } catch {

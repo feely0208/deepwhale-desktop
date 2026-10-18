@@ -85,6 +85,28 @@ function lastGatewayPort(): number | null {
     return null;
   }
 }
+function gatewayEnabled(): boolean {
+  try {
+    const f = portFile();
+    if (!f || !fs.existsSync(f)) return false;
+    return JSON.parse(fs.readFileSync(f, 'utf8'))?.enabled === true;
+  } catch {
+    return false;
+  }
+}
+
+/** 记住「上次是否开着手机访问」—— 应用重启后自动恢复，用户不用每次手点 ✗ */
+function rememberEnabled(enabled: boolean): void {
+  try {
+    const f = portFile();
+    if (!f) return;
+    const cur = fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : {};
+    fs.writeFileSync(f, JSON.stringify({ ...cur, enabled, updatedAt: new Date().toISOString() }, null, 2));
+  } catch {
+    /* 记不住就下次不自动开（不影响手动开） */
+  }
+}
+
 function rememberGatewayPort(port: number): void {
   try {
     const f = portFile();
@@ -105,6 +127,78 @@ let tunnel: TunnelHandle | null = null;
 let resolveDshEndpoint: (() => { base: string; token: string } | null) | null = null;
 
 /** 注册 IPC 与依赖注入（在 app ready 之后调用一次） */
+/** 开网关+隧道（IPC 与「自动开启」共用） */
+async function startGatewayInternal(): Promise<Record<string, unknown>> {
+    if (gateway) {
+    return { ok: true, already: true, ...sessionInfo() };
+    }
+    const ep = resolveDshEndpoint?.() ?? null;
+    if (!ep) {
+    return { ok: false, reason: 'dsh-not-ready' };
+    }
+    try {
+    const remembered = lastGatewayPort();
+    const rememberedToken = lastGatewayToken() ?? undefined;
+    try {
+      gateway = await startMobileGateway({ dshBase: ep.base, dshToken: ep.token, port: remembered ?? undefined, token: rememberedToken });
+    } catch (e) {
+      // 上次的端口被别的程序占了 → 回落到随机端口（这次记新端口）
+      if (remembered) gateway = await startMobileGateway({ dshBase: ep.base, dshToken: ep.token, token: rememberedToken });
+      else throw e;
+    }
+    gatewaySessionToken = gateway.session.token;
+    const gwPort = gateway.session.origin ? Number(new URL(gateway.session.origin).port) : 0;
+    rememberGatewayPort(gwPort);
+    // 隧道：手机在外面用（连中继 → 回到本机网关）。密钥持久化，重启后隧道 ID 不变。
+    try {
+      const secret = lastTunnelSecret() ?? makeTunnelSecret();
+      rememberTunnelSecret(secret);
+      tunnel = startMobileTunnel({
+        gatewayPort: gwPort,
+        secret,
+        onLog: (line) => console.log(line),
+      });
+    } catch (e) {
+      console.log('[mobile-panel] 隧道启动失败（不影响局域网使用）:', String((e as Error)?.message ?? e));
+    }
+    if (panel && !panel.isDestroyed()) panel.webContents.send('mobile:state', { running: true, ...sessionInfo() });
+    return { ok: true, ...sessionInfo() };
+    } catch (e) {
+    gateway = null;
+    return { ok: false, reason: 'start-failed', error: String((e as Error)?.message ?? e) };
+    }
+}
+
+/**
+ * 应用启动时自动开启手机访问（**如果上次是开着的**）。
+ *
+ * 为什么需要：以前每次重启都要手点「开启手机访问」✗ —— 用户出门忘了点，
+ * 手机上就什么都连不上（用户原话："如果忘记扫码，那出门不是白搭了嘛"）。
+ * 现在：开关状态持久化 + 启动自愈 → 一次开启，之后重启自动恢复 ✓。
+ *
+ * @returns 是否真的启动了（false = 上次是关着的，或 DSH 一直没就绪）
+ */
+export async function autoStartMobileGateway(): Promise<boolean> {
+  if (!gatewayEnabled()) return false;
+  if (gateway) return true;
+  // DSH 就绪需要时间（壳要先拉起 DSH 再拿到 token）→ 最多等 30 秒
+  for (let i = 0; i < 30; i += 1) {
+    const ep = resolveDshEndpoint?.() ?? null;
+    if (ep) {
+      try {
+        const r = await startGatewayInternal();
+        return r?.ok === true;
+      } catch (e) {
+        console.log('[mobile-panel] 自动开启失败:', String((e as Error)?.message ?? e));
+        return false;
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  console.log('[mobile-panel] 自动开启跳过：DSH 30 秒内未就绪');
+  return false;
+}
+
 export function initMobilePanel(getEndpoint: () => { base: string; token: string } | null): void {
   resolveDshEndpoint = getEndpoint;
 
@@ -115,49 +209,11 @@ export function initMobilePanel(getEndpoint: () => { base: string; token: string
     lanHint: detectLanHost(),
   }));
 
-  ipcMain.handle('mobile:start', async () => {
-    if (gateway) {
-      return { ok: true, already: true, ...sessionInfo() };
-    }
-    const ep = resolveDshEndpoint?.() ?? null;
-    if (!ep) {
-      return { ok: false, reason: 'dsh-not-ready' };
-    }
-    try {
-      const remembered = lastGatewayPort();
-      const rememberedToken = lastGatewayToken() ?? undefined;
-      try {
-        gateway = await startMobileGateway({ dshBase: ep.base, dshToken: ep.token, port: remembered ?? undefined, token: rememberedToken });
-      } catch (e) {
-        // 上次的端口被别的程序占了 → 回落到随机端口（这次记新端口）
-        if (remembered) gateway = await startMobileGateway({ dshBase: ep.base, dshToken: ep.token, token: rememberedToken });
-        else throw e;
-      }
-      gatewaySessionToken = gateway.session.token;
-      const gwPort = gateway.session.origin ? Number(new URL(gateway.session.origin).port) : 0;
-      rememberGatewayPort(gwPort);
-      // 隧道：手机在外面用（连中继 → 回到本机网关）。密钥持久化，重启后隧道 ID 不变。
-      try {
-        const secret = lastTunnelSecret() ?? makeTunnelSecret();
-        rememberTunnelSecret(secret);
-        tunnel = startMobileTunnel({
-          gatewayPort: gwPort,
-          secret,
-          onLog: (line) => console.log(line),
-        });
-      } catch (e) {
-        console.log('[mobile-panel] 隧道启动失败（不影响局域网使用）:', String((e as Error)?.message ?? e));
-      }
-      if (panel && !panel.isDestroyed()) panel.webContents.send('mobile:state', { running: true, ...sessionInfo() });
-      return { ok: true, ...sessionInfo() };
-    } catch (e) {
-      gateway = null;
-      return { ok: false, reason: 'start-failed', error: String((e as Error)?.message ?? e) };
-    }
-  });
+  ipcMain.handle('mobile:start', async () => startGatewayInternal());
 
   ipcMain.handle('mobile:stop', async () => {
     if (!gateway) return { ok: true, already: true };
+    rememberEnabled(false);
     try {
       tunnel?.stop();
       tunnel = null;

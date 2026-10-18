@@ -46,7 +46,7 @@ import { healPatchFiles } from './patch-heal';
 import { healLegacyAgentPreset } from './preset-heal';
 import { registerLocalFilesIpc } from './localfiles';
 import { notesFor } from './whatsnew';
-import { initMobilePanel, showMobilePanel, disposeMobileGateway } from './mobile-panel';
+import { initMobilePanel, autoStartMobileGateway, showMobilePanel, disposeMobileGateway } from './mobile-panel';
 import {
 
 
@@ -451,6 +451,11 @@ async function showMobileConnect(): Promise<void> {
   //    面板上的「开启手机访问」就是唯一的开关。
   if (!mobilePanelInited) {
     initMobilePanel(() => service?.getWebEndpoint() ?? null);
+  // 手机访问自动恢复：上次开着的话，DSH 就绪后自动拉起网关+隧道
+  // （用户痛点：每次重启都要手点，忘了点出门就白搭 ✗）
+  void autoStartMobileGateway().catch((e) => {
+    console.log('[mobile] 自动开启手机访问失败:', String((e as Error)?.message ?? e));
+  });
     mobilePanelInited = true;
   }
   showMobilePanel();

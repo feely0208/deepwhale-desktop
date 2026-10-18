@@ -443,16 +443,12 @@ function openSettingsPage(): void {
  */
 let mobilePanelInited = false;
 async function showMobileConnect(): Promise<void> {
-  if (!store.get('lanAccess')) {
-    await dialog.showMessageBox({
-      type: 'info',
-      title: '手机连接',
-      message: '「允许手机连接」当前是关闭的。',
-      detail: '打开后深鲸桌面才会在局域网里可被访问。可以在设置里打开，或联系支持。',
-      buttons: ['知道了'],
-    });
-    return;
-  }
+  // ⚠️ 这里原先有个 `if (!store.get('lanAccess'))` 的闸门，指引用户"去设置里打开"——
+  //    但设置里**根本没有**这个开关（1.0.59 实测：用户点「手机连接」只得到一句
+  //    「允许手机连接当前是关闭的」，然后无处可开 ✗）。
+  //    这个开关管的是**旧方案**（把 DSH 绑 0.0.0.0，正是 1.0.58 事故源头）。
+  //    1.0.59 起局域网访问由壳自己的 mobile-gateway.ts 提供 —— 面板不再需要它，
+  //    面板上的「开启手机访问」就是唯一的开关。
   if (!mobilePanelInited) {
     initMobilePanel(() => service?.getWebEndpoint() ?? null);
     mobilePanelInited = true;
@@ -626,6 +622,12 @@ async function restorePersistedTokenUrl(): Promise<string> {
 }
 
 function refreshMobileAddressFile(): void {
+  // ⚠️ 2026-10-18 停用：这份文件把 **DSH 令牌明文放在桌面**（安全隐患，谁看到都能操作 DSH），
+  //    而新手机端用一次性配对码，根本不需要它。用户确认删除这个旧任务。
+  //    函数保留空实现，是为了不动那些调用点（删函数会连带把 tokenUrlFile 之类的定义带走，
+  //    第一次尝试就踩过 ✗ —— 改动越小越安全）。
+  return;
+
   if (!store.get('mobileAddressFile')) return;
   const token = (() => {
     try {

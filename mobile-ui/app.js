@@ -88,6 +88,8 @@
     }
   }
 
+  // API_FAIL_TOAST：真机调试用 —— 接口失败时把「路径 + 状态码」显示出来，
+  // 否则手机上只能看到空列表，完全不知道是 401/502/网络错（局域网能过、公网不行时尤其难查）。
   function jfetch(path, opts) {
     var url = base() + path + authQuery();
     // 跨域（独立 App）时必须带凭据：DSH 的鉴权是 cookie，omit 会让网关拿到 403（实测）

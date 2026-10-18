@@ -37,6 +37,11 @@ app.whenReady().then(async () => {
     .executeJavaScript(`JSON.stringify({
       rows: document.querySelectorAll('.row-btn').length,
       firstId: (document.querySelector('.row-btn')||{dataset:{}}).dataset ? (document.querySelector('.row-btn')||{}).dataset.id : null,
+      firstTitle: (function () {
+        var b = document.querySelector('.row-btn');
+        var t = b && b.querySelector('.title');
+        return t ? String(t.textContent || '').trim() : null;
+      })(),
       health: typeof window.dshMobileApi,
     })`)
     .catch((e) => JSON.stringify({ error: 'eval1: ' + e.message }));

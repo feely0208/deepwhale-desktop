@@ -186,6 +186,26 @@
     }
   }
 
+  /** 把时间戳变成"刚刚 / 5 分钟前 / 昨天"——列表副标题用，比原始 id 有用得多 */
+  function relTime(ts) {
+    if (!ts) return '';
+    var t = (typeof ts === 'number') ? ts : Date.parse(ts);
+    if (!t || isNaN(t)) return '';
+    if (t < 1e12) t = t * 1000;   // 秒级时间戳
+    var diff = Date.now() - t;
+    if (diff < 0) return '刚刚';
+    var min = Math.floor(diff / 60000);
+    if (min < 1) return '刚刚';
+    if (min < 60) return min + ' 分钟前';
+    var hr = Math.floor(min / 60);
+    if (hr < 24) return hr + ' 小时前';
+    var day = Math.floor(hr / 24);
+    if (day === 1) return '昨天';
+    if (day < 30) return day + ' 天前';
+    var d = new Date(t);
+    return (d.getMonth() + 1) + '/' + d.getDate();
+  }
+
   function el(tag, cls, text) {
     var n = document.createElement(tag);
     if (cls) n.className = cls;
@@ -204,8 +224,12 @@
       var b = el('button', 'row-btn');
       b.setAttribute('data-id', s.id || '');
       var t = el('span', 't');
-      t.appendChild(el('span', 'title', s.title || s.id || '(未命名)'));
-      t.appendChild(el('span', 'sub', s.id || ''));
+      // ⚠️ 以前标题回落到原始 `session-<uuid>`（真机实测：列表里全是长 id，没法用 ✗）
+      //    现在：有标题用标题，没有就说"新会话"，副标题显示相对时间（没有时间再退到工作区）
+      var titleText = s.title && String(s.title).trim() !== '' ? s.title : '新会话';
+      var subText = relTime(s.updatedAt) || (s.workspace ? String(s.workspace) : '');
+      t.appendChild(el('span', 'title', titleText));
+      t.appendChild(el('span', 'sub', subText));
       b.appendChild(t);
       b.appendChild(el('span', 'time', fmtTime(s.updatedAt)));
       b.addEventListener('click', function () {

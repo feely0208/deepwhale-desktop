@@ -33,6 +33,7 @@
  */
 
 import { statSync as statSyncFs, createReadStream as createReadStreamFs, readFileSync as readFileSyncFs, readdirSync } from 'node:fs';
+import { zstdDecompressSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { dirname, join as joinPath, normalize as normPath } from 'node:path';
 
@@ -233,6 +234,88 @@ export function readProjectionMeta(id, home) {
   }
 }
 
+
+/**
+ * 读会话事件流里的**思考过程 + 工具调用**（手机端聊天里"思考"折叠块的数据源）。
+ *
+ * 数据源：`<DSH_HOME>/sessions/<工作区>/<会话id>/session.v4.jsonl.zstd`
+ *   —— 这是 DSH 真正的事件日志（zstd **多帧**追加，必须用流解，一次性解只出第一帧 ✗）。
+ * 事件形状（实测）：
+ *   {"type":"assistant/message","data":{"turn":1,"step":2,"message":{"content":[
+ *      {"type":"reasoning","text":"…思考…"}, {"type":"tool-call","name":"bash","arguments":"…"}]}}}
+ *
+ * 只读、不改；解析失败就返回空（不抛）。
+ */
+export async function readSessionTrace(id, home) {
+  const base = home || process.env.DSH_HOME || '';
+  if (!base || !id) return { ok: false, reason: 'bad-input', turns: [] };
+  const root = joinPath(base, 'sessions');
+  let file = '';
+  try {
+    for (const ws of readdirSync(root)) {
+      const cand = joinPath(root, ws, id, 'session.v4.jsonl.zstd');
+      try {
+        statSyncFs(cand);
+        file = cand;
+        break;
+      } catch {
+        /* 不在这个工作区 */
+      }
+    }
+  } catch {
+    return { ok: false, reason: 'no-sessions-dir', turns: [] };
+  }
+  if (!file) return { ok: false, reason: 'session-file-not-found', turns: [] };
+
+  // ⚠️ DSH 的 .zstd 是**多个独立 zstd 帧拼接**（实测魔数在 0 和 155…）：
+  //    Node 的 createZstdDecompress 流解到第二帧就报 "Unknown frame descriptor" ✗；
+  //    Python zstandard 也只出第一帧 ✗。唯一稳的办法：按 zstd 魔数 28 B5 2F FD 切成单帧逐个解。
+  const text = (() => {
+    const buf = readFileSyncFs(file);
+    const MAGIC = Buffer.from([0x28, 0xb5, 0x2f, 0xfd]);
+    const out = [];
+    let start = buf.indexOf(MAGIC);
+    while (start >= 0) {
+      const next = buf.indexOf(MAGIC, start + 4);
+      const end = next < 0 ? buf.length : next;
+      try {
+        out.push(zstdDecompressSync(buf.subarray(start, end)).toString('utf8'));
+      } catch {
+        /* 坏帧/误判跳过 */
+      }
+      start = next;
+    }
+    return out.join('');
+  })();
+
+  const byTurn = new Map();
+  for (const line of text.split('\n')) {
+    if (!line.trim()) continue;
+    let ev;
+    try {
+      ev = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (ev?.type !== 'assistant/message') continue;
+    const turn = ev?.data?.turn;
+    const step = ev?.data?.step;
+    const content = ev?.data?.message?.content;
+    if (!Array.isArray(content) || typeof turn !== 'number') continue;
+    if (!byTurn.has(turn)) byTurn.set(turn, []);
+    for (const part of content) {
+      if (part?.type === 'reasoning' && typeof part.text === 'string' && part.text.trim() !== '') {
+        byTurn.get(turn).push({ kind: 'reasoning', step, text: part.text });
+      } else if (part?.type === 'tool-call' && part.name) {
+        byTurn.get(turn).push({ kind: 'tool', step, name: String(part.name), args: String(part.arguments ?? '').slice(0, 400) });
+      }
+    }
+  }
+  return {
+    ok: true,
+    turns: Array.from(byTurn.entries()).map(([turn, items]) => ({ turn, items })),
+  };
+}
 
 export function apply(ctx) {
   const log = (m) => {
@@ -801,6 +884,13 @@ export function apply(ctx) {
         }
         json(res, 200, await sendPrompt(payload));
       });
+      return;
+    }
+
+    if (path === `${ROUTE}/trace`) {
+      // 思考过程 + 工具调用（桌面端"思考…"那一块，手机端要用）
+      const traceId = url.searchParams.get('id') ?? '';
+      json(res, 200, await readSessionTrace(traceId));
       return;
     }
 

@@ -601,16 +601,8 @@ function renderList(sessions) {
     //    之前写成"探测失败才显示"，实测在独立 App 里不生效（页面停在列表页的静态演示
     //    内容上，用户根本不知道要配对）。现在的顺序：先给连接页 → 探测到同源可用再隐藏。
     if (window.__dshMobile && window.__dshMobile.showPage) window.__dshMobile.showPage('connect');
-    fetch('/mobile/api/health', { credentials: 'same-origin', cache: 'no-store' })
-      .then(function (r) { return r.ok ? r.json() : null; })
-      .catch(function () { return null; })
-      .then(function (h) {
-        if (!h || !h.ok) return;      // 同源连不上 → 留在连接页（正确）
-        SAME_ORIGIN = true;
-        ONLINE = true;
-        if (window.__dshMobile && window.__dshMobile.showPage) window.__dshMobile.showPage('list');
-        startOnline();
-      });
+      // ⚠️ 不做"无令牌探测"：以前这里 fetch /mobile/api/health（不带令牌）→ 必然 401/404 ✗
+      //    用户一进来看到「接口 404」以为坏了。没令牌本来就该配对，探测毫无意义。
   }
 
     // ── 插件页（真数据）────────────────────────────────────────────

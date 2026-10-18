@@ -88,7 +88,10 @@ function lastGatewayPort(): number | null {
 function rememberGatewayPort(port: number): void {
   try {
     const f = portFile();
-    if (f) fs.writeFileSync(f, JSON.stringify({ port, token: gatewaySessionToken ?? '', updatedAt: new Date().toISOString() }, null, 2));
+    // ⚠️ 必须保留已有字段（尤其 secret）：之前只写 {port, token} 会把 secret 覆盖掉 →
+    //    每次重启隧道 ID 都变 → 手机里的远程地址失效（用户实测被迫重填）。
+    const cur = fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : {};
+    fs.writeFileSync(f, JSON.stringify({ ...cur, port, token: gatewaySessionToken ?? '', updatedAt: new Date().toISOString() }, null, 2));
   } catch {
     /* 记不住不影响使用，只是下次要重新配对 */
   }

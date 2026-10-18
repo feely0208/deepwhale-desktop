@@ -314,6 +314,38 @@ function renderList(sessions) {
       });
     }
 
+    /** 思考/工具：实时同步（1.5s 轮询 /mobile/api/trace，数据来自 DSH 事件流） */
+    var traceTimer = null, traceSig = '';
+    function stopTracePoll() { if (traceTimer) { clearInterval(traceTimer); traceTimer = null; } traceSig = ''; }
+    function loadTrace(id) {
+      jfetch('/mobile/api/trace?id=' + encodeURIComponent(id)).then(function (r) {
+        if (!r || !r.ok || !Array.isArray(r.turns)) return;
+        var sig = r.turns.length + ':' + JSON.stringify(r.turns).length;
+        if (sig === traceSig) return;
+        traceSig = sig;
+        var byTurn = {};
+        r.turns.forEach(function (t) { byTurn[t.turn] = (t.items || []); });
+        Array.prototype.slice.call(document.querySelectorAll('#page-chat .think')).forEach(function (n) { n.remove(); });
+        Array.prototype.slice.call(document.querySelectorAll('#page-chat .msg')).forEach(function (node) {
+          var turn = node.getAttribute('data-turn');
+          var items = turn && byTurn[turn];
+          if (!items || !items.length) return;
+          var nT = items.filter(function (x) { return x.kind === 'reasoning'; }).length;
+          var nX = items.filter(function (x) { return x.kind === 'tool'; }).length;
+          var box = el('details', 'think');
+          var sum = el('summary', 'think-sum');
+          sum.textContent = '思考' + (nT ? ' · ' + nT + ' 段' : '') + (nX ? ' · ' + nX + ' 次工具' : '');
+          box.appendChild(sum);
+          items.forEach(function (x) {
+            if (x.kind === 'reasoning') box.appendChild(el('div', 'think-text', x.text));
+            else box.appendChild(el('div', 'think-tool', x.name + '  ' + String(x.args || '').slice(0, 160)));
+          });
+          node.parentNode.insertBefore(box, node);
+        });
+      }).catch(function () {});
+    }
+    function startTracePoll(id) { stopTracePoll(); loadTrace(id); traceTimer = setInterval(function () { loadTrace(id); }, 1500); }
+
   function messageNode(m) {
     var wrap = el('div', 'msg' + (m.role === 'user' ? ' me' : ''));
     var text = m.text || '';
@@ -423,9 +455,10 @@ function renderList(sessions) {
             var q = (t.prompt || '').trim();
             var a = (t.response || '').trim();
             if (q) pairs.push({ role: "user", text: q });
-            if (a) pairs.push({ role: "assistant", text: a });
+            if (a) pairs.push({ role: "assistant", text: a, turn: t.turn });
           });
           renderChat({ messages: pairs });
+        startTracePoll(id);   // 实时同步思考（1.5s 轮询事件流）
         } catch (e) { /* 单条坏数据不影响连接 */ }
       });
     } catch (e) {
@@ -543,6 +576,7 @@ function renderList(sessions) {
   //    返回 / 新建会话 / 刷新 是手机端最基本的三个动作，必须能点。
   window.__dshBack = function () {
     try { stopChatStream(); } catch (e) {}
+    try { stopTracePoll(); } catch (e) {}
     if (window.__dshMobile && window.__dshMobile.showPage) window.__dshMobile.showPage('list');
     startOnline();   // 回列表时刷新数据（会话可能有新消息）
   };

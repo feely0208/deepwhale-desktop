@@ -97,6 +97,8 @@ function rememberGatewayPort(port: number): void {
   }
 }
 let gateway: GatewayHandle | null = null;
+/** 外面用的固定地址（Cloudflare 隧道指向本机网关；地址固定、重启不变） */
+const CLOUDFLARE_ORIGIN = 'https://mnkuil8bitiy.deepwhale.org';
 /** 在外面用的隧道（随网关启停；手机连中继再回到本机） */
 let tunnel: TunnelHandle | null = null;
 /** 拿 DSH 的地址与令牌（由 index.ts 注入：只有那里知道 service-manager 的实例） */

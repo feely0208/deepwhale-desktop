@@ -478,7 +478,10 @@ export function qrSvg(text: string, size = 260): string {
  * 用 `dshmobile://pair?...` 自定义协议，扫码后 App 直接进入连接流程；
  * 同时也把 origin/code 明文写进去，便于任何扫码器都能显示，人工输入也能用。
  */
-export function pairPayload(session: GatewaySession): string {
+export function pairPayload(session: GatewaySession, extra?: { remote?: string }): string {
   const q = new URLSearchParams({ origin: session.origin, code: session.pairCode });
+  // 远程地址（在外面用）：二维码里同时带上，App 会先试局域网、失败再试远程 ——
+  // 用户不用区分"我在家还是在外"，扫一次到哪都能用 ✓
+  if (extra?.remote) q.set('remote', extra.remote);
   return `dshmobile://pair?${q.toString()}`;
 }

@@ -66,7 +66,7 @@ const server = http.createServer((req, res) => {
     } catch {
       res.writeHead(502); res.end('tunnel send failed'); return;
     }
-    const pending = { res, headersSent: false, done: false };
+    const pending = { res, headersSent: false, done: false, method: req.method, path: rest };
     tun.pending.set(id, pending);
     // ⚠️ 必须监听 **res** 的 close（= 手机端断开），不能监听 req 的 close ——
     //    req 的 close 在"请求体读完"时就触发（实测：响应还没回来就在这儿把 pending 删了 →
@@ -106,6 +106,8 @@ wss.on('connection', (ws) => {
       const buf = msg.body ? Buffer.from(msg.body, 'base64') : Buffer.alloc(0);
       if (!p.headersSent) {
         p.headersSent = true;
+        // 中继请求日志：手机上的「接口 404/500」能直接看到是哪条路径
+        console.log(`[relay] ${p.method} ${p.path} → ${msg.status || 200}`);
         p.res.writeHead(msg.status || 200, msg.headers || {});
       }
       if (buf.length) p.res.write(buf);

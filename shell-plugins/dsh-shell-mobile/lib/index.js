@@ -265,11 +265,19 @@ export function apply(ctx) {
           sampleKeys: arr[0] ? Object.keys(arr[0]).slice(0, 24) : [],
           sessions: arr.slice(0, 200).map((x) => {
             const h = x?.header && typeof x.header === 'object' ? x.header : {};
+            const sid = x?.id ?? x?.sessionId ?? x?.key ?? null;
+            // 列表要"看得出内容"：附上最后一轮预览与轮数（真机反馈"很不好用"——以前只有一行「新会话」）
+            let turns = [];
+            try { turns = readProjectionTurns(sid); } catch { turns = []; }
+            const last = turns.length ? turns[turns.length - 1] : null;
+            const preview = last ? String(last.response || last.prompt || '').replace(/\s+/g, ' ').trim().slice(0, 80) : '';
             return {
               id: x?.id ?? x?.sessionId ?? x?.key ?? null,
               title: h.title ?? x?.title ?? null,
               updatedAt: h.updatedAt ?? h.lastActivityAt ?? x?.updatedAt ?? null,
               workspace: h.workspace ?? h.workspacePath ?? x?.workspace ?? null,
+              turnCount: turns.length,
+              preview,
             };
           }),
         };

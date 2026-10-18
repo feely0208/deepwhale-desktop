@@ -272,30 +272,47 @@
   }
 
   /** 把会话列表渲染进 #page-list（保留搜索框与"新建会话"） */
-  function renderList(sessions) {
-    var page = document.getElementById('page-list');
-    if (!page) return;
-    Array.prototype.slice.call(page.querySelectorAll('.row-btn')).forEach(function (n) {
-      n.remove();
-    });
-    sessions.forEach(function (s) {
-      var b = el('button', 'row-btn');
-      b.setAttribute('data-id', s.id || '');
-      var t = el('span', 't');
-      // ⚠️ 以前标题回落到原始 `session-<uuid>`（真机实测：列表里全是长 id，没法用 ✗）
-      //    现在：有标题用标题，没有就说"新会话"，副标题显示相对时间（没有时间再退到工作区）
-      var titleText = s.title && String(s.title).trim() !== '' ? s.title : '新会话';
-      var subText = relTime(s.updatedAt) || (s.workspace ? String(s.workspace) : '');
-      t.appendChild(el('span', 'title', titleText));
-      t.appendChild(el('span', 'sub', subText));
-      b.appendChild(t);
-      b.appendChild(el('span', 'time', fmtTime(s.updatedAt)));
-      b.addEventListener('click', function () {
-        openSession(s.id);
+function renderList(sessions) {
+      var page = document.getElementById('page-list');
+      if (!page) return;
+      Array.prototype.slice.call(page.querySelectorAll('.row-btn, .list-empty')).forEach(function (n) {
+        n.remove();
       });
-      page.appendChild(b);
-    });
-  }
+      // 本地搜索过滤（真机上原来那个"搜索会话内容"只是个假框，点了没反应 ✗）
+      var q = String((document.getElementById('list-search') || {}).value || '').trim().toLowerCase();
+      var list = (sessions || []).filter(function (s) {
+        if (!q) return true;
+        var hay = ((s.title || '') + ' ' + (s.preview || '')).toLowerCase();
+        return hay.indexOf(q) >= 0;
+      });
+      if (!list.length) {
+        var em = el('div', 'list-empty');
+        em.textContent = q ? '没有匹配的会话' : '还没有会话 —— 在电脑上随便聊几句，这里就会出现';
+        page.appendChild(em);
+        return;
+      }
+      list.forEach(function (s) {
+        var b = el('button', 'row-btn');
+        b.setAttribute('data-id', s.id || '');
+        var t = el('span', 't');
+        var titleText = s.title && String(s.title).trim() !== '' ? s.title : '新会话';
+        // 副标题用**最后一轮的内容预览**（真机反馈"很不好用"：以前只有一行「新会话」，
+        // 完全看不出点进去是什么）；没有预览时才退回时间/工作区。
+        var subText = (s.preview && String(s.preview).trim()) || relTime(s.updatedAt) || (s.workspace ? String(s.workspace) : '');
+        t.appendChild(el('span', 'title', titleText));
+        t.appendChild(el('span', 'sub', subText));
+        b.appendChild(t);
+        var meta = el('span', 'meta');
+        meta.appendChild(el('span', 'time', relTime(s.updatedAt) || ''));
+        if (s.turnCount) meta.appendChild(el('span', 'turns', s.turnCount + ' 轮'));
+        meta.appendChild(el('span', 'chev', '›'));
+        b.appendChild(meta);
+        b.addEventListener('click', function () {
+          openSession(s.id);
+        });
+        page.appendChild(b);
+      });
+    }
 
   function messageNode(m) {
     var wrap = el('div', 'msg' + (m.role === 'user' ? ' me' : ''));
@@ -513,6 +530,13 @@
   }
   window.dshMobileSend = send;
   window.dshMobileReload = startOnline;
+
+  // 搜索框：本地过滤（真机上原来点它没反应 ✗）
+  (function () {
+    var box = document.getElementById('list-search');
+    if (!box) return;
+    box.addEventListener('input', function () { renderList(null); });
+  })();
 
   // 还没做的入口：给明确反馈（别让用户以为按钮坏了）
   (function wireUnimplemented() {

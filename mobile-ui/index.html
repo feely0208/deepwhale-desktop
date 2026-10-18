@@ -112,6 +112,8 @@
 
   /* ── 内容 ───────────────────────────────────────────────────── */
   .scroll{flex:1 1 auto;overflow-y:auto;overscroll-behavior:contain;min-height:0}
+  .search input{flex:1;border:0;background:transparent;font:inherit;color:inherit;outline:none;height:100%;padding:0}
+  .search input::placeholder{color:inherit;opacity:.55}
   .search{display:flex;align-items:center;gap:9px;height:44px;padding:0 14px;margin:14px;
     border-radius:var(--r-md);font-size:14px;opacity:.9}
 
@@ -124,7 +126,11 @@
   .row-btn .t{flex:1 1 auto;min-width:0}
   .row-btn .title{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:15.5px;font-weight:500}
   .row-btn .sub{display:block;font-size:12px;opacity:.55;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+  .row-btn .meta{display:flex;align-items:center;gap:8px;flex:0 0 auto}
   .row-btn .time{font-size:12px;opacity:.5;flex:0 0 auto}
+  .row-btn .turns{font-size:12px;opacity:.45;flex:0 0 auto}
+  .row-btn .chev{font-size:20px;opacity:.3;line-height:1}
+  .list-empty{padding:32px 20px;text-align:center;font-size:13px;opacity:.55;line-height:1.7}
 
   /* 会话页 */
   .tabs{display:flex;align-items:center;gap:8px;padding:12px 14px}
@@ -243,7 +249,7 @@
 
   <!-- 会话列表页 -->
   <main class="scroll" id="page-list">
-    <div class="search">🔍 搜索会话内容</div>
+    <div class="search"><span>🔍</span><input id="list-search" type="search" placeholder="搜索会话内容" autocomplete="off" /></div>
     <button class="new-btn" id="btn-new">＋ 新建会话</button>
     <!-- 会话行由 app.js 渲染：离线(file://)用 MOCK，在线用真接口 —— 不放静态演示行，
          否则真数据模式下会拿它冒充真实会话（实测导致 E2E 假绿） -->
@@ -304,9 +310,14 @@
       // 未连接时不该出现输入区与标签栏（那是"已在用"的界面，会对不上）
       var composer = document.querySelector('.composer');
       var tabbar = document.querySelector('.tabbar');
+      var chips = document.querySelector('.chips-wrap');
       var onConnect = name === 'connect';
-      if (composer) composer.style.display = onConnect ? 'none' : '';
-      if (tabbar) tabbar.style.display = onConnect ? 'none' : '';
+      var onChat = name === 'chat';
+      // ⚠️ 真机反馈「很不好用」：列表页底部还挂着输入框和 chips（那是聊天页的东西）→
+      //    白占 1/3 屏、还让人以为能在列表页说话。现在输入区/chips 只在聊天页出现。
+      if (composer) composer.style.display = onChat ? '' : 'none';
+      if (chips) chips.style.display = onChat ? '' : 'none';
+      if (tabbar) tabbar.style.display = onConnect || onChat ? 'none' : '';
       document.querySelectorAll('.tabbar button').forEach((b)=>b.removeAttribute('aria-current'));
       document.getElementById(name === 'list' ? 'nav-chat' : 'nav-chat').setAttribute('aria-current','page');
     },

@@ -39,7 +39,19 @@ for (const ch of ['mobile:start', 'mobile:stop', 'mobile:rotate', 'mobile:status
 }
 if (!/showMobilePanel\(\)/.test(index)) problems.push('「手机连接」没有接到面板（showMobilePanel 未被调用）');
 if (!index.includes('disposeMobileGateway')) problems.push('退出时没有收掉手机访问网关（端口会一直开着）');
+// 1.0.59 实测：面板被 `lanAccess` 闸门拦住，而设置里根本没有那个开关 → 用户无路可走。
+// 现在局域网由 mobile-gateway 提供，面板不得再依赖 lanAccess。
+const panelFn = index
+  .slice(index.indexOf('async function showMobileConnect('), index.indexOf('async function showMobileConnectLegacy('))
+  // 去掉注释再判断：说明文字里提到 lanAccess 不算依赖（我第一次就误报了）
+  .replace(/^\s*\/\/.*$/gm, '');
+if (/store\.get\('lanAccess'\)/.test(panelFn)) problems.push('「手机连接」面板仍被旧开关 lanAccess 拦住（设置里没有这个开关，用户会无路可走）');
 if (!/qrSvg\(/.test(mainPanel)) problems.push('面板没有用本地 qrSvg 生成二维码');
+// 令牌必须持久化：否则每次重启网关都换新令牌 → 手机端存的令牌失效 → 每次都要重新配对
+if (!/token:\s*gatewaySessionToken/.test(mainPanel)) {
+  problems.push('面板没有把网关令牌持久化（重启后手机必须重新配对）');
+}
+if (!/lastGatewayToken/.test(mainPanel)) problems.push('面板启动时没有复用上次的令牌');
 // 在线二维码服务会把"一次性钥匙"递出去
 if (/api\.qrserver|chart\.googleapis|quickchart|qrserver\.com/.test(panel + mainPanel)) {
   problems.push('面板引用了**在线**二维码服务（配对载荷不该发给第三方）');

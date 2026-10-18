@@ -63,7 +63,7 @@ function lastGatewayPort(): number | null {
 function rememberGatewayPort(port: number): void {
   try {
     const f = portFile();
-    if (f) fs.writeFileSync(f, JSON.stringify({ port, updatedAt: new Date().toISOString() }, null, 2));
+    if (f) fs.writeFileSync(f, JSON.stringify({ port, token: gatewaySessionToken ?? '', updatedAt: new Date().toISOString() }, null, 2));
   } catch {
     /* 记不住不影响使用，只是下次要重新配对 */
   }

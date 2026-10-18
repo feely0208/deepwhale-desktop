@@ -212,10 +212,19 @@ export function readProjectionMeta(id, home) {
     if (!base || !id) return empty;
     const file = joinPath(base, 'storages', 'session_projcache', 'sessions', `${id}.json`);
     const rows = JSON.parse(readFileSyncFs(file, 'utf8'))?.record?.rows ?? {};
+    // ⚠️ modelSelection.val 是**嵌套**的（实测：{current:{model,reasoningEffort}, pending:null}）——
+    //    直接读 sel.model 会得到空串（第一次就踩了 ✗）。这里在当前层 + 一层子对象里找。
     const sel = rows.modelSelection?.val ?? {};
+    const pick = (key) => {
+      if (typeof sel?.[key] === 'string') return sel[key];
+      for (const v of Object.values(sel ?? {})) {
+        if (v && typeof v === 'object' && typeof v[key] === 'string') return v[key];
+      }
+      return '';
+    };
     return {
-      model: typeof sel.model === 'string' ? sel.model : '',
-      effort: typeof sel.reasoningEffort === 'string' ? sel.reasoningEffort : '',
+      model: pick('model'),
+      effort: pick('reasoningEffort'),
       preset: typeof rows.agentPreset?.val === 'string' ? rows.agentPreset.val : '',
       workspace: typeof rows.workingDirectory?.val === 'string' ? rows.workingDirectory.val : '',
     };

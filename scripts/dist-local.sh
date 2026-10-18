@@ -22,7 +22,11 @@ export ELECTRON_BUILDER_BINARIES_MIRROR="${ELECTRON_BUILDER_BINARIES_MIRROR:-htt
 echo "[dist-local] 编译（tsc + 静态资源）…"
 npm run build >/dev/null
 echo "[dist-local] 拷随包插件（含 mobile-ui）…"
-node scripts/build-bundled-plugins.js >/dev/null
+if [ "${SKIP_BUNDLED_PLUGINS:-0}" = "1" ]; then
+  echo "[dist-local] 跳过随包插件下载（SKIP_BUNDLED_PLUGINS=1，用现有 bundled-plugins/）"
+else
+  node scripts/build-bundled-plugins.js >/dev/null
+fi
 
 echo "使用镜像：ELECTRON_MIRROR=$ELECTRON_MIRROR"
 echo "          ELECTRON_BUILDER_BINARIES_MIRROR=$ELECTRON_BUILDER_BINARIES_MIRROR"

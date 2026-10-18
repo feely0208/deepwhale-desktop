@@ -144,11 +144,17 @@
    */
   function isDarkTheme() {
     try {
+      // ⚠️ 2026-10-18 修正：**只看 DSH 应用自己的主题属性，不看系统主题**。
+      //    原来最后有一条 `matchMedia('(prefers-color-scheme: dark)')` 兜底 ——
+      //    用户 macOS 是深色、DSH 应用设成浅色时，这里判成"深色"，
+      //    于是浅色菜单里被画了一块黑板（截图实测）。
+      //    DSH 用 data-ds-dark-theme 表达应用主题，那才是权威判据；
+      //    两个属性都不在 = 浅色（应用默认）。
       if (document.body && document.body.hasAttribute('data-ds-dark-theme')) return true;
-      if (document.documentElement.hasAttribute('data-ds-dark-theme')) return true;
-      return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      if (document.documentElement && document.documentElement.hasAttribute('data-ds-dark-theme')) return true;
+      return false;
     } catch (e) {
-      return true;
+      return false;
     }
   }
 

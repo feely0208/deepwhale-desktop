@@ -605,6 +605,41 @@ function renderList(sessions) {
       });
   }
 
+    // ── 插件页（真数据）────────────────────────────────────────────
+    // 读 /mobile/api/plugins（插件端直接扫 dsh-home/plugins/），不依赖 DSH 内部服务形状。
+    function loadPlugins() {
+      var list = document.getElementById('plugins-list');
+      if (!list) return;
+      list.innerHTML = '<div class="list-empty">正在读取…</div>';
+      jfetch('/mobile/api/plugins').then(function (r) {
+        if (!r || !r.ok) {
+          list.innerHTML = '<div class="list-empty">插件列表拿不到（' + (r && r.status ? r.status : '网络错误') + '）</div>';
+          return;
+        }
+        var ps = r.plugins || [];
+        var sub = document.getElementById('plugins-sub');
+        if (sub) sub.textContent = ps.length + ' 个已安装';
+        if (!ps.length) {
+          list.innerHTML = '<div class="list-empty">还没有安装插件</div>';
+          return;
+        }
+        list.textContent = '';
+        ps.forEach(function (p) {
+          var row = el('div', 'plugin-row');
+          var head = el('div');
+          head.appendChild(el('span', 'pn', String(p.name || p.id || '')));
+          if (p.version) head.appendChild(el('span', 'pv', 'v' + p.version));
+          row.appendChild(head);
+          if (p.description) row.appendChild(el('div', 'pd', String(p.description)));
+          list.appendChild(row);
+        });
+      }).catch(function () {
+        list.innerHTML = '<div class="list-empty">插件列表拿不到</div>';
+      });
+    }
+    window.__dshLoadPlugins = loadPlugins;
+
+
   function startOnline() {
     if (!ONLINE) {
       renderList(MOCK.sessions);   // file:// 下用假数据（只服务排版断言）

@@ -32,7 +32,7 @@
  *    也不要返回一个看起来成功、实际是空的数据（那是假绿，桌面端已经吃过亏）。
  */
 
-import { statSync as statSyncFs, createReadStream as createReadStreamFs, readFileSync as readFileSyncFs } from 'node:fs';
+import { statSync as statSyncFs, createReadStream as createReadStreamFs, readFileSync as readFileSyncFs, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join as joinPath, normalize as normPath } from 'node:path';
 
@@ -765,6 +765,35 @@ export function apply(ctx) {
       });
       return;
     }
+
+    if (path === `${ROUTE}/plugins`) {
+      // 插件页（真数据）：直接读 dsh-home/plugins/*/package.json。
+      // 不依赖 DSH 内部服务形状（那会变），磁盘布局稳定、结果可核对 —— 手机上看"装了哪些插件"。
+      const home = process.env.DSH_HOME || '';
+      const dir = joinPath(home, 'plugins');
+      const out = [];
+      try {
+        for (const id of readdirSync(dir)) {
+          try {
+            const pkg = JSON.parse(readFileSyncFs(joinPath(dir, id, 'package.json'), 'utf8'));
+            out.push({
+              id,
+              name: typeof pkg.name === 'string' ? pkg.name : id,
+              version: typeof pkg.version === 'string' ? pkg.version : '',
+              description: typeof pkg.description === 'string' ? pkg.description.slice(0, 140) : '',
+            });
+          } catch {
+            out.push({ id, name: id, version: '', description: '' });
+          }
+        }
+      } catch {
+        /* 目录不存在 = 还没装插件 */
+      }
+      out.sort((a, b) => String(a.id).localeCompare(String(b.id)));
+      json(res, 200, { ok: true, count: out.length, plugins: out });
+      return;
+    }
+
 
     json(res, 404, { ok: false, reason: 'unknown-route', route: ROUTE });
   }

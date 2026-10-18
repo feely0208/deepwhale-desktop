@@ -121,14 +121,12 @@
 
   // API_FAIL_TOAST：真机调试用 —— 接口失败时把「路径 + 状态码」显示出来，
   // 否则手机上只能看到空列表，完全不知道是 401/502/网络错（局域网能过、公网不行时尤其难查）。
-  // 探针接口（在线状态检查）失败不弹提示：它不是用户操作，弹了只会让人以为坏了 ✗
-  var PROBE_PATHS = { '/mobile/api/health': 1, '/mobile/api/_services': 1 };
   function jfetch(path, opts) {
     var url = base() + path + authQuery();
     // 跨域（独立 App）时必须带凭据：DSH 的鉴权是 cookie，omit 会让网关拿到 403（实测）
     return fetch(url, Object.assign({ credentials: base() ? 'include' : 'same-origin' }, opts || {})).then(function (r) {
       return r.json().catch(function () {
-        if (typeof toast === 'function' && !PROBE_PATHS[path]) toast('接口 ' + r.status + '：' + String(path).slice(0, 46));
+        if (typeof toast === 'function') toast('接口 ' + r.status + '：' + String(path).slice(0, 46));
         return { ok: false, reason: 'bad-json', status: r.status };
       });
     });
@@ -543,7 +541,14 @@ function renderList(sessions) {
   // 还没做的入口：给明确反馈（别让用户以为按钮坏了）
   (function wireUnimplemented() {
     var items = [
+      ['nav-tasks', '任务：还没做，下一步接'],
+      ['nav-plugins', '插件：还没做，下一步接'],
       ['nav-me', ''],
+      ['chip-attach', '附件：还没做，下一步接'],
+      ['chip-ws', '工作区分组：还没做'],
+      ['ws-chip', '工作区：还没做'],
+      ['chip-model', '模型选择：还没做'],
+      ['chip-effort', '强度选择：还没做'],
     ];
     items.forEach(function (it) {
       var node = document.getElementById(it[0]);

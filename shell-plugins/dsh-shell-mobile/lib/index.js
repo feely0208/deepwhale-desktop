@@ -516,6 +516,56 @@ export function apply(ctx) {
       }
     }
 
+    // ── 会话事件流（SSE）：手机端"实时同步"用 ──
+    // 轮询投影文件而不是订阅 DSH 内部事件：助手回复就在 record.rows.turnOutline.val.turns[]
+    // （deriveMessages 没有），文件 mtime 变了就推一次。好处：不依赖 DSH 未公开的事件 API，
+    // DSH 升级不易坏；代价：1 秒粒度。
+    if (path === `${ROUTE}/stream`) {
+      const sid = url.searchParams.get('id') ?? '';
+      if (!sid) {
+        json(res, 400, { ok: false, reason: 'missing-id' });
+        return;
+      }
+      res.writeHead(200, {
+        'content-type': 'text/event-stream; charset=utf-8',
+        'cache-control': 'no-store, no-transform',
+        connection: 'keep-alive',
+        'x-accel-buffering': 'no',
+      });
+      let lastMtime = -1;
+      let closed = false;
+      const send = (event, data) => {
+        if (!closed) res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      };
+      const flush = () => {
+        if (closed) return;
+        try {
+          const home = process.env.DSH_HOME || '';
+          const file = joinPath(home, 'storages', 'session_projcache', 'sessions', `${sid}.json`);
+          const st = statSyncFs(file);
+          if (st.mtimeMs !== lastMtime) {
+            lastMtime = st.mtimeMs;
+            send('turns', { turns: readProjectionTurns(sid), mtime: st.mtimeMs });
+          }
+        } catch {
+          /* 投影文件还没生成：等下次 */
+        }
+      };
+      flush(); // 立刻给一次当前状态
+      const timer = setInterval(flush, 1000);
+      const beat = setInterval(() => {
+        if (!closed) res.write(': ping\n\n');
+      }, 15000);
+      const stop = () => {
+        closed = true;
+        clearInterval(timer);
+        clearInterval(beat);
+      };
+      req.on('close', stop);
+      res.on('close', stop);
+      return;
+    }
+
     if (path === `${ROUTE}/health`) {
       json(res, 200, { ok: true, plugin: name, version: PLUGIN_VERSION, injected: Object.keys(services) });
       return;

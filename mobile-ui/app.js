@@ -340,9 +340,52 @@
     });
   }
   window.dshMobileTrajectory = showTrajectory;
+  /**
+   * 会话实时同步（SSE）。
+   *
+   * 为什么不轮询：轮询要自己管节奏、还会把"正在生成"拖成几秒一跳；SSE 由服务端在
+   * 投影文件变化时推一次（插件的 /mobile/api/stream），手机端只管重渲染。
+   * EventSource 不能带自定义头 → 令牌走查询参数（我们的网关两种都认）。
+   */
+  var chatStream = null;
+  function stopChatStream() {
+    if (chatStream) {
+      try { chatStream.close(); } catch (e) {}
+      chatStream = null;
+    }
+  }
+  function subscribeChat(id) {
+    stopChatStream();
+    if (typeof EventSource === 'undefined') return;
+    var url = base() + '/mobile/api/stream?id=' + encodeURIComponent(id) + authQuery();
+    try {
+      var es = new EventSource(url);
+      chatStream = es;
+      es.addEventListener('turns', function (ev) {
+        if (currentSessionId !== id) return;
+        try {
+          var d = JSON.parse(ev.data || '{}');
+          var turns = d.turns || [];
+          if (!turns.length) return;
+          var pairs = [];
+          turns.forEach(function (t) {
+            var q = (t.prompt || '').trim();
+            var a = (t.response || '').trim();
+            if (q) pairs.push({ role: "user", text: q });
+            if (a) pairs.push({ role: "assistant", text: a });
+          });
+          renderChat({ messages: pairs });
+        } catch (e) { /* 单条坏数据不影响连接 */ }
+      });
+    } catch (e) {
+      /* EventSource 不可用（老 WebView）→ 退回一次性快照，不影响可用性 */
+    }
+  }
+
   function openSession(id) {
     currentSessionId = id || '';
     if (window.__dshMobile && window.__dshMobile.showPage) window.__dshMobile.showPage('chat');
+    subscribeChat(id);   // 先订阅，避免首屏之后的变化丢掉
     if (!ONLINE) {
       renderChat({ messages: MOCK.messages });
       return;

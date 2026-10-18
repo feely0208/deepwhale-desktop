@@ -571,7 +571,9 @@ function renderList(sessions) {
     try {
       var qs = new URLSearchParams(location.search || '');
       var urlToken = qs.get('token');
-      if (urlToken && !(conn && conn.token)) {
+      // ⚠️ 每次都用 URL 里的令牌：localStorage 里可能是上次会话的旧令牌（网关重启会换）
+      //    → 旧令牌让所有请求 401 → 页面「能进但全死」（真机多次踩到 ✗）
+      if (urlToken) {
         conn = { origin: '', token: urlToken };   // origin 空 = 同源
         saveConn(conn);
         // 把令牌从地址栏抹掉（别留在历史里）
@@ -616,10 +618,14 @@ function renderList(sessions) {
     if (chat) {
       Array.prototype.slice.call(chat.querySelectorAll('.msg')).forEach(function (n) { n.remove(); });
     }
+    // ⚠️ health 失败不能静默放弃 ✗（真机实测：401 → 页面死、一个接口都不发、用户看到「进去了但全死」）
     api.health().then(function (h) {
-      if (!h || !h.ok) return;
+      if (!h || !h.ok) {
+        if (typeof toast === 'function') toast('在线状态检查失败' + (h && h.status ? '（' + h.status + '）' : ''));
+      }
       api.list().then(function (r) {
         if (r && r.ok) renderList(r.sessions || []);
+        else if (typeof toast === 'function') toast('会话列表拉取失败' + (r && r.status ? '（' + r.status + '）' : ''));
       });
     });
   }

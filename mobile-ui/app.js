@@ -410,6 +410,7 @@
   var pendingApprovals = [];     // 手机待审批
   var pendingAtts = [];          // 待发送附件
   var modelCatalog = null;       // session/modelCatalog 结果
+  var currentModel = { provider: '', model: '' };   // 当前会话的模型（投影里的真值）
   var attachmentUrlCache = {};   // attachmentId → 已加载过的图片 url
 
   function stopTracePoll() { if (traceTimer) { clearInterval(traceTimer); traceTimer = null; } traceSig = ''; }
@@ -857,8 +858,8 @@
       page.insertBefore(makeUserBubble(t, currentSessionId, eager), null);
       if (t.response) page.insertBefore(makeAssistantBubble(t), null);
     });
-    if (ONLINE && currentSessionId && list.length) {
-      startTracePoll(currentSessionId);   // 思考/工具折叠块（1.5s 轮询事件流）
+    if (ONLINE && currentSessionId && list.length && !traceTimer) {
+      startTracePoll(currentSessionId);   // 思考/工具折叠块（1.5s 轮询事件流；已在轮询就别重建）
     }
     if (stick) scrollChatToBottom();
   }
@@ -1164,6 +1165,7 @@
     api.session(id).then(function (r) {
       // chips 显示**真值**（模型/强度/工作区来自投影 modelSelection 等，不是写死的假标签）
       var meta = (r && r.meta) || {};
+      currentModel = { provider: String(meta.provider || ''), model: String(meta.model || '') };
       var cm = document.getElementById('chip-model');
       if (cm && meta.model) cm.textContent = shortModelName(String(meta.model));
       var ce = document.getElementById('chip-effort');
@@ -1312,13 +1314,23 @@
   // ══════════════════════════════════════════════════════════════════════
   function findCatalogModel() {
     if (!modelCatalog || !modelCatalog.groups) return null;
-    var wantModel = (document.getElementById('chip-model') || {}).textContent || '';
-    var wantProvider = modelCatalog.default && modelCatalog.default.provider;
+    var wantModel = currentModel.model || (document.getElementById('chip-model') || {}).textContent || '';
+    var wantProvider = currentModel.provider || (modelCatalog.default && modelCatalog.default.provider);
+    // 1) 先按投影里的**模型 id** 精确匹配（chip 上显示的是短名，不能拿它当 id）
     for (var gi = 0; gi < modelCatalog.groups.length; gi += 1) {
       var g = modelCatalog.groups[gi];
+      if (wantProvider && g.id !== wantProvider) continue;
       for (var mi = 0; mi < (g.models || []).length; mi += 1) {
         var m = g.models[mi];
-        if (m.id === wantModel || m.name === wantModel) return { provider: g.id, providerName: g.name || g.id, model: m };
+        if (m.id === wantModel) return { provider: g.id, providerName: g.name || g.id, model: m };
+      }
+    }
+    // 2) 退一步按显示名/任意 provider 匹配
+    for (var gj = 0; gj < modelCatalog.groups.length; gj += 1) {
+      var g1 = modelCatalog.groups[gj];
+      for (var mj = 0; mj < (g1.models || []).length; mj += 1) {
+        var m1 = g1.models[mj];
+        if (m1.id === wantModel || m1.name === wantModel) return { provider: g1.id, providerName: g1.name || g1.id, model: m1 };
       }
     }
     // 退而求其次：默认模型
@@ -1372,6 +1384,7 @@
     api.selectModel(currentSessionId, provider, model.id, effort).then(function (r) {
       if (btn) btn.disabled = false;
       if (r && r.ok) {
+        currentModel = { provider: provider, model: model.id };
         var cm = document.getElementById('chip-model');
         if (cm) cm.textContent = shortModelName(model.name || model.id);
         var ce = document.getElementById('chip-effort');

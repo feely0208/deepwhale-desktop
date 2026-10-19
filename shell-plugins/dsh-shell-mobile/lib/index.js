@@ -41,7 +41,15 @@
  *    也不要返回一个看起来成功、实际是空的数据（那是假绿，桌面端已经吃过亏）。
  */
 
-import { statSync as statSyncFs, createReadStream as createReadStreamFs, readFileSync as readFileSyncFs, readdirSync } from 'node:fs';
+import {
+  statSync as statSyncFs,
+  createReadStream as createReadStreamFs,
+  readFileSync as readFileSyncFs,
+  readdirSync,
+  openSync as openSyncFs,
+  readSync as readSyncFs,
+  closeSync as closeSyncFs,
+} from 'node:fs';
 import { zstdDecompressSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { dirname, join as joinPath, normalize as normPath } from 'node:path';
@@ -216,7 +224,7 @@ export function readProjectionTurns(id, home) {
  * 且手机端本来就是只读展示（切换模型以后再说），读文件最稳、可核对。
  */
 export function readProjectionMeta(id, home) {
-  const empty = { model: '', effort: '', preset: '', workspace: '' };
+  const empty = { provider: '', model: '', effort: '', preset: '', workspace: '' };
   try {
     const base = home || process.env.DSH_HOME || '';
     if (!base || !id) return empty;
@@ -233,6 +241,7 @@ export function readProjectionMeta(id, home) {
       return '';
     };
     return {
+      provider: pick('provider'),
       model: pick('model'),
       effort: pick('reasoningEffort'),
       preset: typeof rows.agentPreset?.val === 'string' ? rows.agentPreset.val : '',
@@ -639,17 +648,39 @@ export function readSessionChat(id, home) {
   }
   let buf;
   try {
-    buf = readFileSyncFs(file);
+    // ⚠️ 只读**新增的一段**，不要每次把整个日志（可能 10MB+）读进来：
+    //    手机聊天每 1 秒可能都要检查一次，全量 readFileSync 会把主进程拖慢。
+    const from = Math.max(0, Math.min(state.offset, st.size));
+    const len = Math.max(0, st.size - from);
+    if (len === 0) {
+      state.size = st.size;
+      state.mtimeMs = st.mtimeMs;
+      return { ok: true, turns: state.turns, count: state.turns.length, changed: false };
+    }
+    const readBuf = Buffer.allocUnsafe(len);
+    const fd = openSyncFs(file, 'r');
+    try {
+      let got = 0;
+      while (got < len) {
+        const n = readSyncFs(fd, readBuf, got, len - got, from + got);
+        if (n <= 0) break;
+        got += n;
+      }
+      buf = readBuf.subarray(0, got);
+    } finally {
+      closeSyncFs(fd);
+    }
   } catch {
     return { ok: false, reason: 'read-failed', turns: state.turns, count: state.turns.length, changed: false };
   }
-  if (buf.length < state.offset) {
-    // 文件被替换/截断 → 从头来
-    state = emptyChatState(file);
-    chatCache.set(id, state);
+  if (buf.length === 0) {
+    state.size = st.size;
+    state.mtimeMs = st.mtimeMs;
+    return { ok: true, turns: state.turns, count: state.turns.length, changed: false };
   }
-  let pos = state.offset;
-  let consumed = state.offset;
+  const baseOffset = state.offset;
+  let pos = 0;
+  let consumed = 0;
   for (;;) {
     const magic = buf.indexOf(ZSTD_MAGIC, pos);
     if (magic < 0) break;
@@ -673,7 +704,7 @@ export function readSessionChat(id, home) {
     pos = next;
     consumed = next;
   }
-  state.offset = consumed;
+  state.offset = baseOffset + consumed;
   state.size = st.size;
   state.mtimeMs = st.mtimeMs;
   return { ok: true, turns: state.turns, count: state.turns.length, changed: true };

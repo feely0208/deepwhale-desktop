@@ -126,7 +126,14 @@ async function main() {
   let out = '';
   el.stdout.on('data', (d) => (out += d));
   el.stderr.on('data', (d) => (out += d));
-  await new Promise((r) => el.on('exit', r));
+  // ⚠️ spawn 失败时只有 'error' 事件（'exit' 不触发）—— 不处理会**永久挂住**（踩过一次：跑了 8 分钟没结果）
+  await new Promise((resolve) => {
+    el.on('error', (e) => {
+      out += '\n[electron spawn error] ' + String(e && e.message);
+      resolve();
+    });
+    el.on('exit', () => resolve());
+  });
   try {
     await gw.stop();
   } catch {}

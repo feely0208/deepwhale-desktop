@@ -15,6 +15,20 @@
 
 ## [未发布] — 1.0.60 待办
 
+- [ ] **用量面板浅色下文字发灰看不清**（2026-10-19 用户实测；源码已修，**待发版才生效**）
+  - 根因：2026-10-18 把 `@media (prefers-color-scheme: dark)` 展开成 `body[data-ds-dark-theme]` 时，
+    每组只给**第一个**选择器加了前缀，后面的（`.row .k = #9aa1ad`、`.row .v = #e6e8ec` 等 19 条）全漏了
+    → 深色那套浅灰/近白文字在浅色底上照常生效。
+  - 判断条件错在"行以 `{` 结尾"，而块里大量是单行规则 `xxx { color: ...; }`。
+  - 已修（commit bcc9082）：按"以 `#` 开头且含 `{`"判断，正确前缀 19 条；34 条浅色基础规则保持无前缀；括号 53/53 配平。
+  - ⚠️ **教训**：改主题相关样式必须**浅色和深色各看一遍**，只验当前模式就是假绿。
+- [ ] **会话搜索（dsh-experimental-session-search）开了但不可用**
+  - 工具能调用，但报 `SESSION_QUERY_PERSISTENCE_FAILED` / `session history storage is unavailable`。
+  - 排查过：bundle 在 profile 里已启用、`dsh-session-query-sqlite` 在运行时里、`node:sqlite` 在 Electron 44（Node 24.18.1）里 `DatabaseSync` 可用 —— **但 sqlite 后端没被挂上**，需要看宿主插件加载日志。
+- [ ] **主题修复整体待发版**（本板条目 1、2 与 10-18 的本机内文件卡片修复，用户端都要等 1.0.60）
+
+
+
 > 记录待办，不代表已开工。
 
 - [ ] **模型显示名跟到官方 `DeepSeek-V4.1-Flash-1017`**（律师端已于 2026-10-17 先跟上，只剩桌面端）

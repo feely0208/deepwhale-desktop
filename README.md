@@ -27,6 +27,32 @@
 
 > 表内「计数」取自官网下载线（华为云 CDN + 官网实时点击），每 5 分钟刷新；与上面的 GitHub 徽章是**两条独立渠道，不能相加**。完整看板：<https://deepwhale.org.cn/stats.html>
 
+## 📱 手机端（深鲸 Mobile）
+
+手机端与桌面端**共用同一套会话、模型与权限**；局域网扫码即连，外出走自建中继；**Android 与 HarmonyOS 可以同时在线**。
+
+| 客户端 | 状态 | 下载 |
+|---|---|---|
+| **Android（APK）** | ✅ 已发布 v1.1.2 | [GitHub Releases](https://github.com/feely0208/deepwhale-mobile/releases/latest) · [官网直连](https://deepwhale.org.cn/dl/mobile-apk) |
+| **HarmonyOS 4.x 及以下** | ✅ 可装同一 APK | 同上 |
+| **HarmonyOS NEXT 原生版** | ⏳ **备案中**（应用市场审核） | [说明仓库](https://github.com/feely0208/deepwhale-mobile-harmony)，上架后在此更新 |
+
+**手机端使用（三步）**
+
+1. 桌面端打开「手机连接」→「开启手机访问」；面板会显示二维码与 6 位配对码（一次性、5 分钟有效）；
+2. 手机打开深鲸 → 扫二维码，或填面板上的地址 + 配对码；
+3. 进入会话列表即成功；之后重开 App **自动进入**，不用再配对。
+
+> 不需要公网 IP、不用自己配 nginx/frp：桌面端内置网关与自建中继，局域网直连、外出走中继。
+> 完整功能 → [deepwhale-mobile 仓库](https://github.com/feely0208/deepwhale-mobile) · [官网手机端介绍](https://deepwhale.org.cn/mobile.html) · [使用指南](https://deepwhale.org.cn/mobile-guide.html)
+
+## 🔌 DSH 插件（37 个 · 免费开源 MIT）
+
+每个插件各管一件事，装在**任意支持 DSH 的载体**上，不绑定桌面端：
+
+- 国内合规 · AI 与 Agent 治理 · 数据与凭据 · 供应链 · 权限与应急 · 能力类（设计工序 / 画布 / 公文排版 / 会话产物）
+- [插件索引（GitHub）](https://github.com/feely0208/dsh-plugins) · [插件市场（可搜索 / 安装）](https://deepwhale.org.cn/plugins.html)
+
 ## ✨ 免费 · 开源 · 无套路
 
 - 💯 **免费开源**：软件本身完全免费——无内购、无订阅、无广告、无隐藏收费，且以 MIT 协议开源，任何人都可以自由使用
@@ -224,16 +250,6 @@ DeepSeek Harness 生态与周边项目：
 | Awesome DeepSeek Harness | DSH 插件、工具与基础设施精选列表。 | [GitHub](https://github.com/0xsline/awesome-deepseek-harness) |
 
 <sub>如果希望收录您的项目，欢迎通过上方联系方式联系我们。</sub>
-
-## 配套客户端
-
-| 客户端 | 状态 | 说明 |
-|---|---|---|
-| 深鲸桌面 | ✅ 已发布 | 本仓库：Windows / macOS / Linux 桌面端 |
-| **深鲸律师端** | ✅ 已发布 | 面向律师执业全流程的商业授权产品（见 Releases 与官网） |
-| **深鲸 Mobile（Android APK）** | ✅ 已发布 | 手机上的 DSH：会话 / 图片 / 模型 / 权限 / 停止与排队 / 轨迹 / 任务；局域网扫码即连、外出走自建中继；[仓库](https://github.com/feely0208/deepwhale-mobile) · [官网介绍](https://deepwhale.org.cn/mobile.html) · [APK](https://github.com/feely0208/deepwhale-mobile/releases/latest) |
-| **深鲸 Mobile（HarmonyOS 原生版）** | ⏳ **备案中** | 鸿蒙 NEXT 原生版正在备案 / 应用市场审核，上架后在官网鸿蒙专区与 GitHub 更新（HarmonyOS 4.x 可先装 Android APK） |
-| DSH 插件（37 个） | ✅ 已发布 | 国内合规 / Agent 治理 / 数据与凭据 / 供应链 / 权限与应急 / 能力类；[插件索引仓库](https://github.com/feely0208/dsh-plugins) · [插件市场](https://deepwhale.org.cn/plugins.html) |
 
 ## License
 

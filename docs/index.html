@@ -56,6 +56,18 @@
 
   /* ===== download ===== */
   .dl{background:#f8fafc;padding:56px 20px}
+  /* 下载区：左边安装包，右边快速上手（手机端使用就在手机卡旁边） */
+  .dl-split{display:grid;grid-template-columns:minmax(0,1.28fr) minmax(0,0.72fr);gap:26px;align-items:start}
+  .dl-side{position:sticky;top:76px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:16px;padding:20px 20px 18px}
+  .dl-side h3{font-size:18px;margin-bottom:4px}
+  .dl-side .hint{margin:0 0 14px}
+  .dl-side .steps{display:block;margin:0}
+  .dl-side .step{display:flex;gap:12px;margin-bottom:14px}
+  .dl-side .stepnum{flex:0 0 28px;width:28px;height:28px;line-height:28px;font-size:13px}
+  .dl-side .step h3{font-size:14.5px;margin-bottom:2px}
+  .dl-side .step p{font-size:12.5px;line-height:1.6;color:#475569}
+  .dl-side .note{margin-top:6px;font-size:12.5px;line-height:1.6}
+  @media (max-width:920px){ .dl-split{grid-template-columns:1fr} .dl-side{position:static} }
   .dl h2{text-align:center;font-size:26px;margin-bottom:6px}
   .dl .hint{text-align:center;color:#64748b;font-size:14px;margin-bottom:30px}
   .dl-group{margin-bottom:34px}
@@ -175,35 +187,15 @@
   <div class="wrap">
     <h2 data-zh="下载中心" data-en="Download Center">下载中心</h2>
     <p class="hint" data-zh="全部安装包托管于 GitHub Releases · 免注册 · 免费" data-en="All packages hosted on GitHub Releases · no sign-up · free">全部安装包托管于 GitHub Releases · 免注册 · 免费</p>
-    <div id="download-groups"><!-- JS 注入 --></div>
-    <p class="alldl"><a class="btn ghost" href="https://github.com/feely0208/deepwhale-desktop/releases" data-zh="查看全部版本与更新日志" data-en="All releases & changelog">查看全部版本与更新日志</a></p>
-  </div>
-</section>
-
-<section class="feat" id="plugins">
-  <div class="wrap">
-    <h2 data-zh="DSH 插件（37 个 · 免费开源 MIT）" data-en="DSH Plugins (37 · free & open source, MIT)">DSH 插件（37 个 · 免费开源 MIT）</h2>
-    <p class="hint" data-zh="装在任意支持 DSH 的载体上，<b>不绑定桌面端</b>；每个插件各管一件事，按需安装。" data-en="Plugins run on any DSH host and are <b>not tied to the desktop app</b>; each plugin does one job, install as needed.">装在任意支持 DSH 的载体上，<b>不绑定桌面端</b>；每个插件各管一件事，按需安装。</p>
-    <div class="fgrid">
-      <div class="fcard"><div class="emoji">🛡️</div><h3 data-zh="国内合规" data-en="China compliance">国内合规</h3><p data-zh="等保 / 个保 / 算法备案 / AI 内容标识 / 未成年人保护 / 数据出境 …" data-en="MLPS, PIPL, algorithm filing, AI content labeling, minor protection, data export…">等保 / 个保 / 算法备案 / AI 内容标识 / 未成年人保护 / 数据出境 …</p></div>
-      <div class="fcard"><div class="emoji">🤖</div><h3 data-zh="AI 与 Agent 治理" data-en="AI &amp; agent governance">AI 与 Agent 治理</h3><p data-zh="Agent 权限范围 / 工具审查 / 输出可信 / 内容信任 …" data-en="Agent scopes, tool vetting, output trust, content trust…">Agent 权限范围 / 工具审查 / 输出可信 / 内容信任 …</p></div>
-      <div class="fcard"><div class="emoji">🔐</div><h3 data-zh="数据与凭据" data-en="Data &amp; credentials">数据与凭据</h3><p data-zh="数据分级 / 密钥扫描与轮换 / 依赖审计 / SBOM / 会话产物 …" data-en="Data classification, secret scanning &amp; rotation, dependency audit, SBOM, session artifacts…">数据分级 / 密钥扫描与轮换 / 依赖审计 / SBOM / 会话产物 …</p></div>
-      <div class="fcard"><div class="emoji">🔗</div><h3 data-zh="供应链" data-en="Supply chain">供应链</h3><p data-zh="CI 守卫 / 发布自检 / 许可证检查 …" data-en="CI guard, release self-check, license checks…">CI 守卫 / 发布自检 / 许可证检查 …</p></div>
-      <div class="fcard"><div class="emoji">🚨</div><h3 data-zh="权限与应急" data-en="Access &amp; incident response">权限与应急</h3><p data-zh="最小权限 / 事件包 / 钓鱼防护 / 告警中继 …" data-en="Least privilege, incident package, phishing guard, alert relay…">最小权限 / 事件包 / 钓鱼防护 / 告警中继 …</p></div>
-      <div class="fcard"><div class="emoji">🛠️</div><h3 data-zh="能力类" data-en="Capabilities">能力类</h3><p data-zh="设计工序（PS / CAD / 3ds Max）/ 画布 / 公文排版 / 法律技能集 …" data-en="Design line (PS / CAD / 3ds Max), canvas, document formatter, legal skills…">设计工序（PS / CAD / 3ds Max）/ 画布 / 公文排版 / 法律技能集 …</p></div>
-    </div>
-    <div class="acts" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:18px">
-      <a class="btn" href="https://deepwhale.org.cn/plugins.html" data-zh="插件市场（可搜索 / 安装）→" data-en="Plugin marketplace →">插件市场（可搜索 / 安装）→</a>
-      <a class="btn ghost" href="https://github.com/feely0208/dsh-plugins" target="_blank" rel="noopener" data-zh="GitHub 插件索引 →" data-en="GitHub plugin index →">GitHub 插件索引 →</a>
-    </div>
-  </div>
-</section>
-
-<section class="howto" id="howto">
-  <div class="wrap">
-    <h2 data-zh="快速上手" data-en="Quick Start">快速上手</h2>
-    <p class="hint" data-zh="三个步骤，一分钟上手" data-en="Three steps, one minute">三个步骤，一分钟上手</p>
-    <div class="steps">
+    <div class="dl-split">
+      <div class="dl-main">
+        <div id="download-groups"><!-- JS 注入 --></div>
+        <p class="alldl"><a class="btn ghost" href="https://github.com/feely0208/deepwhale-desktop/releases" data-zh="查看全部版本与更新日志" data-en="All releases & changelog">查看全部版本与更新日志</a></p>
+      </div>
+      <aside class="dl-side" id="howto">
+        <h3 data-zh="快速上手" data-en="Quick Start">快速上手</h3>
+        <p class="hint" data-zh="三步，一分钟上手" data-en="Three steps, one minute">三步，一分钟上手</p>
+        <div class="steps">
       <div class="step">
         <div class="stepnum">1</div>
         <div class="stepbody">
@@ -226,7 +218,28 @@
         </div>
       </div>
     </div>
-    <div class="note" data-zh="💡 所有产品都使用你自己的 DeepSeek API Key，数据只存在你自己的设备上，不上传任何服务器。" data-en="💡 All products use your own DeepSeek API key; data stays on your device and is never uploaded.">💡 所有产品都使用你自己的 DeepSeek API Key，数据只存在你自己的设备上，不上传任何服务器。</div>
+        <div class="note" data-zh="💡 所有产品都使用你自己的 DeepSeek API Key，数据只存在你自己的设备上，不上传任何服务器。" data-en="💡 All products use your own DeepSeek API key; data stays on your device and is never uploaded.">💡 所有产品都使用你自己的 DeepSeek API Key，数据只存在你自己的设备上，不上传任何服务器。</div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<section class="feat" id="plugins">
+  <div class="wrap">
+    <h2 data-zh="DSH 插件（37 个 · 免费开源 MIT）" data-en="DSH Plugins (37 · free & open source, MIT)">DSH 插件（37 个 · 免费开源 MIT）</h2>
+    <p class="hint" data-zh="装在任意支持 DSH 的载体上，<b>不绑定桌面端</b>；每个插件各管一件事，按需安装。" data-en="Plugins run on any DSH host and are <b>not tied to the desktop app</b>; each plugin does one job, install as needed.">装在任意支持 DSH 的载体上，<b>不绑定桌面端</b>；每个插件各管一件事，按需安装。</p>
+    <div class="fgrid">
+      <div class="fcard"><div class="emoji">🛡️</div><h3 data-zh="国内合规" data-en="China compliance">国内合规</h3><p data-zh="等保 / 个保 / 算法备案 / AI 内容标识 / 未成年人保护 / 数据出境 …" data-en="MLPS, PIPL, algorithm filing, AI content labeling, minor protection, data export…">等保 / 个保 / 算法备案 / AI 内容标识 / 未成年人保护 / 数据出境 …</p></div>
+      <div class="fcard"><div class="emoji">🤖</div><h3 data-zh="AI 与 Agent 治理" data-en="AI &amp; agent governance">AI 与 Agent 治理</h3><p data-zh="Agent 权限范围 / 工具审查 / 输出可信 / 内容信任 …" data-en="Agent scopes, tool vetting, output trust, content trust…">Agent 权限范围 / 工具审查 / 输出可信 / 内容信任 …</p></div>
+      <div class="fcard"><div class="emoji">🔐</div><h3 data-zh="数据与凭据" data-en="Data &amp; credentials">数据与凭据</h3><p data-zh="数据分级 / 密钥扫描与轮换 / 依赖审计 / SBOM / 会话产物 …" data-en="Data classification, secret scanning &amp; rotation, dependency audit, SBOM, session artifacts…">数据分级 / 密钥扫描与轮换 / 依赖审计 / SBOM / 会话产物 …</p></div>
+      <div class="fcard"><div class="emoji">🔗</div><h3 data-zh="供应链" data-en="Supply chain">供应链</h3><p data-zh="CI 守卫 / 发布自检 / 许可证检查 …" data-en="CI guard, release self-check, license checks…">CI 守卫 / 发布自检 / 许可证检查 …</p></div>
+      <div class="fcard"><div class="emoji">🚨</div><h3 data-zh="权限与应急" data-en="Access &amp; incident response">权限与应急</h3><p data-zh="最小权限 / 事件包 / 钓鱼防护 / 告警中继 …" data-en="Least privilege, incident package, phishing guard, alert relay…">最小权限 / 事件包 / 钓鱼防护 / 告警中继 …</p></div>
+      <div class="fcard"><div class="emoji">🛠️</div><h3 data-zh="能力类" data-en="Capabilities">能力类</h3><p data-zh="设计工序（PS / CAD / 3ds Max）/ 画布 / 公文排版 / 法律技能集 …" data-en="Design line (PS / CAD / 3ds Max), canvas, document formatter, legal skills…">设计工序（PS / CAD / 3ds Max）/ 画布 / 公文排版 / 法律技能集 …</p></div>
+    </div>
+    <div class="acts" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:18px">
+      <a class="btn" href="https://deepwhale.org.cn/plugins.html" data-zh="插件市场（可搜索 / 安装）→" data-en="Plugin marketplace →">插件市场（可搜索 / 安装）→</a>
+      <a class="btn ghost" href="https://github.com/feely0208/dsh-plugins" target="_blank" rel="noopener" data-zh="GitHub 插件索引 →" data-en="GitHub plugin index →">GitHub 插件索引 →</a>
+    </div>
   </div>
 </section>
 

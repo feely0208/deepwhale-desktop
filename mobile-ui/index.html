@@ -58,16 +58,12 @@
     -webkit-text-size-adjust:100%;
   }
   /* 浅色：同配方换色 */
-  @media (prefers-color-scheme: light){
-    html,body{
-      background-color:#eaf1fb;
+  html[data-theme="light"] html,body{background-color:#eaf1fb;
       background-image:
         radial-gradient(circle closest-side at center, rgba(160,197,241,.90) 0%, rgba(160,197,241,.72) 25%, rgba(160,197,241,.432) 50%, rgba(160,197,241,.171) 75%, rgba(160,197,241,0) 100%),
         radial-gradient(circle closest-side at center, rgba(132,178,234,.95) 0%, rgba(132,178,234,.76) 25%, rgba(132,178,234,.456) 50%, rgba(132,178,234,.181) 75%, rgba(132,178,234,0) 100%),
         radial-gradient(circle closest-side at center, rgba(190,218,248,.80) 0%, rgba(190,218,248,.64) 25%, rgba(190,218,248,.384) 50%, rgba(190,218,248,.152) 75%, rgba(190,218,248,0) 100%);
-      color:#16202c;
-    }
-  }
+      color:#16202c;}
   @keyframes dsh-skin-drift{
     from{background-position:calc(10vw - 80px) calc(100% + 60px), calc(50vw - 450px) calc(100% + 40px), calc(90vw - 460px) calc(100% + 70px)}
     to{background-position:calc(10vw - 44px) calc(100% + 74px), calc(50vw - 512px) calc(100% + 54px), calc(90vw - 424px) calc(100% + 58px)}
@@ -78,14 +74,12 @@
   /* 按钮基底：**必须显式给底色** —— 漏掉就会渲染成浏览器默认的白底（实测"新建会话"变白块） */
   button{font:inherit;color:inherit;background:rgba(255,255,255,.06);
     border:1px solid rgba(255,255,255,.10);cursor:pointer}
-  @media (prefers-color-scheme: light){ button{background:rgba(255,255,255,.62);border-color:rgba(20,40,70,.10)} }
+  html[data-theme="light"] button{background:rgba(255,255,255,.62);border-color:rgba(20,40,70,.10)}
   body{display:flex;flex-direction:column;overflow-x:hidden}
   /* 自上而下压暗：把辉光留在下方，顶部留出层次（手机竖屏比桌面窗口高得多） */
   body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
     background:linear-gradient(to bottom, rgba(11,16,24,.88) 0%, rgba(11,16,24,.45) 38%, rgba(11,16,24,0) 72%)}
-  @media (prefers-color-scheme: light){
-    body::before{background:linear-gradient(to bottom, rgba(234,241,251,.92) 0%, rgba(234,241,251,.5) 38%, rgba(234,241,251,0) 72%)}
-  }
+  html[data-theme="light"] body::before{background:linear-gradient(to bottom, rgba(234,241,251,.92) 0%, rgba(234,241,251,.5) 38%, rgba(234,241,251,0) 72%)}
   .app{position:relative;z-index:1}
   .app{width:100%;max-width:520px;margin:0 auto;flex:1;display:flex;flex-direction:column;
     min-height:0;padding-top:var(--safe-t)}
@@ -93,14 +87,12 @@
   /* ── 玻璃面板（辉光透出来，而不是盖死） ─────────────────────── */
   .glass{background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.10);
     -webkit-backdrop-filter:blur(16px) saturate(1.15);backdrop-filter:blur(16px) saturate(1.15)}
-  @media (prefers-color-scheme: light){
-    .glass{background:rgba(255,255,255,.62);border-color:rgba(20,40,70,.10)}
-  }
+  html[data-theme="light"] .glass{background:rgba(255,255,255,.62);border-color:rgba(20,40,70,.10)}
 
   /* ── 顶部 ───────────────────────────────────────────────────── */
   .top{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid rgba(255,255,255,.07);
     background:rgba(12,17,25,.55);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);flex-wrap:nowrap}
-  @media (prefers-color-scheme: light){ .top{background:rgba(255,255,255,.55);border-bottom-color:rgba(20,40,70,.08)} }
+  html[data-theme="light"] .top{background:rgba(255,255,255,.55);border-bottom-color:rgba(20,40,70,.08)}
   .ws{display:inline-flex;align-items:center;gap:7px;height:var(--tap-min);padding:0 14px;
     border:1px solid rgba(255,255,255,.12);border-radius:999px;background:rgba(255,255,255,.06);
     font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:48vw;flex:0 1 auto}
@@ -122,7 +114,7 @@
     margin:0 14px 14px;width:calc(100% - 28px);border-radius:var(--r-md);color:inherit;font-size:15px;font-weight:600}
   .row-btn{display:flex;width:100%;align-items:center;gap:10px;min-height:64px;padding:12px 16px;
     background:transparent;border:0;border-bottom:1px solid rgba(255,255,255,.06);color:inherit;text-align:left}
-  @media (prefers-color-scheme: light){ .row-btn{border-bottom-color:rgba(20,40,70,.07)} }
+  html[data-theme="light"] .row-btn{border-bottom-color:rgba(20,40,70,.07)}
   .row-btn .t{flex:1 1 auto;min-width:0}
   .row-btn .title{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:15.5px;font-weight:500}
   .row-btn .sub{display:block;font-size:12px;opacity:.55;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
@@ -135,7 +127,7 @@
   .page-head .page-sub{font-size:12px;opacity:.55}
   .plugins-list{padding:0 0 90px}
   .plugin-row{padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.06)}
-  @media (prefers-color-scheme: light){ .plugin-row{border-bottom-color:rgba(20,40,70,.07)} }
+  html[data-theme="light"] .plugin-row{border-bottom-color:rgba(20,40,70,.07)}
   .plugin-row .pn{font-size:14.5px;font-weight:500}
   .plugin-row .pv{font-size:11.5px;opacity:.5;margin-left:8px}
   .plugin-row .pd{font-size:12px;opacity:.6;margin-top:3px;line-height:1.5}
@@ -159,9 +151,7 @@
   .connect label{display:block;font-size:12px;opacity:.6;margin-bottom:6px}
   .connect input{width:100%;height:var(--btn-h-primary);padding:0 14px;border-radius:var(--r-md);
     border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.06);color:inherit;font:inherit;font-size:15px}
-  @media (prefers-color-scheme: light){
-    .connect input{border-color:rgba(20,40,70,.14);background:rgba(255,255,255,.7)}
-  }
+  html[data-theme="light"] .connect input{border-color:rgba(20,40,70,.14);background:rgba(255,255,255,.7)}
   .connect .go{height:var(--btn-h-primary);border-radius:var(--r-md);border:0;font-size:15px;font-weight:600;
     color:#f4f9ff;background:linear-gradient(180deg,#5c9ad4,#2d5f9e);box-shadow:var(--glow)}
   .connect .err{font-size:13px;color:#e5534b;min-height:18px}
@@ -192,7 +182,7 @@
   /* ── 输入区 ─────────────────────────────────────────────────── */
   .composer{border-top:1px solid rgba(255,255,255,.08);background:rgba(12,17,25,.58);
     -webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);padding:10px 14px}
-  @media (prefers-color-scheme: light){ .composer{background:rgba(255,255,255,.60);border-top-color:rgba(20,40,70,.08)} }
+  html[data-theme="light"] .composer{background:rgba(255,255,255,.60);border-top-color:rgba(20,40,70,.08)}
   .chips-wrap{position:relative}
   /* chip 行**换行**而不是横向滚动：滚动 + 右缘渐隐在玻璃层上会变成一块难看的深色方块（实测） */
   .chips{display:flex;flex-wrap:wrap;gap:9px;padding-bottom:10px}
@@ -215,7 +205,7 @@
   .tabbar{display:flex;border-top:1px solid rgba(255,255,255,.08);
     background:rgba(12,17,25,.62);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);
     padding-bottom:var(--safe-b)}
-  @media (prefers-color-scheme: light){ .tabbar{background:rgba(255,255,255,.62);border-top-color:rgba(20,40,70,.08)} }
+  html[data-theme="light"] .tabbar{background:rgba(255,255,255,.62);border-top-color:rgba(20,40,70,.08)}
   .tabbar button{flex:1 1 0;min-width:0;height:58px;border:0;background:transparent;color:inherit;
     opacity:.62;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
     font-size:11px;white-space:nowrap}
@@ -232,6 +222,31 @@
   .think-text{white-space:pre-wrap;opacity:.75;line-height:1.6;padding:2px 0 8px}
   .think-tool{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;opacity:.6;padding:2px 0;
     border-top:1px dashed rgba(120,140,170,.25);margin-top:4px;word-break:break-all}
+  /* 跟随系统：没手动选过（无 data-theme）时按系统浅色 */
+  @media (prefers-color-scheme: light){
+html:not([data-theme]) html,body{background-color:#eaf1fb;
+      background-image:
+        radial-gradient(circle closest-side at center, rgba(160,197,241,.90) 0%, rgba(160,197,241,.72) 25%, rgba(160,197,241,.432) 50%, rgba(160,197,241,.171) 75%, rgba(160,197,241,0) 100%),
+        radial-gradient(circle closest-side at center, rgba(132,178,234,.95) 0%, rgba(132,178,234,.76) 25%, rgba(132,178,234,.456) 50%, rgba(132,178,234,.181) 75%, rgba(132,178,234,0) 100%),
+        radial-gradient(circle closest-side at center, rgba(190,218,248,.80) 0%, rgba(190,218,248,.64) 25%, rgba(190,218,248,.384) 50%, rgba(190,218,248,.152) 75%, rgba(190,218,248,0) 100%);
+      color:#16202c;}
+html:not([data-theme]) button{background:rgba(255,255,255,.62);border-color:rgba(20,40,70,.10)}
+html:not([data-theme]) body::before{background:linear-gradient(to bottom, rgba(234,241,251,.92) 0%, rgba(234,241,251,.5) 38%, rgba(234,241,251,0) 72%)}
+html:not([data-theme]) .glass{background:rgba(255,255,255,.62);border-color:rgba(20,40,70,.10)}
+html:not([data-theme]) .top{background:rgba(255,255,255,.55);border-bottom-color:rgba(20,40,70,.08)}
+html:not([data-theme]) .row-btn{border-bottom-color:rgba(20,40,70,.07)}
+html:not([data-theme]) .plugin-row{border-bottom-color:rgba(20,40,70,.07)}
+html:not([data-theme]) .connect input{border-color:rgba(20,40,70,.14);background:rgba(255,255,255,.7)}
+html:not([data-theme]) .composer{background:rgba(255,255,255,.60);border-top-color:rgba(20,40,70,.08)}
+html:not([data-theme]) .tabbar{background:rgba(255,255,255,.62);border-top-color:rgba(20,40,70,.08)}
+  }
+  /* 我的页 */
+  .mine-section{padding:16px 16px 6px;font-size:12px;opacity:.5;letter-spacing:.5px}
+  .mine-row{display:flex;align-items:center;width:100%;min-height:52px;padding:12px 16px;background:transparent;
+    border:0;border-bottom:1px solid rgba(120,140,170,.14);color:inherit;font:inherit;text-align:left}
+  .mine-label{flex:1 1 auto;font-size:15px}
+  .mine-value{font-size:13px;opacity:.55;max-width:52%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .mine-chev{opacity:.3;margin-left:10px;font-size:18px}
 </style>
 </head>
 <body>
@@ -272,6 +287,11 @@
   </main>
 
   <!-- 会话页（默认隐藏，供断言/联调切换） -->
+
+  <main class="scroll" id="page-mine" hidden>
+    <div class="page-head"><span class="page-title">我的</span><span class="page-sub" id="mine-ver">深鲸 Mobile</span></div>
+    <div id="mine-list" class="plugins-list"></div>
+  </main>
 
   <main class="scroll" id="page-tasks" hidden>
     <div class="page-head"><span class="page-title">任务</span><span class="page-sub" id="tasks-sub">定时任务</span></div>
@@ -319,7 +339,7 @@
     <button id="nav-me"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/></svg>我的</button>
   </nav>
 </div>
-<script src="app.js?v=20261018a"></script>
+<script src="app.js?v=20261018c"></script>
 <script>
   // 仅用于骨架/断言联调：切换两个主页面
   window.__dshMobile = {
@@ -327,6 +347,8 @@
       document.getElementById('page-list').hidden = name !== 'list';
       document.getElementById('page-chat').hidden = name !== 'chat';
       var pt = document.getElementById('page-tasks');
+      var pm = document.getElementById('page-mine');
+      if (pm) pm.hidden = name !== 'mine';
       if (pt) pt.hidden = name !== 'tasks';
       var c = document.getElementById('page-connect');
       if (c) c.hidden = name !== 'connect';
@@ -350,8 +372,33 @@
     window.__dshMobile.showPage('tasks');
     if (window.__dshLoadTasks) window.__dshLoadTasks();
   });
+  document.getElementById('nav-me').addEventListener('click',function(){
+    window.__dshMobile.showPage('mine');
+    if (window.__dshRenderMine) window.__dshRenderMine();
+  });
   document.getElementById('nav-me').addEventListener('click',()=>window.__dshMobile.showPage('list'));
   // 返回 / 新建会话 / 刷新 —— 以前**画了没接线**（真机反馈：点进会话退不出 ✗）
+  // 外观切换（☀/🌙）：三态「跟随系统 → 浅色 → 深色」
+  // 无 data-theme = 跟随系统（由 @media 控制）；手动选择才写 data-theme 固定
+  (function () {
+    var btn = document.getElementById('btn-settings');
+    if (!btn) return;
+    var order = ['', 'light', 'dark'];
+    var cur = '';
+    try { cur = localStorage.getItem('dshMobile.theme') || ''; } catch (e) {}
+    if (order.indexOf(cur) < 0) cur = '';
+    function apply(v) {
+      if (v === '') { document.documentElement.removeAttribute('data-theme'); }
+      else { document.documentElement.setAttribute('data-theme', v); }
+      try { localStorage.setItem('dshMobile.theme', v); } catch (e) {}
+    }
+    apply(cur);
+    btn.addEventListener('click', function () {
+      cur = order[(order.indexOf(cur) + 1) % order.length];
+      apply(cur);
+      if (typeof toast === 'function') toast(cur === '' ? '外观：跟随系统' : (cur === 'light' ? '外观：浅色' : '外观：深色'));
+    });
+  })();
   (function () {
     var b = document.getElementById('btn-back');
     if (b) b.addEventListener('click', function () { if (window.__dshBack) window.__dshBack(); });

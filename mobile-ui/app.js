@@ -371,6 +371,71 @@ function renderList(sessions) {
     }
     window.__dshLoadTasks = loadTasks;
 
+    /** 我的页：账号/连接、外观、设置、意见反馈、关于、断开 */
+    function renderMine() {
+      var list = document.getElementById('mine-list');
+      if (!list) return;
+      var origin = '';
+      try { origin = (JSON.parse(localStorage.getItem('dshMobile.conn') || '{}').origin) || ''; } catch (e) {}
+      var theme = '';
+      try { theme = localStorage.getItem('dshMobile.theme') || ''; } catch (e) {}
+      var ver = document.getElementById('mine-ver');
+      if (ver) ver.textContent = 'v1.1.0';
+
+      function section(title) {
+        var h = el('div', 'mine-section', title);
+        list.appendChild(h);
+      }
+      function row(label, value, onClick) {
+        var r = el('button', 'mine-row');
+        var l = el('span', 'mine-label', label);
+        r.appendChild(l);
+        if (value) r.appendChild(el('span', 'mine-value', value));
+        r.appendChild(el('span', 'mine-chev', '›'));
+        if (onClick) r.addEventListener('click', onClick);
+        list.appendChild(r);
+        return r;
+      }
+      list.textContent = '';
+      section('连接');
+      row('服务器', origin || '未连接', function () {
+        if (typeof toast === 'function') toast(origin || '还没连接');
+      });
+      row('模型', (document.getElementById('chip-model') || {}).textContent || '—');
+      row('强度', (document.getElementById('chip-effort') || {}).textContent || '—');
+
+      section('设置');
+      row('外观', theme === 'light' ? '浅色' : theme === 'dark' ? '深色' : '跟随系统', function () {
+        var order = ['', 'light', 'dark'];
+        var cur = order.indexOf(theme); cur = order[(cur + 1) % order.length];
+        theme = cur;
+        if (cur === '') document.documentElement.removeAttribute('data-theme');
+        else document.documentElement.setAttribute('data-theme', cur);
+        try { localStorage.setItem('dshMobile.theme', cur); } catch (e) {}
+        renderMine();
+      });
+      row('清空界面缓存', '会重新拉取页面', function () {
+        try { localStorage.removeItem('dshMobile.mineVer'); } catch (e) {}
+        if (typeof toast === 'function') toast('已清空，重新进入即可');
+      });
+
+      section('帮助');
+      row('意见反馈', 'contact@deepwhale.org.cn', function () {
+        if (typeof toast === 'function') toast('意见反馈：contact@deepwhale.org.cn');
+      });
+      row('使用说明 / 常见问题', '官网', function () {
+        if (typeof toast === 'function') toast('https://deepwhale.org.cn');
+      });
+
+      section('关于');
+      row('版本', '1.1.0');
+      row('断开连接', '需要重新扫码', function () {
+        try { localStorage.removeItem('dshMobile.conn'); } catch (e) {}
+        if (window.__dshMobile && window.__dshMobile.showPage) window.__dshMobile.showPage('connect');
+      });
+    }
+    window.__dshRenderMine = renderMine;
+
   function messageNode(m) {
     var wrap = el('div', 'msg' + (m.role === 'user' ? ' me' : ''));
     var text = m.text || '';

@@ -225,6 +225,16 @@ DeepSeek Harness 生态与周边项目：
 
 <sub>如果希望收录您的项目，欢迎通过上方联系方式联系我们。</sub>
 
+## 配套客户端
+
+| 客户端 | 状态 | 说明 |
+|---|---|---|
+| 深鲸桌面 | ✅ 已发布 | 本仓库：Windows / macOS / Linux 桌面端 |
+| **深鲸律师端** | ✅ 已发布 | 面向律师执业全流程的商业授权产品（见 Releases 与官网） |
+| **深鲸 Mobile（Android APK）** | ✅ 已发布 | 手机上的 DSH：会话 / 图片 / 模型 / 权限 / 停止与排队 / 轨迹 / 任务；局域网扫码即连、外出走自建中继；[仓库](https://github.com/feely0208/deepwhale-mobile) · [官网介绍](https://deepwhale.org.cn/mobile.html) · [APK](https://github.com/feely0208/deepwhale-mobile/releases/latest) |
+| **深鲸 Mobile（HarmonyOS 原生版）** | ⏳ **备案中** | 鸿蒙 NEXT 原生版正在备案 / 应用市场审核，上架后在官网鸿蒙专区与 GitHub 更新（HarmonyOS 4.x 可先装 Android APK） |
+| DSH 插件（37 个） | ✅ 已发布 | 国内合规 / Agent 治理 / 数据与凭据 / 供应链 / 权限与应急 / 能力类；[插件索引仓库](https://github.com/feely0208/dsh-plugins) · [插件市场](https://deepwhale.org.cn/plugins.html) |
+
 ## License
 
 [MIT](LICENSE)

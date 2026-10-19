@@ -71,6 +71,8 @@
   @media (prefers-reduced-motion: reduce){ html,body{animation:none} }
 
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  /* `hidden` 必须真的隐藏：本文件有些类是 display:flex，会盖掉 UA 的 [hidden]{display:none} */
+  [hidden]{display:none!important}
   /* 按钮基底：**必须显式给底色** —— 漏掉就会渲染成浏览器默认的白底（实测"新建会话"变白块） */
   button{font:inherit;color:inherit;background:rgba(255,255,255,.06);
     border:1px solid rgba(255,255,255,.10);cursor:pointer}
@@ -134,7 +136,12 @@
   .list-empty{padding:32px 20px;text-align:center;font-size:13px;opacity:.55;line-height:1.7}
 
   /* 会话页 */
-  .tabs{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:8px;padding:10px 14px;background:rgba(240,246,255,.99);border-bottom:1px solid rgba(20,40,70,.10);box-shadow:0 6px 14px -10px rgba(20,40,70,.25)}
+  /* ⚠️ 这里原来写死成浅色（rgba(240,246,255,.99)），深色主题下会在顶部突出一块白条（实测截图可见）→
+     改成跟 .top 同一套玻璃层，并给浅色/跟随系统各一处覆盖 */
+  .tabs{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:8px;padding:10px 14px;
+    background:rgba(12,17,25,.72);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);
+    border-bottom:1px solid rgba(255,255,255,.08);box-shadow:0 6px 14px -10px rgba(0,0,0,.35)}
+  html[data-theme="light"] .tabs{background:rgba(255,255,255,.72);border-bottom-color:rgba(20,40,70,.10)}
   .tab{flex:1 1 0;height:var(--btn-h);border-radius:999px;background:rgba(255,255,255,.05);
     border:1px solid rgba(255,255,255,.10);color:inherit;font-size:14px;white-space:nowrap;min-width:0;opacity:.72}
   .tab[aria-selected="true"]{opacity:1;font-weight:600;border-color:rgba(124,186,240,.45);
@@ -234,6 +241,7 @@ html:not([data-theme]) button{background:rgba(255,255,255,.62);border-color:rgba
 html:not([data-theme]) body::before{background:linear-gradient(to bottom, rgba(234,241,251,.92) 0%, rgba(234,241,251,.5) 38%, rgba(234,241,251,0) 72%)}
 html:not([data-theme]) .glass{background:rgba(255,255,255,.62);border-color:rgba(20,40,70,.10)}
 html:not([data-theme]) .top{background:rgba(255,255,255,.55);border-bottom-color:rgba(20,40,70,.08)}
+html:not([data-theme]) .tabs{background:rgba(255,255,255,.72);border-bottom-color:rgba(20,40,70,.10)}
 html:not([data-theme]) .row-btn{border-bottom-color:rgba(20,40,70,.07)}
 html:not([data-theme]) .plugin-row{border-bottom-color:rgba(20,40,70,.07)}
 html:not([data-theme]) .connect input{border-color:rgba(20,40,70,.14);background:rgba(255,255,255,.7)}
@@ -247,6 +255,77 @@ html:not([data-theme]) .tabbar{background:rgba(255,255,255,.62);border-top-color
   .mine-label{flex:1 1 auto;font-size:15px}
   .mine-value{font-size:13px;opacity:.55;max-width:52%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .mine-chev{opacity:.3;margin-left:10px;font-size:18px}
+
+  /* ═══ 附件（拍照/相册/文件）═══════════════════════════════════════
+     验收要点：待发送缩略图可删、图片压缩后再传（4G/隧道下几 MB 的相机原图会卡死）、
+     聊天里的图片可点开大图、文件显示名字与大小。 */
+  .att-strip{display:flex;gap:9px;overflow-x:auto;padding:2px 0 10px;overscroll-behavior-x:contain}
+  .att-thumb{position:relative;flex:0 0 auto;width:66px;height:66px;border-radius:12px;overflow:hidden;
+    border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06)}
+  html[data-theme="light"] .att-thumb{border-color:rgba(20,40,70,.16)}
+  .att-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+  .att-thumb .dx{position:absolute;right:2px;top:2px;width:24px;height:24px;border-radius:50%;
+    border:0;background:rgba(10,14,22,.78);color:#fff;font-size:14px;line-height:1;
+    display:flex;align-items:center;justify-content:center}
+  .att-thumb .prog{position:absolute;inset:auto 0 0 0;height:3px;background:rgba(124,186,240,.9)}
+  .att-file{display:flex;align-items:center;gap:10px;min-height:48px;padding:8px 12px;border-radius:12px;
+    background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);margin-top:8px}
+  html[data-theme="light"] .att-file{background:rgba(255,255,255,.62);border-color:rgba(20,40,70,.12)}
+  .att-file .ico{flex:0 0 auto;width:32px;height:32px;border-radius:8px;display:flex;align-items:center;
+    justify-content:center;background:rgba(124,186,240,.16);color:#9ecbf5;font-size:15px}
+  .att-file .dd{flex:1 1 auto;min-width:0}
+  .att-file .n{display:block;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .att-file .s{display:block;font-size:11.5px;opacity:.55;margin-top:2px}
+  .att-img{display:block;max-width:100%;max-height:320px;border-radius:12px;margin-top:8px;object-fit:contain;
+    background:rgba(6,10,16,.35)}
+
+  /* 底部动作面板（选择附件 / 选模型 / 选强度）—— 不用原生 alert，手机上太丑 */
+  .sheet-mask{position:fixed;inset:0;z-index:200;background:rgba(4,8,14,.56);
+    display:flex;align-items:flex-end;justify-content:center}
+  .sheet{width:100%;max-width:520px;background:#141c2a;border-radius:18px 18px 0 0;
+    padding:12px 14px calc(14px + var(--safe-b));display:flex;flex-direction:column;gap:9px;
+    box-shadow:0 -12px 40px rgba(0,0,0,.45)}
+  html[data-theme="light"] .sheet{background:#f7fafe}
+  .sheet .sh{display:flex;align-items:baseline;gap:10px;padding:2px 4px 4px}
+  .sheet .sh b{font-size:15px}
+  .sheet .sh span{font-size:12px;opacity:.55}
+  .sheet .sh .x2{margin-left:auto;font-size:18px;opacity:.5;border:0;background:transparent;color:inherit;
+    min-width:44px;min-height:44px}
+  .sheet button.opt{display:flex;align-items:center;gap:12px;min-height:52px;padding:0 14px;
+    border-radius:14px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.11);
+    color:inherit;font-size:15px;text-align:left}
+  html[data-theme="light"] .sheet button.opt{background:rgba(255,255,255,.7);border-color:rgba(20,40,70,.10)}
+  .sheet button.opt[aria-current="true"]{border-color:rgba(124,186,240,.55);background:rgba(124,186,240,.16)}
+  .sheet button.opt .sub{font-size:12px;opacity:.55;margin-left:auto}
+  .sheet button.opt .ck{margin-left:auto;color:#9ecbf5;font-size:15px}
+  .sheet .scrollable{max-height:52vh;overflow-y:auto;display:flex;flex-direction:column;gap:9px}
+
+  /* 审批卡（手机批准/拒绝） */
+  .approval-slot:empty{display:none}
+  .approval .who{font-size:12px;opacity:.65;margin-bottom:6px}
+  .approval .cmd{font-family:ui-monospace,Menlo,monospace;font-size:12px;opacity:.8;word-break:break-all;
+    margin-top:8px;background:rgba(6,10,16,.4);padding:8px 10px;border-radius:8px;max-height:120px;overflow:auto}
+
+  /* 轨迹 tab：完整列表（按轮折叠） */
+  .trace-list{padding-bottom:80px}
+  .trace-sum{padding:14px 16px 6px;font-size:12.5px;opacity:.6;line-height:1.6}
+  .trace-turn{margin:10px 14px;padding:10px 12px;border-radius:14px;background:rgba(255,255,255,.045);
+    border:1px solid rgba(255,255,255,.09)}
+  html[data-theme="light"] .trace-turn{background:rgba(255,255,255,.62);border-color:rgba(20,40,70,.10)}
+  .trace-turn .th{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;opacity:.85}
+  .trace-turn .th .cnt{margin-left:auto;font-size:11.5px;font-weight:400;opacity:.55}
+  .trace-item{margin-top:8px;font-size:12.5px;line-height:1.6;border-left:2px solid rgba(124,186,240,.35);
+    padding-left:10px}
+  .trace-item .tl{font-size:11.5px;opacity:.5;margin-bottom:2px}
+  .trace-item.think{white-space:pre-wrap;opacity:.78;max-height:200px;overflow:auto}
+  .trace-item.tool{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;color:#9ecbf5;
+    word-break:break-all;white-space:pre-wrap;max-height:160px;overflow:auto}
+  .trace-empty{padding:28px 18px;text-align:center;font-size:13px;opacity:.55;line-height:1.7}
+
+  /* 图片大图查看 */
+  .viewer{position:fixed;inset:0;z-index:300;background:rgba(2,5,10,.92);display:flex;align-items:center;
+    justify-content:center;padding:16px}
+  .viewer img{max-width:100%;max-height:100%;object-fit:contain}
 </style>
 </head>
 <body>
@@ -311,24 +390,30 @@ html:not([data-theme]) .tabbar{background:rgba(255,255,255,.62);border-top-color
       <div class="meta"><span>耗时 3 秒</span><span>2 项上下文</span><span>1 次工具调用</span></div>
     </div>
     <div class="approval" id="approval-card">
+      <div class="who">示例（未连接时的静态样例，真机由真实审批替换）</div>
       <div>Agent 请求执行 <b>bash</b>：<code>rm -rf build/</code></div>
       <div class="acts">
         <button class="btn grow danger" id="btn-deny">拒绝</button>
-        <button class="btn grow primary" id="btn-allow">允许</button>
+        <button class="btn grow primary" id="btn-allow">允许一次</button>
       </div>
     </div>
+    <!-- 真审批卡由 app.js 插入这里（离线时保留上面的静态样例给排版断言） -->
+    <div class="approval-slot" id="approval-slot"></div>
+    <!-- 轨迹 tab：完整列表（思考 + 工具调用，按轮分组） -->
+    <div class="trace-list" id="trace-list" hidden></div>
   </main>
 
   <!-- 输入区 + 标签栏 -->
   <div class="composer">
+    <div class="att-strip" id="att-strip" hidden></div>
     <div class="chips-wrap"><div class="chips" id="chips">
-      <button class="chip" id="chip-attach">📎 附件</button>
+      <button class="chip" id="chip-attach"><svg class="ic" viewBox="0 0 24 24" width="16" height="16"><path d="M21.4 11.6l-8.9 8.9a5.6 5.6 0 0 1-7.9-7.9l9.6-9.6a3.8 3.8 0 0 1 5.4 5.4l-9.4 9.4a1.9 1.9 0 0 1-2.7-2.7l8.5-8.5"/></svg>附件</button>
       <button class="chip" id="chip-ws">未分组</button>
-      <button class="chip" id="chip-model">DeepSeek-V4</button>
-      <button class="chip" id="chip-effort">High</button>
+      <button class="chip" id="chip-model">模型</button>
+      <button class="chip" id="chip-effort">强度</button>
     </div></div>
     <div class="input-row">
-      <button class="icon-44" id="btn-plus" aria-label="更多"><svg class="ic" viewBox="0 0 24 24" width="20" height="20"><path d="M12 5v14M5 12h14"/></svg></button>
+      <button class="icon-44" id="btn-plus" aria-label="附件"><svg class="ic" viewBox="0 0 24 24" width="20" height="20"><path d="M12 5v14M5 12h14"/></svg></button>
       <textarea id="input" rows="1" placeholder="描述你想要构建的内容"></textarea>
       <button class="send" id="btn-send" aria-label="发送"><svg class="ic" viewBox="0 0 24 24" width="20" height="20"><path d="M5 4l14 8-14 8z" fill="currentColor" stroke="none"/></svg></button>
     </div>
@@ -339,7 +424,32 @@ html:not([data-theme]) .tabbar{background:rgba(255,255,255,.62);border-top-color
     <button id="nav-me"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/></svg>我的</button>
   </nav>
 </div>
-<script src="app.js?v=20261018c"></script>
+<!-- 底部动作面板（附件 / 模型 / 强度）—— 只在真机上由 app.js 打开 -->
+<div class="sheet-mask" id="sheet-attach" hidden>
+  <div class="sheet">
+    <div class="sh"><b>发送附件</b><span>图片压缩后再传，省流量</span><button class="x2" data-close-sheet="sheet-attach" aria-label="关闭">✕</button></div>
+    <button class="opt" id="att-camera"><svg class="ic" viewBox="0 0 24 24" width="22" height="22"><path d="M4 8h3l2-2h6l2 2h3v12H4z"/><circle cx="12" cy="13" r="3.4"/></svg>拍照</button>
+    <button class="opt" id="att-gallery"><svg class="ic" viewBox="0 0 24 24" width="22" height="22"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.6"/><path d="M4 18l5-5 4 4 3-3 4 4"/></svg>从相册选择</button>
+    <button class="opt" id="att-file"><svg class="ic" viewBox="0 0 24 24" width="22" height="22"><path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4"/></svg>选择文件</button>
+  </div>
+</div>
+<div class="sheet-mask" id="sheet-model" hidden>
+  <div class="sheet">
+    <div class="sh"><b>选择模型</b><span id="sheet-model-sub"></span><button class="x2" data-close-sheet="sheet-model" aria-label="关闭">✕</button></div>
+    <div class="scrollable" id="model-list"></div>
+  </div>
+</div>
+<div class="sheet-mask" id="sheet-effort" hidden>
+  <div class="sheet">
+    <div class="sh"><b>推理强度</b><span>越强越慢，按需选</span><button class="x2" data-close-sheet="sheet-effort" aria-label="关闭">✕</button></div>
+    <div class="scrollable" id="effort-list"></div>
+  </div>
+</div>
+<div class="viewer" id="viewer" hidden><img id="viewer-img" alt="附件图片"></div>
+<input type="file" id="file-camera" accept="image/*" capture="environment" hidden>
+<input type="file" id="file-gallery" accept="image/*" hidden>
+<input type="file" id="file-any" hidden>
+<script src="app.js?v=20261019b"></script>
 <script>
   // 仅用于骨架/断言联调：切换两个主页面
   window.__dshMobile = {
@@ -364,10 +474,19 @@ html:not([data-theme]) .tabbar{background:rgba(255,255,255,.62);border-top-color
       if (chips) chips.style.display = onChat ? '' : 'none';
       if (tabbar) tabbar.style.display = onConnect || onChat ? 'none' : '';
       document.querySelectorAll('.tabbar button').forEach((b)=>b.removeAttribute('aria-current'));
-      document.getElementById(name === 'list' ? 'nav-chat' : 'nav-chat').setAttribute('aria-current','page');
+      // 列表与聊天都算「会话」tab；任务/我的各有自己的 tab（以前写死 nav-chat，点「我的」高亮错）
+      var navId = name === 'tasks' ? 'nav-tasks' : (name === 'mine' ? 'nav-me' : 'nav-chat');
+      var navEl = document.getElementById(navId);
+      if (navEl) navEl.setAttribute('aria-current','page');
+      // 交给数据层：离开聊天页要断 SSE、离开轨迹要停轮询（省电、也避免"手机在口袋里还被当成在看"）
+      if (window.__dshPageChanged) { try { window.__dshPageChanged(name); } catch (e) {} }
     },
   };
-  document.getElementById('nav-chat').addEventListener('click',()=>window.__dshMobile.showPage('chat'));
+  // 底部三个 tab：会话 → 列表；任务 → 任务页；我的 → 我的页
+  document.getElementById('nav-chat').addEventListener('click',function(){
+    window.__dshMobile.showPage('list');
+    if (window.__dshBackToList) window.__dshBackToList();
+  });
   document.getElementById('nav-tasks').addEventListener('click',function(){
     window.__dshMobile.showPage('tasks');
     if (window.__dshLoadTasks) window.__dshLoadTasks();
@@ -376,9 +495,8 @@ html:not([data-theme]) .tabbar{background:rgba(255,255,255,.62);border-top-color
     window.__dshMobile.showPage('mine');
     if (window.__dshRenderMine) window.__dshRenderMine();
   });
-  document.getElementById('nav-me').addEventListener('click',()=>window.__dshMobile.showPage('list'));
   // 返回 / 新建会话 / 刷新 —— 以前**画了没接线**（真机反馈：点进会话退不出 ✗）
-  // 外观切换（☀/🌙）：三态「跟随系统 → 浅色 → 深色」
+  // 外观切换：三态「跟随系统 → 浅色 → 深色」
   // 无 data-theme = 跟随系统（由 @media 控制）；手动选择才写 data-theme 固定
   (function () {
     var btn = document.getElementById('btn-settings');
@@ -396,7 +514,7 @@ html:not([data-theme]) .tabbar{background:rgba(255,255,255,.62);border-top-color
     btn.addEventListener('click', function () {
       cur = order[(order.indexOf(cur) + 1) % order.length];
       apply(cur);
-      if (typeof toast === 'function') toast(cur === '' ? '外观：跟随系统' : (cur === 'light' ? '外观：浅色' : '外观：深色'));
+      if (window.__dshToast) window.__dshToast(cur === '' ? '外观：跟随系统' : (cur === 'light' ? '外观：浅色' : '外观：深色'));
     });
   })();
   (function () {
@@ -437,29 +555,78 @@ html:not([data-theme]) .tabbar{background:rgba(255,255,255,.62);border-top-color
     }
   })();
 
-  // 轨迹 tab
+  // 对话 / 轨迹 两个 tab（轨迹是完整列表视图，不是事件流截断）
   (function () {
     var t = document.getElementById('tab-trace');
     var c = document.getElementById('tab-chat');
     if (t) t.addEventListener('click', function () {
       c.setAttribute('aria-selected','false'); t.setAttribute('aria-selected','true');
-      if (window.dshMobileTrajectory) window.dshMobileTrajectory();
+      if (window.__dshShowTrace) window.__dshShowTrace();
     });
     if (c) c.addEventListener('click', function () {
       t.setAttribute('aria-selected','false'); c.setAttribute('aria-selected','true');
-      if (window.dshMobileReloadChat) window.dshMobileReloadChat();
+      if (window.__dshShowChat) window.__dshShowChat();
     });
   })();
-  // 发送：接真实数据层（离线时是预览）
+
+  // 底部动作面板：附件 / 模型 / 强度（app.js 里装内容）
+  (function () {
+    function closeAll() {
+      Array.prototype.slice.call(document.querySelectorAll('.sheet-mask')).forEach(function (m) { m.hidden = true; });
+    }
+    function open(id) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      closeAll();
+      el.hidden = false;
+    }
+    var openers = [
+      ['chip-attach', 'sheet-attach', null],
+      ['btn-plus', 'sheet-attach', null],
+      ['chip-model', 'sheet-model', function () { if (window.__dshOpenModelSheet) window.__dshOpenModelSheet(); }],
+      ['chip-effort', 'sheet-effort', function () { if (window.__dshOpenEffortSheet) window.__dshOpenEffortSheet(); }],
+    ];
+    openers.forEach(function (it) {
+      var b = document.getElementById(it[0]);
+      if (!b) return;
+      b.addEventListener('click', function () {
+        if (it[2]) it[2]();
+        open(it[1]);
+      });
+    });
+    // 附件面板里的三个动作 → app.js
+    [['att-camera', 'camera'], ['att-gallery', 'gallery'], ['att-file', 'file']].forEach(function (it) {
+      var b = document.getElementById(it[0]);
+      if (!b) return;
+      b.addEventListener('click', function () {
+        closeAll();
+        if (window.__dshPick) window.__dshPick(it[1]);
+      });
+    });
+    // ✕ / 点遮罩关闭
+    Array.prototype.slice.call(document.querySelectorAll('[data-close-sheet]')).forEach(function (b) {
+      b.addEventListener('click', closeAll);
+    });
+    Array.prototype.slice.call(document.querySelectorAll('.sheet-mask')).forEach(function (m) {
+      m.addEventListener('click', function (e) { if (e.target === m) closeAll(); });
+    });
+    window.__dshCloseSheets = closeAll;
+    // 大图查看：点任意位置关闭
+    var viewer = document.getElementById('viewer');
+    if (viewer) viewer.addEventListener('click', function () { viewer.hidden = true; });
+  })();
+
+  // 发送：接真实数据层（离线时是预览；有附件时允许空文字发送）
   (function () {
     var input = document.getElementById('input');
     var send = document.getElementById('btn-send');
     function doSend() {
       var text = (input.value || '').trim();
-      if (!text || !window.dshMobileSend) return;
+      var hasAtt = window.__dshPendingCount ? window.__dshPendingCount() > 0 : false;
+      if ((!text && !hasAtt) || !window.dshMobileSend) return;
       send.disabled = true;
       Promise.resolve(window.dshMobileSend(text)).then(function () {
-        input.value = '';
+        if (window.__dshClearInput) window.__dshClearInput();
         send.disabled = false;
       }).catch(function () { send.disabled = false; });
     }
@@ -467,6 +634,7 @@ html:not([data-theme]) .tabbar{background:rgba(255,255,255,.62);border-top-color
     if (input) input.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSend(); }
     });
+    window.__dshDoSend = doSend;
   })();
 </script>
 </body>

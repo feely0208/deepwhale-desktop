@@ -52,6 +52,25 @@ if (!/token:\s*gatewaySessionToken/.test(mainPanel)) {
   problems.push('面板没有把网关令牌持久化（重启后手机必须重新配对）');
 }
 if (!/lastGatewayToken/.test(mainPanel)) problems.push('面板启动时没有复用上次的令牌');
+// 「换一个配对码」不能连令牌一起换：2026-10-19 真机根因 ——
+//   旧实现调 gateway.rotate()（换令牌）却只持久化配对码 → 状态文件留旧令牌 →
+//   桌面重启复用旧令牌 → 手机上已保存的令牌全部 401，被迫反复扫码。
+// ⚠️ 必须在**去掉注释后的代码**里判断：说明文字里提到 gateway.rotate() 不算违规（第一版就误报了）
+const mainPanelCode = mainPanel.replace(/^\s*\/\/.*$/gm, '');
+if (/gateway\.rotate\(\)/.test(mainPanelCode)) {
+  problems.push('「换一个配对码」调了 gateway.rotate()（会连令牌一起换，已配对的手机全部 401）→ 应改用 rotatePairCode()');
+}
+if (!/rotatePairCode\(\)/.test(mainPanelCode)) problems.push('「换一个配对码」没有调用 rotatePairCode()（只换码不换令牌）');
+// 开启后必须把 enabled=true 写回：否则重启后 autoStartMobileGateway() 永远跳过
+if (!/rememberEnabled\(true\)/.test(mainPanel)) {
+  problems.push('开启手机访问后没有写 enabled=true → 重启不会自动恢复（旧代码只有 rememberEnabled(false)）');
+}
+// 自动恢复必须挂在**启动流程**（DSH 就绪后），不能只挂在「手机连接」菜单回调里：
+//   否则用户重启桌面后不点菜单 → 网关不开 → 手机必 401（2026-10-19 真机定位）
+const autoStartCalls = (index.match(/void ensureMobileGatewayAutoStart\(\)/g) || []).length;
+if (autoStartCalls < 2) {
+  problems.push(`自动恢复只在「手机连接」菜单里触发（启动流程里没有）→ 重启后网关不开；实际调用点 ${autoStartCalls} 处`);
+}
 // 在线二维码服务会把"一次性钥匙"递出去
 if (/api\.qrserver|chart\.googleapis|quickchart|qrserver\.com/.test(panel + mainPanel)) {
   problems.push('面板引用了**在线**二维码服务（配对载荷不该发给第三方）');

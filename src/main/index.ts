@@ -442,6 +442,30 @@ function openSettingsPage(): void {
  * 而网关需要它去与 DSH 建立会话（凭据留在网关内，不下发手机）。
  */
 let mobilePanelInited = false;
+/** 面板初始化只做一次（注册 IPC、拿到取 DSH 端点的方法） */
+function initMobilePanelOnce(): void {
+  if (mobilePanelInited) return;
+  initMobilePanel(() => service?.getWebEndpoint() ?? null);
+  mobilePanelInited = true;
+}
+/**
+ * 手机访问自动恢复：**DSH 就绪后**就把上次开着的网关+隧道拉起来。
+ *
+ * ⚠️ 为什么必须单独抽出来（2026-10-19 真机定位的根因）：
+ *   旧实现把 autoStartMobileGateway() 写在 showMobileConnect() 里 —— 也就是
+ *   **用户点「手机连接」菜单时才执行**。用户重启桌面后不去点那个菜单，网关根本
+ *   不开；手机拿着旧地址来连 → 401/连不上（"重启就要重新扫码"的直接原因之一）。
+ *   现在启动流程在 await service.ensureReady() 之后调这里，不需要用户操作。
+ */
+async function ensureMobileGatewayAutoStart(): Promise<void> {
+  try {
+    initMobilePanelOnce();
+    const started = await autoStartMobileGateway();
+    console.log('[mobile] 自动恢复手机访问:', started ? '已开启' : '上次是关闭状态（跳过）');
+  } catch (e) {
+    console.log('[mobile] 自动开启手机访问失败:', String((e as Error)?.message ?? e));
+  }
+}
 async function showMobileConnect(): Promise<void> {
   // ⚠️ 这里原先有个 `if (!store.get('lanAccess'))` 的闸门，指引用户"去设置里打开"——
   //    但设置里**根本没有**这个开关（1.0.59 实测：用户点「手机连接」只得到一句
@@ -449,15 +473,9 @@ async function showMobileConnect(): Promise<void> {
   //    这个开关管的是**旧方案**（把 DSH 绑 0.0.0.0，正是 1.0.58 事故源头）。
   //    1.0.59 起局域网访问由壳自己的 mobile-gateway.ts 提供 —— 面板不再需要它，
   //    面板上的「开启手机访问」就是唯一的开关。
-  if (!mobilePanelInited) {
-    initMobilePanel(() => service?.getWebEndpoint() ?? null);
-  // 手机访问自动恢复：上次开着的话，DSH 就绪后自动拉起网关+隧道
-  // （用户痛点：每次重启都要手点，忘了点出门就白搭 ✗）
-  void autoStartMobileGateway().catch((e) => {
-    console.log('[mobile] 自动开启手机访问失败:', String((e as Error)?.message ?? e));
-  });
-    mobilePanelInited = true;
-  }
+  initMobilePanelOnce();
+  // 兜底：正常启动流程已经自动开过；万一没开（比如 DSH 当时没就绪），点面板时再试一次
+  void ensureMobileGatewayAutoStart();
   showMobilePanel();
 }
 
@@ -1769,6 +1787,10 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
       await service.ensureReady();
       dshReady = true;
       if (SMOKE) console.log('[smoke] DSH ready (reused or spawned)');
+      // 手机访问自动恢复（2026-10-19 修）：必须在这里拉起，不能等用户点「手机连接」菜单。
+      // 见 ensureMobileGatewayAutoStart() 的注释：旧实现放在菜单回调里 →
+      // 用户重启桌面后不开面板 → 网关不开 → 手机必 401。
+      void ensureMobileGatewayAutoStart();
       // 首次启动：DSH 这时才建好 profiles/web，补齐 profile 侧注入并让窗口重载，
       // 否则页面已经按"没有该插件"的入口图渲染过了。
       // 这一段单独兜底：注入失败不能被当成"DSH 启动失败"弹错框。

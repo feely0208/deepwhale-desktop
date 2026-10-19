@@ -173,6 +173,19 @@ function firstChunkMs(port, token) {
     const newTok = await req({ host: '127.0.0.1', port: P, path: `/?token=${rotated.token}`, method: 'GET' });
     ok(newTok.status === 200, `轮换后新令牌 200（实际 ${newTok.status}）`);
 
+    // ⑦b 只换配对码（面板「换一个配对码」用的这个）：令牌必须**继续有效**，旧码作废、新码可用
+    //     —— 旧实现把令牌一起换掉，已配对的手机全被踢下线（真机 401 的根因之一）
+    const beforePair = gw.session.pairCode;
+    const beforeTok = gw.session.token;
+    const onlyCode = gw.rotatePairCode();
+    ok(onlyCode.token === beforeTok, '只换配对码时令牌不变');
+    const oldCodeResp = await req({ host: '127.0.0.1', port: P, path: `/__pair?code=${beforePair}`, method: 'GET' });
+    ok(oldCodeResp.status === 403, `只换配对码后旧配对码 403（实际 ${oldCodeResp.status}）`);
+    const newCodeResp = await req({ host: '127.0.0.1', port: P, path: `/__pair?code=${onlyCode.pairCode}`, method: 'GET' });
+    ok(newCodeResp.status === 200, `新配对码可用（实际 ${newCodeResp.status}）`);
+    const stillTok = await req({ host: '127.0.0.1', port: P, path: `/?token=${beforeTok}`, method: 'GET' });
+    ok(stillTok.status === 200, `换配对码后已配对令牌仍有效（实际 ${stillTok.status}）`);
+
     // ③ 过期（等待超过 TTL 后，新配对码也要能用旧的过期逻辑验证）
     const expiredGw = await startMobileGateway({
       dshBase: `http://127.0.0.1:${stub.port}`, dshToken: DSH_TOKEN, pairTtlMs: 50,

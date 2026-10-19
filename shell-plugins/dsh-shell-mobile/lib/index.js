@@ -21,12 +21,21 @@
  *     手机必须经我们的网关（网关负责配对与令牌）。
  *   · 本插件只接受**回环地址**来的请求 —— 多一道闸，防止本机其它程序越权。
  *
- * 现阶段实现范围
+ * 现阶段实现范围（v0.2.0，2026-10-19）
  *   /mobile/api/health          健康检查（通了/没通一眼可见）
  *   /mobile/api/_services       **自报家底**：把注入到的服务与其方法名 dump 出来
  *   /mobile/api/sessions        会话列表（尽力而为：服务形状不认识时如实返回原因，不抛异常）
- *   /mobile/api/session?id=…    单个会话（详情/消息，同上"尽力而为"）
- *   /mobile/api/prompt          （未实现，明确返回 not-implemented，绝不假装成功）
+ *   /mobile/api/session?id=…    单个会话（详情/消息 + chips 元信息 + chat）
+ *   /mobile/api/chat?id=…       **聊天全文 + 附件元数据**（增量解析事件日志，见 readSessionChat）
+ *   /mobile/api/attachment?id=&sid=…  附件字节（只允许本会话日志引用过的 id）
+ *   /mobile/api/stream?id=…     SSE：chat（全文/附件）+ turns（投影）+ approval（待审批）
+ *   /mobile/api/approvals?sid=… 待审批列表（轮询兜底）
+ *   /mobile/api/approval/answer 手机批准/拒绝（POST {id,outcome}）
+ *   /mobile/api/prompt          发消息（文本；附件走 DSH 官方 RPC，见交接文档）
+ *   /mobile/api/trajectory      轨迹（事件时间线）
+ *   /mobile/api/trace           思考 + 工具调用（按轮）
+ *   /mobile/api/tasks           定时任务
+ *   /mobile/api/plugins         插件清单
  *
  * ⚠️ 「尽力而为 + 如实返回原因」是刻意的：宁可接口明确说"我还不认识这个服务的形状"，
  *    也不要返回一个看起来成功、实际是空的数据（那是假绿，桌面端已经吃过亏）。
@@ -61,7 +70,7 @@ export const inject = ['webServer'];
 /** 路由前缀（网关与手机端都按这个约定来） */
 export const ROUTE = '/mobile/api';
 
-const PLUGIN_VERSION = '0.1.0';
+const PLUGIN_VERSION = '0.2.0';
 
 /** 只允许回环地址访问（DSH 本来也只监听回环；这是第二道闸） */
 function isLoopback(req) {
@@ -236,6 +245,129 @@ export function readProjectionMeta(id, home) {
 
 
 /**
+ * 会话摘要（标题/最后活动/工作区/轮数/预览）—— 从投影缓存读，按 mtime 缓存。
+ *
+ * 为什么列表不能只靠 `sessions.list()`：那个接口返回的是**进程内活着的会话**
+ * （dsh-session 的 SessionManager.list() = store 里的 live sessions）。
+ * 桌面重启后 DSH 是全新进程，除非桌面 UI 恰好把某个会话重新打开，否则**一个都不活**
+ * → 手机端列表直接空白（2026-10-19 发现：临时 DSH 里创建过带附件的会话，
+ * 重启后 /mobile/api/sessions 返回 count=0）。
+ * 所以列表必须**以磁盘上的会话为准**，live 信息只作为补充/覆盖。
+ */
+const projSummaryCache = new Map();
+function readProjectionSummary(id, home) {
+  const base = home || process.env.DSH_HOME || '';
+  if (!base || !id) return null;
+  const file = joinPath(base, 'storages', 'session_projcache', 'sessions', `${id}.json`);
+  try {
+    const st = statSyncFs(file);
+    const cached = projSummaryCache.get(id);
+    if (cached && cached.file === file && cached.mtimeMs === st.mtimeMs) return cached;
+    const rec = JSON.parse(readFileSyncFs(file, 'utf8'))?.record ?? {};
+    const rows = rec.rows ?? {};
+    const title = typeof rows.title?.val === 'string' ? rows.title.val : '';
+    const lastPromptAt = typeof rows.sessionListMetadata?.val?.lastPromptAt === 'number' ? rows.sessionListMetadata.val.lastPromptAt : null;
+    const workspace = typeof rows.workingDirectory?.val === 'string' ? rows.workingDirectory.val : '';
+    const turns = readProjectionTurns(id, home);
+    const last = turns.length ? turns[turns.length - 1] : null;
+    const preview = last ? String(last.response || last.prompt || '').replace(/\s+/g, ' ').trim().slice(0, 80) : '';
+    const summary = { file, mtimeMs: st.mtimeMs, title, lastPromptAt, workspace, turnCount: turns.length, preview };
+    if (projSummaryCache.size > 400) projSummaryCache.clear(); // 防内存无界（正常用户远小于此）
+    projSummaryCache.set(id, summary);
+    return summary;
+  } catch {
+    return null;
+  }
+}
+
+/** 磁盘上存在的事件日志里，这个会话的「最后活动时间」近似值（投影缓存没有时用文件 mtime） */
+function sessionFileMtime(dirPath) {
+  try {
+    return statSyncFs(joinPath(dirPath, 'session.v4.jsonl.zstd')).mtimeMs;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * 枚举 `<DSH_HOME>/sessions/<workspace>/<sessionId>/` 得到**持久化会话列表**。
+ * 只读；目录形状不稳定时返回部分结果（不抛）。
+ */
+export function listPersistedSessions(home) {
+  const base = home || process.env.DSH_HOME || '';
+  if (!base) return [];
+  const root = joinPath(base, 'sessions');
+  const out = [];
+  let workspaces = [];
+  try {
+    workspaces = readdirSync(root, { withFileTypes: true }).filter((d) => d.isDirectory());
+  } catch {
+    return [];
+  }
+  for (const ws of workspaces) {
+    const wsDir = joinPath(root, ws.name);
+    let ids = [];
+    try {
+      ids = readdirSync(wsDir, { withFileTypes: true }).filter((d) => d.isDirectory());
+    } catch {
+      continue;
+    }
+    for (const entry of ids) {
+      const id = entry.name;
+      if (!id || id.startsWith('.')) continue;
+      const dir = joinPath(wsDir, id);
+      const mtime = sessionFileMtime(dir);
+      const summary = readProjectionSummary(id, home);
+      out.push({
+        id,
+        title: summary?.title && summary.title.trim() !== '' ? summary.title : null,
+        updatedAt: summary?.lastPromptAt ?? mtime ?? null,
+        workspace: summary?.workspace || null,
+        turnCount: summary?.turnCount ?? 0,
+        preview: summary?.preview ?? '',
+      });
+    }
+  }
+  return out;
+}
+
+/** 时间比较用：number 直接用、字符串尽力 parse（解析不了当 0） */
+function numericTime(row) {
+  const v = row?.updatedAt;
+  if (typeof v === 'number' && isFinite(v)) return v;
+  if (typeof v === 'string') {
+    const t = Date.parse(v);
+    return isNaN(t) ? 0 : t;
+  }
+  return 0;
+}
+
+/** live 行（进程内）优先覆盖磁盘行；合并后按最后活动倒序 */
+function mergeSessionRows(liveRows, diskRows) {
+  const byId = new Map();
+  for (const row of diskRows || []) if (row?.id) byId.set(row.id, row);
+  for (const row of liveRows || []) {
+    if (!row?.id) continue;
+    const prev = byId.get(row.id);
+    if (!prev) {
+      byId.set(row.id, row);
+      continue;
+    }
+    // live 的 title/updatedAt 可能更准（刚聊完），磁盘的 turnCount/preview 更全 → 合并而不是覆盖
+    byId.set(row.id, {
+      ...prev,
+      ...row,
+      title: row.title ?? prev.title,
+      updatedAt: row.updatedAt ?? prev.updatedAt,
+      workspace: row.workspace ?? prev.workspace,
+      turnCount: row.turnCount || prev.turnCount || 0,
+      preview: row.preview || prev.preview || '',
+    });
+  }
+  return [...byId.values()].sort((a, b) => numericTime(b) - numericTime(a));
+}
+
+/**
  * 读会话事件流里的**思考过程 + 工具调用**（手机端聊天里"思考"折叠块的数据源）。
  *
  * 数据源：`<DSH_HOME>/sessions/<工作区>/<会话id>/session.v4.jsonl.zstd`
@@ -317,10 +449,319 @@ export async function readSessionTrace(id, home) {
   };
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+ * 会话聊天全文 + 附件（手机端聊天页的数据源）
+ * ──────────────────────────────────────────────────────────────────────
+ * 为什么不用投影里的 turnOutline：
+ *   · prompt 被**截断到 50 字符**（PROMPT_PREVIEW_LIMIT），手机上看不到完整用户话；
+ *   · 只有 text 块 —— 图片/文件附件在里面**完全不存在**（2026-10-19 实测真会话日志：
+ *     user/message.data.content 里是 {type:'image'|'file', attachment:{…}}）。
+ * 所以直接读 DSH 真正的事件日志（session.v4.jsonl.zstd），**增量解析 + 内存缓存**：
+ *   · .zstd 是多帧拼接 → 按魔数切帧逐个解（同一套已验证的逻辑，见 readSessionTrace）；
+ *   · 文件只会追加 → 记下已消费到的字节偏移，下次只解新帧（不重复解十几 MB）；
+ *   · 末帧可能正在写 → 解不开就**不推进偏移**，下一秒重试。
+ * 事件形状（2026-10-19 在用户真会话里核对过）：
+ *   {"type":"user/message","data":{"content":[
+ *      {"type":"image","attachment":{"attachmentId":"sha256:…","mediaType":"image/png","width":…,"height":…,"bytes":…,"name":"…"}},
+ *      {"type":"file","attachment":{"attachmentId":"sha256:…","name":"fault.log","bytes":66042}},
+ *      {"type":"text","text":"…"}],"source":{"kind":"user"},…}}
+ *   {"type":"assistant/message","data":{"turn":…,"message":{"content":[{"type":"text","text":"…"}]}}}
+ * 只读、不改；解析失败返回已有的（不抛）。
+ */
+const ZSTD_MAGIC = Buffer.from([0x28, 0xb5, 0x2f, 0xfd]);
+/** 会话 id → 日志文件路径（避免每次全盘 readdir） */
+const sessionFileCache = new Map();
+/** 会话 id → 增量解析状态 {file, offset, size, mtimeMs, lineTail, turns, byTurn, currentTurn} */
+const chatCache = new Map();
+/** 缓存上限：手机端最多同时看几个会话；超了丢最老的，防内存涨 */
+const CHAT_CACHE_MAX = 24;
+
+function findSessionFile(id, base) {
+  const cached = sessionFileCache.get(id);
+  if (cached && cached.base === base) {
+    try {
+      statSyncFs(cached.file);
+      return cached.file;
+    } catch {
+      sessionFileCache.delete(id);
+    }
+  }
+  const root = joinPath(base, 'sessions');
+  let file = '';
+  try {
+    for (const ws of readdirSync(root)) {
+      const cand = joinPath(root, ws, id, 'session.v4.jsonl.zstd');
+      try {
+        if (statSyncFs(cand).isFile()) {
+          file = cand;
+          break;
+        }
+      } catch {
+        /* 不在这个工作区 */
+      }
+    }
+  } catch {
+    return '';
+  }
+  if (file) sessionFileCache.set(id, { base, file });
+  return file;
+}
+
+/** 把 DSH 的 content 块整理成手机端认的附件元数据（**不带字节**，字节走 /mobile/api/attachment） */
+function mobilePartsOf(content) {
+  const out = [];
+  for (const part of Array.isArray(content) ? content : []) {
+    if (!part || typeof part !== 'object') continue;
+    if (part.type === 'text' && typeof part.text === 'string') {
+      out.push({ type: 'text', text: part.text });
+    } else if (part.type === 'image' && part.attachment && typeof part.attachment === 'object') {
+      const a = part.attachment;
+      out.push({
+        type: 'image',
+        attachmentId: String(a.attachmentId ?? ''),
+        mediaType: String(a.mediaType ?? ''),
+        width: typeof a.width === 'number' ? a.width : null,
+        height: typeof a.height === 'number' ? a.height : null,
+        bytes: typeof a.bytes === 'number' ? a.bytes : null,
+        name: typeof a.name === 'string' ? a.name : '',
+      });
+    } else if (part.type === 'file' && part.attachment && typeof part.attachment === 'object') {
+      const a = part.attachment;
+      out.push({
+        type: 'file',
+        attachmentId: String(a.attachmentId ?? ''),
+        name: typeof a.name === 'string' ? a.name : '',
+        bytes: typeof a.bytes === 'number' ? a.bytes : null,
+      });
+    }
+  }
+  return out;
+}
+
+function emptyChatState(file) {
+  return {
+    file,
+    offset: 0,
+    size: 0,
+    mtimeMs: 0,
+    lineTail: '',
+    turns: [],
+    byTurn: new Map(),
+    currentTurn: null,
+  };
+}
+
+function applyChatEvent(state, ev) {
+  const type = String(ev?.type ?? '');
+  const d = ev?.data ?? {};
+  if (type === 'turn/start') {
+    const n = typeof d.turn === 'number' ? d.turn : state.turns.length + 1;
+    const turn = { turn: n, prompt: '', promptParts: [], response: '', time: ev?.time ?? null };
+    state.currentTurn = n;
+    state.turns.push(turn);
+    state.byTurn.set(n, turn);
+    return;
+  }
+  if (type === 'user/message') {
+    if (d?.source?.kind !== 'user') return; // 运行时上下文/技能清单等注入不算聊天
+    const turn = state.byTurn.get(state.currentTurn);
+    if (!turn || turn.prompt !== '' || turn.promptParts.length > 0) return;
+    const parts = mobilePartsOf(d.content);
+    turn.promptParts = parts;
+    turn.prompt = parts
+      .filter((p) => p.type === 'text')
+      .map((p) => p.text)
+      .join('\n')
+      .trim();
+    return;
+  }
+  if (type === 'assistant/message') {
+    const turn = state.byTurn.get(state.currentTurn);
+    if (!turn) return;
+    const text = mobilePartsOf(d?.message?.content)
+      .filter((p) => p.type === 'text')
+      .map((p) => p.text)
+      .join('\n')
+      .trim();
+    if (text !== '') turn.response = text; // 最新一条文本即本轮可见回复（与投影 turnOutline 一致）
+  }
+}
+
+function applyChatText(state, text) {
+  const combined = state.lineTail + text;
+  const lines = combined.split('\n');
+  state.lineTail = lines.pop() ?? '';
+  for (const line of lines) {
+    if (line.trim() === '') continue;
+    let ev;
+    try {
+      ev = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    try {
+      applyChatEvent(state, ev);
+    } catch {
+      /* 单条坏事件不影响整体 */
+    }
+  }
+}
+
+/**
+ * 读一个会话的聊天（全文 + 附件元数据），增量解析、带缓存。
+ * @param {string} id 会话 id
+ * @param {string} [home] DSH_HOME（测试可传）
+ * @returns {{ok:boolean, reason?:string, turns:Array, count:number, changed:boolean}}
+ */
+export function readSessionChat(id, home) {
+  const base = home || process.env.DSH_HOME || '';
+  if (!base || !id) return { ok: false, reason: 'bad-input', turns: [], count: 0, changed: false };
+  const file = findSessionFile(id, base);
+  if (!file) return { ok: false, reason: 'session-file-not-found', turns: [], count: 0, changed: false };
+  let st;
+  try {
+    st = statSyncFs(file);
+  } catch {
+    return { ok: false, reason: 'stat-failed', turns: [], count: 0, changed: false };
+  }
+  let state = chatCache.get(id);
+  if (state && state.file !== file) state = null;
+  if (state && state.size === st.size && state.mtimeMs === st.mtimeMs) {
+    return { ok: true, turns: state.turns, count: state.turns.length, changed: false };
+  }
+  if (!state) {
+    state = emptyChatState(file);
+    if (chatCache.size >= CHAT_CACHE_MAX) {
+      const oldest = chatCache.keys().next().value;
+      if (oldest !== undefined) chatCache.delete(oldest);
+    }
+    chatCache.set(id, state);
+  }
+  let buf;
+  try {
+    buf = readFileSyncFs(file);
+  } catch {
+    return { ok: false, reason: 'read-failed', turns: state.turns, count: state.turns.length, changed: false };
+  }
+  if (buf.length < state.offset) {
+    // 文件被替换/截断 → 从头来
+    state = emptyChatState(file);
+    chatCache.set(id, state);
+  }
+  let pos = state.offset;
+  let consumed = state.offset;
+  for (;;) {
+    const magic = buf.indexOf(ZSTD_MAGIC, pos);
+    if (magic < 0) break;
+    const next = buf.indexOf(ZSTD_MAGIC, magic + 4);
+    const end = next < 0 ? buf.length : next;
+    let text;
+    try {
+      text = zstdDecompressSync(buf.subarray(magic, end)).toString('utf8');
+    } catch {
+      // 最后一帧可能还在写 → 不推进偏移，下次重试；中间坏帧 → 跳过
+      if (next < 0) break;
+      pos = next;
+      consumed = next;
+      continue;
+    }
+    applyChatText(state, text);
+    if (next < 0) {
+      consumed = buf.length;
+      break;
+    }
+    pos = next;
+    consumed = next;
+  }
+  state.offset = consumed;
+  state.size = st.size;
+  state.mtimeMs = st.mtimeMs;
+  return { ok: true, turns: state.turns, count: state.turns.length, changed: true };
+}
+
+/** 从聊天缓存里按 attachmentId 找到附件元数据（看图/下文件要用） */
+export function findChatAttachment(id, attachmentId, home) {
+  const chat = readSessionChat(id, home);
+  for (const turn of chat.turns || []) {
+    for (const part of turn.promptParts || []) {
+      if (part.type !== 'text' && part.attachmentId === attachmentId) return part;
+    }
+  }
+  return null;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+ * 审批（手机批准 / 拒绝）
+ * ──────────────────────────────────────────────────────────────────────
+ * 宿主侧的审批是 `approval/request` **waterfall**：answerer 返回
+ * allowed-once / rejected / cancelled；返回 undefined 表示交给下一个 listener。
+ * 桌面网页的审批面板也是 waterfall 里的一个 listener（经 Remote Event 转发）。
+ *
+ * 策略（手机优先，但不霸占）：
+ *   · 只有**手机正开着这个会话的实时流**（SSE，页面可见）时才接管 ——
+ *     因为此时用户显然在看手机；
+ *   · 接管后等手机上点「允许/拒绝」；超时（60s）或请求被 abort → 交回桌面
+ *     （`next()`），桌面面板照常出现，不会把桌面卡死；
+ *   · 手机页面不可见就断开 SSE（app.js 里做了 visibilitychange）→ 不会出现
+ *     "手机在口袋里，桌面干等"的情况。
+ * 这是取舍，不是完美方案：桌面端面板在超时后才出现（最长 60s）。理由写在
+ * 交接文档里，别偷偷改策略。
+ */
+const APPROVAL_WAIT_MS = 60 * 1000;
+/** sessionId → SSE 连接数（>0 表示手机正看着这个会话） */
+const watchingSessions = new Map();
+/** 待回答的审批：id → {id, sessionId, toolName, callId, reason, displayReason, createdAt, finish, timer} */
+const pendingApprovals = new Map();
+/** sessionId → Set<{send}>（SSE 推送审批变化用） */
+const sseClients = new Map();
+let approvalCounter = 0;
+
+function publicApproval(entry) {
+  return {
+    id: entry.id,
+    sessionId: entry.sessionId,
+    toolName: entry.toolName,
+    callId: entry.callId,
+    reason: entry.reason,
+    displayReason: entry.displayReason,
+    createdAt: entry.createdAt,
+    ageMs: Date.now() - entry.createdAt,
+    timeoutMs: APPROVAL_WAIT_MS,
+  };
+}
+
+function approvalsFor(sessionId) {
+  const out = [];
+  for (const entry of pendingApprovals.values()) {
+    if (!sessionId || entry.sessionId === sessionId) out.push(publicApproval(entry));
+  }
+  return out;
+}
+
+function notifyApprovals(sessionId) {
+  const clients = sseClients.get(sessionId);
+  if (!clients) return;
+  const payload = { approvals: approvalsFor(sessionId) };
+  for (const client of clients) {
+    try {
+      client.send('approval', payload);
+    } catch {
+      /* 单个连接坏了不影响别人 */
+    }
+  }
+}
+
 export function apply(ctx) {
   const log = (m) => {
     try {
       ctx.logger?.info?.(`[shell-mobile] ${m}`);
+    } catch {
+      /* 日志失败不影响功能 */
+    }
+  };
+  const warn = (m) => {
+    try {
+      ctx.logger?.warn?.(`[shell-mobile] ${m}`);
     } catch {
       /* 日志失败不影响功能 */
     }
@@ -356,6 +797,66 @@ export function apply(ctx) {
     services.__error = String(e?.message ?? e);
   }
 
+  // ── 手机审批 answerer：只在手机正看着这个会话时接管 ────────────────────
+  /**
+   * 等待手机上的一次点击。
+   * @returns Promise<null|string>：null=超时/取消（交回桌面），否则是审批结果词
+   */
+  function waitMobileDecision(request, sessionId) {
+    return new Promise((resolve) => {
+      approvalCounter += 1;
+      const id = `ap-${Date.now().toString(36)}-${String(approvalCounter)}`;
+      let settled = false;
+      const finish = (outcome) => {
+        if (settled) return;
+        settled = true;
+        const entry = pendingApprovals.get(id);
+        if (entry?.timer) clearTimeout(entry.timer);
+        pendingApprovals.delete(id);
+        notifyApprovals(sessionId);
+        resolve(outcome);
+      };
+      pendingApprovals.set(id, {
+        id,
+        sessionId,
+        toolName: String(request?.toolName ?? ''),
+        callId: request?.callId ?? null,
+        reason: typeof request?.reason === 'string' ? request.reason : '',
+        displayReason: request?.displayReason ?? null,
+        createdAt: Date.now(),
+        finish,
+        timer: setTimeout(() => finish(null), APPROVAL_WAIT_MS),
+      });
+      notifyApprovals(sessionId);
+      const signal = request?.signal;
+      if (signal && typeof signal.addEventListener === 'function') {
+        if (signal.aborted) finish('cancelled');
+        else signal.addEventListener('abort', () => finish('cancelled'), { once: true });
+      }
+    });
+  }
+
+  try {
+    // waterfall listener：审批请求进来时，手机在看这个会话就接管，否则原样交给桌面
+    ctx.on(
+      'approval/request',
+      (request, next) => {
+        try {
+          const sessionId = request?.agent?.session?.id;
+          if (!sessionId) return next();
+          if (!(watchingSessions.get(sessionId) > 0)) return next();
+          return waitMobileDecision(request, sessionId).then((outcome) => (outcome === null ? next() : outcome));
+        } catch (e) {
+          warn(`审批接管失败（交回桌面）：${String(e?.message ?? e)}`);
+          return next();
+        }
+      },
+      'dsh-shell-mobile: 手机审批 answerer',
+    );
+  } catch (e) {
+    warn(`注册手机审批 answerer 失败（不影响其它功能）：${String(e?.message ?? e)}`);
+  }
+
   /**
    * 会话列表。**实测得出的正解**（而不是猜的）：
    *   · `sessions.list()` ✓ 存在；
@@ -365,7 +866,14 @@ export function apply(ctx) {
    */
   async function listSessions() {
     const sessions = typeof ctx.get === 'function' ? ctx.get('sessions') : undefined;
-    if (!sessions) return { ok: false, reason: 'no-sessions-service' };
+    // ⚠️ 列表**以磁盘为准**：sessions.list() 只有"进程内活着的会话"，桌面重启后是空的
+    //    （2026-10-19 实测：临时 DSH 里带附件的会话重启后 /mobile/api/sessions = 0 条）。
+    //    磁盘列表（listPersistedSessions）保证"重启后手机上还能看到历史会话"。
+    const diskRows = listPersistedSessions();
+    if (!sessions) {
+      if (diskRows.length) return { ok: true, via: 'disk-only', count: diskRows.length, sessions: diskRows.slice(0, 200) };
+      return { ok: false, reason: 'no-sessions-service' };
+    }
     const attempts = [
       ['sessions.list()', () => sessions.list?.()],
       ['sessions.list({})', () => sessions.list?.({})],
@@ -376,32 +884,38 @@ export function apply(ctx) {
         if (v === undefined || v === null) continue;
         const arr = Array.isArray(v) ? v : Array.isArray(v.items) ? v.items : Array.isArray(v.sessions) ? v.sessions : null;
         if (!arr) return { ok: false, reason: 'unexpected-shape', via: label, shape: describe(v, 2) };
+        const liveRows = arr.map((x) => {
+          const h = x?.header && typeof x.header === 'object' ? x.header : {};
+          const sid = x?.id ?? x?.sessionId ?? x?.key ?? null;
+          // 列表要"看得出内容"：附上最后一轮预览与轮数（真机反馈"很不好用"——以前只有一行「新会话」）
+          let turns = [];
+          try { turns = readProjectionTurns(sid); } catch { turns = []; }
+          const last = turns.length ? turns[turns.length - 1] : null;
+          const preview = last ? String(last.response || last.prompt || '').replace(/\s+/g, ' ').trim().slice(0, 80) : '';
+          return {
+            id: sid,
+            title: h.title ?? x?.title ?? null,
+            updatedAt: h.updatedAt ?? h.lastActivityAt ?? x?.updatedAt ?? null,
+            workspace: h.workspace ?? h.workspacePath ?? x?.workspace ?? null,
+            turnCount: turns.length,
+            preview,
+          };
+        });
+        const merged = mergeSessionRows(liveRows, diskRows);
         return {
           ok: true,
-          via: label,
-          count: arr.length,
-          sampleKeys: arr[0] ? Object.keys(arr[0]).slice(0, 24) : [],
-          sessions: arr.slice(0, 200).map((x) => {
-            const h = x?.header && typeof x.header === 'object' ? x.header : {};
-            const sid = x?.id ?? x?.sessionId ?? x?.key ?? null;
-            // 列表要"看得出内容"：附上最后一轮预览与轮数（真机反馈"很不好用"——以前只有一行「新会话」）
-            let turns = [];
-            try { turns = readProjectionTurns(sid); } catch { turns = []; }
-            const last = turns.length ? turns[turns.length - 1] : null;
-            const preview = last ? String(last.response || last.prompt || '').replace(/\s+/g, ' ').trim().slice(0, 80) : '';
-            return {
-              id: x?.id ?? x?.sessionId ?? x?.key ?? null,
-              title: h.title ?? x?.title ?? null,
-              updatedAt: h.updatedAt ?? h.lastActivityAt ?? x?.updatedAt ?? null,
-              workspace: h.workspace ?? h.workspacePath ?? x?.workspace ?? null,
-              turnCount: turns.length,
-              preview,
-            };
-          }),
+          via: `${label}+disk`,
+          count: merged.length,
+          liveCount: liveRows.length,
+          diskCount: diskRows.length,
+          sessions: merged.slice(0, 200),
         };
       } catch (e) {
         lastError = String(e?.message ?? e);
       }
+    }
+    if (diskRows.length) {
+      return { ok: true, via: 'disk-fallback', count: diskRows.length, sessions: diskRows.slice(0, 200) };
     }
     return { ok: false, reason: 'all-shapes-failed', lastError, services };
   }
@@ -643,9 +1157,11 @@ export function apply(ctx) {
     }
 
     // ── 会话事件流（SSE）：手机端"实时同步"用 ──
-    // 轮询投影文件而不是订阅 DSH 内部事件：助手回复就在 record.rows.turnOutline.val.turns[]
-    // （deriveMessages 没有），文件 mtime 变了就推一次。好处：不依赖 DSH 未公开的事件 API，
-    // DSH 升级不易坏；代价：1 秒粒度。
+    // 两路数据：
+    //   ① chat  —— 事件日志（session.v4.jsonl.zstd）增量解析出的**全文 + 附件**（首帧全量，之后只推尾巴）
+    //   ② turns —— 投影缓存的 turnOutline（兼容旧界面 / 列表预览用，小、稳）
+    //   ③ approval —— 有待审批时推送（手机在看这个会话时审批由手机接管，见 apply 里的 answerer）
+    // 1 秒粒度；不订阅 DSH 内部事件 API（升级不易坏）。
     if (path === `${ROUTE}/stream`) {
       const sid = url.searchParams.get('id') ?? '';
       if (!sid) {
@@ -660,11 +1176,33 @@ export function apply(ctx) {
       });
       let lastMtime = -1;
       let closed = false;
+      let chatSig = '';
+      let sentChatTurns = 0;
       const send = (event, data) => {
         if (!closed) res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
       };
       const flush = () => {
         if (closed) return;
+        // ① 聊天全文 + 附件
+        try {
+          const chat = readSessionChat(sid);
+          if (chat.ok) {
+            const turns = chat.turns || [];
+            const last = turns[turns.length - 1];
+            // 签名只看"变了没有"：轮数 + 最后一轮的 prompt/response 长度（文本替换等长这种极端忽略）
+            const sig = `${String(turns.length)}|${String(last?.prompt?.length ?? 0)}|${String(last?.response?.length ?? 0)}`;
+            if (sig !== chatSig) {
+              const first = sentChatTurns === 0;
+              const from = first ? 0 : Math.max(0, sentChatTurns - 1);
+              chatSig = sig;
+              sentChatTurns = turns.length;
+              send('chat', { turns: first ? turns : turns.slice(from), replace: first, from });
+            }
+          }
+        } catch {
+          /* 日志还没生成：等下次 */
+        }
+        // ② 投影（兼容旧界面）
         try {
           const home = process.env.DSH_HOME || '';
           const file = joinPath(home, 'storages', 'session_projcache', 'sessions', `${sid}.json`);
@@ -677,15 +1215,35 @@ export function apply(ctx) {
           /* 投影文件还没生成：等下次 */
         }
       };
-      flush(); // 立刻给一次当前状态
+      // 登记"手机正看着这个会话"：审批接管靠它判断（页面隐藏时前端会断开 SSE）
+      watchingSessions.set(sid, (watchingSessions.get(sid) ?? 0) + 1);
+      let clients = sseClients.get(sid);
+      if (!clients) {
+        clients = new Set();
+        sseClients.set(sid, clients);
+      }
+      const client = { send };
+      clients.add(client);
+      flush(); // 立刻给一次当前状态（含待审批）
+      const pending = approvalsFor(sid);
+      if (pending.length > 0) send('approval', { approvals: pending });
       const timer = setInterval(flush, 1000);
       const beat = setInterval(() => {
         if (!closed) res.write(': ping\n\n');
       }, 15000);
       const stop = () => {
+        if (closed) return;
         closed = true;
         clearInterval(timer);
         clearInterval(beat);
+        const left = (watchingSessions.get(sid) ?? 1) - 1;
+        if (left <= 0) watchingSessions.delete(sid);
+        else watchingSessions.set(sid, left);
+        const set = sseClients.get(sid);
+        if (set && client) {
+          set.delete(client);
+          if (set.size === 0) sseClients.delete(sid);
+        }
       };
       req.on('close', stop);
       res.on('close', stop);
@@ -862,7 +1420,107 @@ export function apply(ctx) {
       const sid = url.searchParams.get('id') ?? '';
         const detail = await getSession(sid);
         // 模型/强度/预设/工作区：chips 显示真值（读投影，稳定可核对）
-        json(res, 200, { ...detail, meta: readProjectionMeta(sid) });
+        json(res, 200, { ...detail, meta: readProjectionMeta(sid), chat: readSessionChat(sid) });
+      return;
+    }
+
+    if (path === `${ROUTE}/chat`) {
+      // 会话聊天全文 + 附件元数据（手机端聊天页；SSE 不可用时的兜底，也是首屏快照）
+      const chatId = url.searchParams.get('id') ?? '';
+      json(res, 200, readSessionChat(chatId));
+      return;
+    }
+
+    if (path === `${ROUTE}/attachment`) {
+      // 附件字节：图片 <img src> 直接用（GET+令牌，同源/网关都行），文件走下载。
+      // 安全：只允许**本会话日志里真实引用过**的 attachmentId（先查聊天缓存，再读字节校验）。
+      const sessionId = url.searchParams.get('sid') ?? '';
+      const attachmentId = url.searchParams.get('id') ?? '';
+      if (!sessionId || !attachmentId) {
+        json(res, 400, { ok: false, reason: 'need-sid-and-id' });
+        return;
+      }
+      const found = findChatAttachment(sessionId, attachmentId);
+      if (!found) {
+        json(res, 404, { ok: false, reason: 'attachment-not-in-session' });
+        return;
+      }
+      const attachments = typeof ctx.get === 'function' ? ctx.get('attachments') : undefined;
+      if (!attachments) {
+        json(res, 501, { ok: false, reason: 'no-attachments-service' });
+        return;
+      }
+      const isImage = found.type === 'image';
+      const ref = isImage
+        ? { attachmentId, mediaType: found.mediaType, bytes: found.bytes ?? 0, width: found.width ?? 0, height: found.height ?? 0, ...(found.name ? { name: found.name } : {}) }
+        : { attachmentId, name: found.name || 'file', bytes: found.bytes ?? 0 };
+      try {
+        if (isImage) {
+          const stored = await attachments.readImage(ref);
+          const buf = Buffer.from(stored.data);
+          res.writeHead(200, {
+            'content-type': ref.mediaType || 'application/octet-stream',
+            'content-length': buf.length,
+            'cache-control': 'private, max-age=3600, immutable',
+            'x-content-type-options': 'nosniff',
+          });
+          res.end(buf);
+          return;
+        }
+        // 文件：流式回传（不整份读进内存）
+        const chunks = [];
+        for await (const chunk of attachments.readFileStream(ref)) chunks.push(Buffer.from(chunk));
+        const buf = Buffer.concat(chunks);
+        const safeName = encodeURIComponent(ref.name || 'file');
+        res.writeHead(200, {
+          'content-type': 'application/octet-stream',
+          'content-length': buf.length,
+          'content-disposition': `attachment; filename*=UTF-8''${safeName}`,
+          'cache-control': 'private, no-store',
+        });
+        res.end(buf);
+      } catch (e) {
+        json(res, 500, { ok: false, reason: 'read-failed', error: String(e?.message ?? e).slice(0, 200) });
+      }
+      return;
+    }
+
+    if (path === `${ROUTE}/approvals`) {
+      // 手机端轮询待审批（SSE 里也会有 approval 事件；轮询是兜底）
+      const sid = url.searchParams.get('sid') ?? url.searchParams.get('id') ?? '';
+      json(res, 200, { ok: true, approvals: approvalsFor(sid), watching: (watchingSessions.get(sid) ?? 0) > 0 });
+      return;
+    }
+
+    if (path === `${ROUTE}/approval/answer`) {
+      if ((req.method ?? 'GET').toUpperCase() !== 'POST') {
+        json(res, 405, { ok: false, reason: 'use-post' });
+        return;
+      }
+      let body = '';
+      req.on('data', (c) => {
+        body += c;
+      });
+      req.on('end', () => {
+        let payload = {};
+        try {
+          payload = body ? JSON.parse(body) : {};
+        } catch {
+          payload = {};
+        }
+        const entry = pendingApprovals.get(String(payload.id ?? ''));
+        if (!entry) {
+          json(res, 200, { ok: false, reason: 'not-pending' });
+          return;
+        }
+        const outcome = payload.outcome === 'rejected' ? 'rejected' : payload.outcome === 'allowed-once' ? 'allowed-once' : '';
+        if (outcome === '') {
+          json(res, 200, { ok: false, reason: 'bad-outcome' });
+          return;
+        }
+        entry.finish(outcome);
+        json(res, 200, { ok: true, id: entry.id, outcome });
+      });
       return;
     }
 

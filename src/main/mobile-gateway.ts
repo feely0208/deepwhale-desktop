@@ -62,8 +62,18 @@ export interface GatewayHandle {
   port: number;
   /** 关闭服务（释放端口） */
   stop: () => Promise<void>;
-  /** 轮换：换令牌与配对码（旧令牌立刻失效） */
+  /** 轮换：换令牌与配对码（旧令牌立刻失效；已配对的手机会被踢下线） */
   rotate: () => GatewaySession;
+  /**
+   * 只换配对码、**不动令牌**：面板上的「换一个配对码」用这个。
+   *
+   * 为什么必须区分（2026-10-19 真机定位到的根因）：旧实现把两者绑在一起 ——
+   * 用户点一次「换一个配对码」，网关就换了新令牌，而面板只持久化了新配对码，
+   * `mobile-gateway.json` 里留的还是旧令牌 → 桌面一重启就复用旧令牌 →
+   * **手机上已保存的令牌全部 401**，用户被迫反复扫码。
+   * 换码的本意只是"重新出个一次性码"，不该连带把已配对的设备踢下线。
+   */
+  rotatePairCode: () => GatewaySession;
   /** 当前是否在监听 */
   listening: () => boolean;
 }
@@ -415,6 +425,12 @@ export function startMobileGateway(opts: GatewayOptions): Promise<GatewayHandle>
           }),
         rotate: () => {
           currentSession = newSession();
+          return currentSession;
+        },
+        rotatePairCode: () => {
+          pairCode = makePairCode();
+          pairExpiresAt = Date.now() + pairTtlMs;
+          currentSession = { ...currentSession, pairCode, pairExpiresAt };
           return currentSession;
         },
         listening: () => server.listening,

@@ -145,6 +145,8 @@ async function startGatewayInternal(): Promise<Record<string, unknown>> {
     if (gateway) {
     // 已开着时也把配对码写进状态文件（否则自动化/排障读不到码 ✗）
     rememberPairCode(gateway.session.pairCode);
+    // 网关确实在跑 → 自愈状态文件（老版本可能从没写过 enabled=true）
+    rememberEnabled(true);
     return { ok: true, already: true, ...sessionInfo() };
     }
     const ep = resolveDshEndpoint?.() ?? null;
@@ -176,6 +178,11 @@ async function startGatewayInternal(): Promise<Record<string, unknown>> {
     } catch (e) {
       console.log('[mobile-panel] 隧道启动失败（不影响局域网使用）:', String((e as Error)?.message ?? e));
     }
+    // ⚠️ 必须在这里写 enabled=true（2026-10-19 真机定位到的根因）：
+    //    旧代码只有 rememberEnabled(false)（关闭时），**从来没有写过 true** →
+    //    用户点过「关闭手机访问」之后，`enabled` 永远是 false →
+    //    重启后 autoStartMobileGateway() 直接跳过 → 用户出门前不开面板就永远连不上。
+    rememberEnabled(true);
     if (panel && !panel.isDestroyed()) panel.webContents.send('mobile:state', { running: true, ...sessionInfo() });
     return { ok: true, ...sessionInfo() };
     } catch (e) {
@@ -247,8 +254,14 @@ export function initMobilePanel(getEndpoint: () => { base: string; token: string
 
   ipcMain.handle('mobile:rotate', () => {
     if (!gateway) return { ok: false, reason: 'not-running' };
-    gateway.rotate();
+    // ⚠️ 只换配对码，**不换令牌**（2026-10-19 真机根因）：
+    //    旧实现 gateway.rotate() 会连令牌一起换，却只持久化配对码 →
+    //    状态文件里留旧令牌，重启后复用旧令牌 → 手机 401，只能重新扫码。
+    //    换码 = 重新出个一次性码，不该把已配对的手机踢下线。
+    gateway.rotatePairCode();
     rememberPairCode(gateway.session.pairCode);
+    // 顺手自愈：把当前（未变的）令牌/端口写回文件，清掉历史遗留的旧令牌
+    rememberGatewayPort(gateway.port);
     return { ok: true, ...sessionInfo() };
   });
 

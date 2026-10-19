@@ -93,6 +93,8 @@
   .fcard .emoji{font-size:24px}
   .fcard h3{font-size:15.5px;margin:8px 0 6px}
   .fcard p{font-size:13.5px;color:#475569}
+  /* 真实 App 图标（替代 emoji） */
+  .emoji img,.pcard .emoji img{width:52px;height:52px;border-radius:14px;display:block;margin:0 auto;object-fit:cover}
 
   /* ===== free banner ===== */
   .freebar{background:linear-gradient(135deg,#0d9488,#059669);color:#fff;text-align:center;padding:34px 20px}
@@ -136,6 +138,7 @@
       <a href="#products" data-zh="产品" data-en="Products">产品</a>
       <a href="#download" data-zh="下载" data-en="Download">下载</a>
       <a href="#features" data-zh="特性" data-en="Features">特性</a>
+      <a href="#plugins" data-zh="插件" data-en="Plugins">插件</a>
       <a href="#faq" data-zh="常见问题" data-en="FAQ">常见问题</a>
       <a href="#ecosystem" data-zh="生态" data-en="Ecosystem">生态</a>
       <a href="https://github.com/feely0208/deepwhale-desktop" class="ghost">GitHub ↗</a>
@@ -177,6 +180,25 @@
   </div>
 </section>
 
+<section class="feat" id="plugins">
+  <div class="wrap">
+    <h2 data-zh="DSH 插件（37 个 · 免费开源 MIT）" data-en="DSH Plugins (37 · free & open source, MIT)">DSH 插件（37 个 · 免费开源 MIT）</h2>
+    <p class="hint" data-zh="装在任意支持 DSH 的载体上，<b>不绑定桌面端</b>；每个插件各管一件事，按需安装。" data-en="Plugins run on any DSH host and are <b>not tied to the desktop app</b>; each plugin does one job, install as needed.">装在任意支持 DSH 的载体上，<b>不绑定桌面端</b>；每个插件各管一件事，按需安装。</p>
+    <div class="fgrid">
+      <div class="fcard"><div class="emoji">🛡️</div><h3 data-zh="国内合规" data-en="China compliance">国内合规</h3><p data-zh="等保 / 个保 / 算法备案 / AI 内容标识 / 未成年人保护 / 数据出境 …" data-en="MLPS, PIPL, algorithm filing, AI content labeling, minor protection, data export…">等保 / 个保 / 算法备案 / AI 内容标识 / 未成年人保护 / 数据出境 …</p></div>
+      <div class="fcard"><div class="emoji">🤖</div><h3 data-zh="AI 与 Agent 治理" data-en="AI &amp; agent governance">AI 与 Agent 治理</h3><p data-zh="Agent 权限范围 / 工具审查 / 输出可信 / 内容信任 …" data-en="Agent scopes, tool vetting, output trust, content trust…">Agent 权限范围 / 工具审查 / 输出可信 / 内容信任 …</p></div>
+      <div class="fcard"><div class="emoji">🔐</div><h3 data-zh="数据与凭据" data-en="Data &amp; credentials">数据与凭据</h3><p data-zh="数据分级 / 密钥扫描与轮换 / 依赖审计 / SBOM / 会话产物 …" data-en="Data classification, secret scanning &amp; rotation, dependency audit, SBOM, session artifacts…">数据分级 / 密钥扫描与轮换 / 依赖审计 / SBOM / 会话产物 …</p></div>
+      <div class="fcard"><div class="emoji">🔗</div><h3 data-zh="供应链" data-en="Supply chain">供应链</h3><p data-zh="CI 守卫 / 发布自检 / 许可证检查 …" data-en="CI guard, release self-check, license checks…">CI 守卫 / 发布自检 / 许可证检查 …</p></div>
+      <div class="fcard"><div class="emoji">🚨</div><h3 data-zh="权限与应急" data-en="Access &amp; incident response">权限与应急</h3><p data-zh="最小权限 / 事件包 / 钓鱼防护 / 告警中继 …" data-en="Least privilege, incident package, phishing guard, alert relay…">最小权限 / 事件包 / 钓鱼防护 / 告警中继 …</p></div>
+      <div class="fcard"><div class="emoji">🛠️</div><h3 data-zh="能力类" data-en="Capabilities">能力类</h3><p data-zh="设计工序（PS / CAD / 3ds Max）/ 画布 / 公文排版 / 法律技能集 …" data-en="Design line (PS / CAD / 3ds Max), canvas, document formatter, legal skills…">设计工序（PS / CAD / 3ds Max）/ 画布 / 公文排版 / 法律技能集 …</p></div>
+    </div>
+    <div class="acts" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:18px">
+      <a class="btn" href="https://deepwhale.org.cn/plugins.html" data-zh="插件市场（可搜索 / 安装）→" data-en="Plugin marketplace →">插件市场（可搜索 / 安装）→</a>
+      <a class="btn ghost" href="https://github.com/feely0208/dsh-plugins" target="_blank" rel="noopener" data-zh="GitHub 插件索引 →" data-en="GitHub plugin index →">GitHub 插件索引 →</a>
+    </div>
+  </div>
+</section>
+
 <section class="howto" id="howto">
   <div class="wrap">
     <h2 data-zh="快速上手" data-en="Quick Start">快速上手</h2>
@@ -186,21 +208,21 @@
         <div class="stepnum">1</div>
         <div class="stepbody">
           <h3 data-zh="下载安装" data-en="Download & install">下载安装</h3>
-          <p data-zh="桌面端：在上方选择你的电脑平台下载安装。深鲸 Mobile：下载「深鲸 Mobile APK」（安卓/鸿蒙 4.x），点击安装，首次需允许「未知来源」。" data-en="Desktop: pick your platform above and install. DeepWhale Mobile: download the DeepWhale Mobile APK (Android/HarmonyOS 4.x), tap to install, and allow unknown sources on first run.">桌面端：在上方选择你的电脑平台下载安装。深鲸 Mobile：下载「深鲸 Mobile APK」（安卓/鸿蒙 4.x），点击安装，首次需允许「未知来源」。</p>
+          <p data-zh="桌面端：按你的系统下载安装。手机端：装「深鲸 Mobile APK」（安卓 / 鸿蒙 4.x；鸿蒙 NEXT 原生版正在备案中）。" data-en="Desktop: pick your platform above. Mobile: install the DeepWhale Mobile APK (Android / HarmonyOS 4.x; the HarmonyOS NEXT build is in filing).">桌面端：按你的系统下载安装。手机端：装「深鲸 Mobile APK」（安卓 / 鸿蒙 4.x；鸿蒙 NEXT 原生版正在备案中）。</p>
         </div>
       </div>
       <div class="step">
         <div class="stepnum">2</div>
         <div class="stepbody">
-          <h3 data-zh="启动 DSH" data-en="Start DSH">启动 DSH</h3>
-          <p data-zh="在你的电脑上启动 DeepSeek Harness（<code>npx @deepseek-ai/dsh web</code>），记录它显示的访问地址。" data-en="Start DeepSeek Harness on your computer (<code>npx @deepseek-ai/dsh web</code>) and note the address it shows.">在你的电脑上启动 DeepSeek Harness（<code>npx @deepseek-ai/dsh web</code>），记录它显示的访问地址。</p>
+          <h3 data-zh="开启手机访问" data-en="Enable mobile access">开启手机访问</h3>
+          <p data-zh="打开深鲸桌面 →「手机连接」→「开启手机访问」；面板会显示二维码和 6 位配对码（一次性、5 分钟有效）。" data-en="Open DeepWhale Desktop → Mobile connection → Enable mobile access; the panel shows a QR code and a 6-digit pair code (one-time, valid for 5 minutes).">打开深鲸桌面 →「手机连接」→「开启手机访问」；面板会显示二维码和 6 位配对码（一次性、5 分钟有效）。</p>
         </div>
       </div>
       <div class="step">
         <div class="stepnum">3</div>
         <div class="stepbody">
-          <h3 data-zh="连接使用" data-en="Connect & use">连接使用</h3>
-          <p data-zh="打开深鲸，填入你的 DSH 地址（同一 WiFi 填局域网地址，异地填你配置的公网地址），即可开始使用。" data-en="Open DeepWhale, enter your DSH address (LAN IP on the same Wi-Fi, or your public address remotely), and you're ready.">打开深鲸，填入你的 DSH 地址（同一 WiFi 填局域网地址，异地填你配置的公网地址），即可开始使用。</p>
+          <h3 data-zh="手机扫码连接" data-en="Scan &amp; connect">手机扫码连接</h3>
+          <p data-zh="手机打开深鲸 → 扫二维码，或填面板上的地址 + 配对码；进入会话列表即成功。<b>不需要公网 IP，也不用自己配 nginx/frp</b>——局域网直连，外出自动走中继。配对一次后重开 App 自动进入。" data-en="Open DeepWhale on the phone → scan the QR code, or enter the address + pair code. You are in when the session list appears. <b>No public IP and no nginx/frp setup</b> — LAN works directly and the self-hosted relay covers the outside case. Pair once; later launches reconnect automatically.">手机打开深鲸 → 扫二维码，或填面板上的地址 + 配对码；进入会话列表即成功。不需要公网 IP，也不用自己配 nginx/frp——局域网直连，外出自动走中继。配对一次后重开 App 自动进入。</p>
         </div>
       </div>
     </div>
@@ -290,6 +312,15 @@
     <h3 class="section-h3" data-zh="🕒 鸿蒙应用专区 · 即将上线" data-en="🕒 HarmonyOS Apps · Coming Soon">🕒 鸿蒙应用专区 · 即将上线</h3>
     <p class="hint" data-zh="以下应用正在开发测试阶段，尚未上架，欢迎关注后续进展。" data-en="The following apps are in development and testing; not yet released. Stay tuned.">以下应用正在开发测试阶段，尚未上架，欢迎关注后续进展。</p>
     <div class="pgrid">
+      <!-- 深鲸 Mobile 鸿蒙原生版 - 备案中 -->
+      <div class="pcard eco-card-soon">
+        <div class="pbar" style="background:linear-gradient(90deg,#DC2626,#F97316)"></div>
+        <div class="emoji"><img src="assets/mobile-icon.png" alt=""></div>
+        <span class="tag soon" data-zh="备案中" data-en="In filing">备案中</span>
+        <h3 data-zh="深鲸 Mobile · 鸿蒙原生版" data-en="DeepWhale Mobile · HarmonyOS">深鲸 Mobile · 鸿蒙原生版</h3>
+        <p data-zh="手机上的 DSH：会话 / 图片附件 / 模型与强度 / 权限 / 停止与排队 / 轨迹 / 定时任务；局域网扫码配对即连，外出走自建中继。当前正在备案 / 应用市场审核中，安卓 APK 可先用。" data-en="DSH in your pocket: sessions, images, model & effort, permissions, stop & queue, trace and scheduled tasks; QR pairing over LAN and self-hosted relay when outside. Currently in filing / AppGallery review; the Android APK is available now.">手机上的 DSH：会话 / 图片附件 / 模型与强度 / 权限 / 停止与排队 / 轨迹 / 定时任务；局域网扫码配对即连，外出走自建中继。当前正在备案 / 应用市场审核中，安卓 APK 可先用。</p>
+        <div class="plats" data-zh="鸿蒙 HarmonyOS NEXT · 备案中" data-en="HarmonyOS NEXT · in filing">鸿蒙 HarmonyOS NEXT · 备案中</div>
+      </div>
       <!-- 速签 - 开发测试中 -->
       <div class="pcard eco-card-soon">
         <div class="pbar" style="background:linear-gradient(90deg,#0EA5E9,#22D3EE)"></div>
@@ -461,11 +492,11 @@ var PRODUCTS = [
     cta: {textZh: '下载', textEn: 'Download', href: '#download'}
   },
   {
-    id: 'mobile', emoji: '📱',
+    id: 'mobile', icon: 'assets/mobile-icon.png',
     nameZh: '深鲸 Mobile', nameEn: 'DeepWhale Mobile',
-    tag: {zh: '已发布 · APK 安装包', en: 'Available · APK'},
-    descZh: '安卓/鸿蒙手机专用 App（APK 安装包）。下载安装后，在 App 里填写你自己的 DSH 服务器地址即可使用——数据只在你自己的设备上。',
-    descEn: 'Android/HarmonyOS app (APK installer). Install it, enter your own DSH server address in the app, and you\'re ready — data stays on your device.',
+    tag: {zh: '已发布 · APK / 鸿蒙版备案中', en: 'Available · APK; HarmonyOS in filing'},
+    descZh: '手机上的 DSH：会话 / 图片附件 / 模型与强度 / 权限预设 / 停止与排队 / 轨迹 / 定时任务。局域网扫码配对即连，外出走自建中继；安卓与鸿蒙可同时在线。',
+    descEn: 'DSH in your pocket: sessions, image attachments, model & effort, permission presets, stop & queue, trace and scheduled tasks. Pair by QR over LAN, self-hosted relay when outside; Android and HarmonyOS can be online together.',
     plats: 'Android · HarmonyOS 4.x',
     cta: {textZh: '下载手机版 APK', textEn: 'Download Mobile APK', href: '#download'}
   },
@@ -482,7 +513,7 @@ var PRODUCTS = [
 
 /* 下载包数据（易维护：发新版只改这里） */
 var GH = 'https://github.com/feely0208/deepwhale-desktop/releases/download';
-var DESKTOP_VERSION='v1.0.59'; /* 壳的发版 tag；律师端与壳同处一个 release，所以共用这个 tag */
+var DESKTOP_VERSION='v1.0.57'; /* 壳的发版 tag；律师端与壳同处一个 release，所以共用这个 tag */
 var DESKTOP_VER = DESKTOP_VERSION.replace(/^v/, ''); /* 文件名里的版本号，自动跟随上面的 tag */
 var LAWYER_VER = '0.1.12';        /* 律师端自身版本号（决定文件名） */
 /* ⚠️ 律师端必须有自己的 tag，**不能借用壳的 tag**：
@@ -492,9 +523,9 @@ var LAWYER_VER = '0.1.12';        /* 律师端自身版本号（决定文件名�
    于是链接拼成 .../download/lawyer-v0.1.3/DeepWhale-Lawyer-0.1.12-x64-Setup.exe，
    实测 404，用户在落地页点「下载律师端」直接下不到（2026-09-28 实测）。 */
 var LAWYER_TAG = 'lawyer-v0.1.12';
-var SUITE_TAG = 'suite-v1.0.59';/* 套装的 release tag（与壳的 tag 不同名） */
-var SUITE_VER = '1.0.59';       /* 套装文件名里的版本号 */
-var MOBILE_VERSION = 'v1.0.2';  /* 手机版版本：独立固定，不随桌面版升级 */
+var SUITE_TAG = 'suite-v1.0.28';/* 套装的 release tag（与壳的 tag 不同名） */
+var SUITE_VER = '1.0.28';       /* 套装文件名里的版本号 */
+var MOBILE_VERSION = 'v1.1.2';  /* 手机版版本：独立固定，不随桌面版升级 */
 /* ✅ 套装已放回（2026-09-29 晚）：suite-v1.0.23 里装的是**壳 1.0.23 + 律师端 0.1.5**。
    当初撤下，是因为 1.0.22 套装里装的是带洞的律师端 0.1.4
    （Ctrl+Shift+I 开控制台改 localStorage 绕过实名核验）；0.1.5 已修掉，
@@ -509,7 +540,7 @@ var DOWNLOADS = [
     {emoji:'🐧', nameZh:'Linux', nameEn:'Linux', descZh:'x86_64 · AppImage', descEn:'x86_64 · AppImage', href: GH + '/' + DESKTOP_VERSION + '/DeepWhale-Desktop-' + DESKTOP_VER + '-x86_64.AppImage', btnZh:'下载 AppImage', btnEn:'Download AppImage', noteZh:'下载后先加执行权限：终端执行 chmod +x DeepWhale-Desktop-' + DESKTOP_VER + '-x86_64.AppImage，然后双击或 ./DeepWhale-Desktop-' + DESKTOP_VER + '-x86_64.AppImage 运行。已内置完整运行环境：无需安装 Node.js、无需联网。', noteEn:'Make it executable first: chmod +x DeepWhale-Desktop-' + DESKTOP_VER + '-x86_64.AppImage, then double-click or run it. The runtime is bundled: no Node.js and no internet needed.'}
   ]},
   { group: 'mobile', titleZh: '深鲸 Mobile（安卓 APK）', titleEn: 'DeepWhale Mobile (Android APK)', items: [
-    {emoji:'🤖', nameZh:'安卓 / 鸿蒙 4.x', nameEn:'Android / HarmonyOS 4.x', descZh:'手机版 APK · 安装后在 App 内填写你的 DSH 地址', descEn:'Mobile APK · install, then enter your DSH address in the app', href: GH + '/' + MOBILE_VERSION + '/DeepWhale-Mobile-1.0.2.apk', btnZh:'下载手机版 APK', btnEn:'Download Mobile APK'}
+    {icon:'assets/mobile-icon.png', nameZh:'安卓 / 鸿蒙 4.x', nameEn:'Android / HarmonyOS 4.x', descZh:'手机版 APK · 扫码配对即连（局域网直连 / 外出中继）', descEn:'Mobile APK · pair by QR (LAN direct / self-hosted relay)', href:'https://deepwhale.org.cn/dl/mobile-apk', btnZh:'下载手机版 APK', btnEn:'Download Mobile APK', noteZh:'<b>手机端使用（三步）</b>：① 桌面端「手机连接」→「开启手机访问」；② 手机扫码，或填地址 + 6 位配对码；③ 进入会话列表即成功，之后重开 App 自动进入。<br>不需要公网 IP，也不用自己配 nginx/frp。鸿蒙 4.x 及以下可直接装这个 APK；<b>鸿蒙 NEXT 原生版正在备案中</b>。', noteEn:'<b>Mobile in three steps</b>: ① Desktop → Mobile connection → Enable mobile access; ② scan the QR code, or enter address + 6-digit pair code; ③ the session list means you are in — later launches reconnect automatically.<br>No public IP and no nginx/frp needed. HarmonyOS 4.x can install this APK; <b>the HarmonyOS NEXT build is in filing</b>.'}
   ]},
   { group: 'lawyer', titleZh: '深鲸·律师端（法律版）', titleEn: 'DeepWhale Lawyer (Legal Edition)', items: [
     {emoji:'🍎', nameZh:'macOS（Apple 芯片）', nameEn:'macOS (Apple Silicon)', descZh:'律师专用版 · zip 免安装', descEn:'Lawyer edition · zip, no installer needed', href: GH + '/' + LAWYER_TAG + '/DeepWhale-Lawyer-' + LAWYER_VER + '-arm64.zip', btnZh:'下载律师端 (macOS)', btnEn:'Download (macOS)', noteZh:'下载后请按顺序做这 4 步（关键是第 ③ 步，漏做深鲸壳就弹不出律师端）：① 双击下载的 zip 解压，得到「深鲸·律师端-首次使用」文件夹；② 打开这个文件夹，先双击里面的「首次使用请双击我」（黑窗口一闪是正常的，它会自动解除 macOS 的安全拦截并启动律师端）；③ 把文件夹里的「深鲸·律师端.app」拖进左侧的「应用程序」文件夹（就是 Finder 左边栏那个 Applications）。必须先拖进去：律师端的 deepwhale-law 链接协议只有被系统登记后才生效，只放在「下载」里双击运行，协议不生效，深鲸壳里选「法律模式」就不会弹出律师端；④ 打开「深鲸·律师端」，登录并完成激活（macOS 上拖进「应用程序」时系统就已登记好链接协议，不需要额外操作；Windows / Linux 则必须先打开一次律师端才会登记）。若首次打开提示「已损坏，无法打开」或「无法验证开发者」，这是没有 Apple 开发者证书时 macOS 的正常提示、文件没有坏，右键点图标 →「打开」→ 再点一次「打开」即可。仅支持 Apple 芯片（M1 及以上）Mac。', noteEn:'After download: ① unzip → ② double-click the bundled 首次使用请双击我 to auto-bypass Gatekeeper & launch (if it warns "damaged / can\'t verify developer" on first open, just run that script) → ③ open 深鲸·律师端 and log in. Requires Apple Silicon (M1+) Mac.'},
@@ -521,10 +552,10 @@ var DOWNLOADS = [
   /* 深鲸套装：壳 + 律师端，三系统各一个 zip，解压后按包内「安装说明.txt」操作。
      只有需要律师功能的人才下它；只想用壳的话，下上面「深鲸桌面」那组就行。 */
   { group: 'suite', titleZh: '深鲸套装（桌面 + 律师端）', titleEn: 'DeepWhale Suite (Desktop + Lawyer)', items: [
-    {emoji:'🪟', nameZh:'Windows x64', nameEn:'Windows x64', descZh:'深鲸桌面 + 深鲸·律师端 · 合体包', descEn:'Desktop + Lawyer bundle', href: GH + '/' + SUITE_TAG + '/DeepWhale-Suite-' + SUITE_VER + '-Windows-x64.zip', btnZh:'下载套装 (Windows)', btnEn:'Download (Windows)', noteZh:'解压后得到两个安装包 + 一份《安装说明.txt》。① 双击 DeepWhale-Desktop-1.0.59-x64-Setup.exe 装深鲸桌面，一路点「下一步」，装完自动创建开始菜单和桌面快捷方式；② 双击 DeepWhale-Lawyer-0.1.12-x64-Setup.exe 装律师端，同样自动建快捷方式；③ ⚠️ 装完请先打开一次律师端并完成激活 —— Windows 上的 deepwhale-law 链接协议是律师端「第一次运行时」才登记的，只装不打开则协议不登记，之后在深鲸桌面里选「法律模式」不会弹出律师端（打开过一次以后就不用再手动开了）。两个安装包都可能弹「Windows 已保护你的电脑」，点「更多信息」→「仍要运行」（我们未购买代码签名证书，属正常提示，文件没有坏）。用法：打开深鲸桌面 → 新建会话 → 预设选「法律模式」→ 律师端自动弹出（默认是标准模式，不会自动弹）。', noteEn:'Unzip; run both installers (Next to Next; both auto-create Start Menu and desktop shortcuts); then open the Lawyer app once to register the deepwhale-law protocol - without that first launch, choosing Legal Mode will not open it. Both installers may trigger SmartScreen: More info then Run anyway.'},
+    {emoji:'🪟', nameZh:'Windows x64', nameEn:'Windows x64', descZh:'深鲸桌面 + 深鲸·律师端 · 合体包', descEn:'Desktop + Lawyer bundle', href: GH + '/' + SUITE_TAG + '/DeepWhale-Suite-' + SUITE_VER + '-Windows-x64.zip', btnZh:'下载套装 (Windows)', btnEn:'Download (Windows)', noteZh:'解压后得到两个安装包 + 一份《安装说明.txt》。① 双击 DeepWhale-Desktop-1.0.57-x64-Setup.exe 装深鲸桌面，一路点「下一步」，装完自动创建开始菜单和桌面快捷方式；② 双击 DeepWhale-Lawyer-0.1.12-x64-Setup.exe 装律师端，同样自动建快捷方式；③ ⚠️ 装完请先打开一次律师端并完成激活 —— Windows 上的 deepwhale-law 链接协议是律师端「第一次运行时」才登记的，只装不打开则协议不登记，之后在深鲸桌面里选「法律模式」不会弹出律师端（打开过一次以后就不用再手动开了）。两个安装包都可能弹「Windows 已保护你的电脑」，点「更多信息」→「仍要运行」（我们未购买代码签名证书，属正常提示，文件没有坏）。用法：打开深鲸桌面 → 新建会话 → 预设选「法律模式」→ 律师端自动弹出（默认是标准模式，不会自动弹）。', noteEn:'Unzip; run both installers (Next to Next; both auto-create Start Menu and desktop shortcuts); then open the Lawyer app once to register the deepwhale-law protocol - without that first launch, choosing Legal Mode will not open it. Both installers may trigger SmartScreen: More info then Run anyway.'},
     {emoji:'🍎', nameZh:'macOS（Apple 芯片）', nameEn:'macOS (Apple Silicon)', descZh:'深鲸桌面 + 深鲸·律师端 · 合体包', descEn:'Desktop + Lawyer bundle', href: GH + '/' + SUITE_TAG + '/DeepWhale-Suite-' + SUITE_VER + '-macOS-arm64.zip', btnZh:'下载套装 (macOS)', btnEn:'Download (macOS)', noteZh:'解压后得到一个壳 zip、一个律师端 zip 和一份《安装说明.txt》。① 解压壳 zip，把「DeepWhale Desktop.app」拖进「应用程序」；② 解压律师端 zip，先双击包内「首次使用请双击我」，再把「深鲸·律师端.app」拖进「应用程序」（macOS 拖进「应用程序」时就自动完成协议登记，不需要额外操作）；③ 打开律师端登录并激活。若提示「已损坏／无法验证开发者」，是没有 Apple 开发者证书时的正常提示、文件没坏：右键图标 →「打开」→ 再点「打开」，或终端执行 xattr -dr com.apple.quarantine "/Applications/深鲸·律师端.app"。用法：打开深鲸桌面 → 新建会话 → 预设选「法律模式」→ 律师端自动弹出（默认是标准模式，不会自动弹）。仅支持 Apple 芯片（M1 及以上）。', noteEn:'Unzip; drag both apps into Applications (double-click the bundled launcher first for the Lawyer app - dragging into Applications registers the protocol on macOS); open the Lawyer app once. Then pick Legal Mode for a new session. Apple Silicon (M1+) only.'},
     {emoji:'🍎', nameZh:'macOS（Intel）', nameEn:'macOS (Intel)', descZh:'深鲸桌面 + 深鲸·律师端 · 合体包 · Intel 芯片', descEn:'Desktop + Lawyer bundle · Intel', href: GH + '/' + SUITE_TAG + '/DeepWhale-Suite-' + SUITE_VER + '-macOS-x64.zip', btnZh:'下载套装 (macOS Intel)', btnEn:'Download (macOS Intel)', noteZh:'适用 Intel 芯片的 Mac。解压后得到壳 zip（-x64）、律师端 zip（-x64）和一份《安装说明.txt》：① 解压壳 zip，把「DeepWhale Desktop.app」拖进「应用程序」；② 解压律师端 zip，先双击包内「首次使用请双击我」，再把「深鲸·律师端.app」拖进「应用程序」；③ 打开律师端登录并激活。若提示「已损坏／无法验证开发者」，是没有 Apple 开发者证书时的正常提示、文件没坏：右键图标 →「打开」→ 再点「打开」。', noteEn:'For Intel-based Macs. Unzip; drag both apps into Applications (run the bundled helper first for the Lawyer app), then open and activate.'},
-    {emoji:'🐧', nameZh:'Linux x64', nameEn:'Linux x64', descZh:'深鲸桌面 + 深鲸·律师端 · 合体包', descEn:'Desktop + Lawyer bundle', href: GH + '/' + SUITE_TAG + '/DeepWhale-Suite-' + SUITE_VER + '-Linux-x64.zip', btnZh:'下载套装 (Linux)', btnEn:'Download (Linux)', noteZh:'解压后得到两个 AppImage 和一份《安装说明.txt》。① 打开终端进入解压目录，给两个文件加执行权限：chmod +x DeepWhale-Desktop-1.0.59-x86_64.AppImage DeepWhale-Lawyer-0.1.12-x86_64.AppImage；② 双击 DeepWhale Desktop 那个运行；③ ⚠️ 务必先双击运行一次律师端并完成激活 —— Linux 上的 deepwhale-law 链接协议是律师端「第一次运行时」才写入 ~/.local/share/applications/ 登记的，不打开则不登记，之后在深鲸桌面里选「法律模式」不会弹出律师端。建议把两个 AppImage 放到固定目录（如 ~/Applications）后再用。用法：打开深鲸桌面 → 新建会话 → 预设选「法律模式」→ 律师端自动弹出（默认是标准模式，不会自动弹）。', noteEn:'Unzip; chmod +x both AppImages; run the Desktop one; then run the Lawyer one once to register the deepwhale-law protocol. Then pick Legal Mode for a new session. Keep the AppImages in a permanent folder such as ~/Applications.'}
+    {emoji:'🐧', nameZh:'Linux x64', nameEn:'Linux x64', descZh:'深鲸桌面 + 深鲸·律师端 · 合体包', descEn:'Desktop + Lawyer bundle', href: GH + '/' + SUITE_TAG + '/DeepWhale-Suite-' + SUITE_VER + '-Linux-x64.zip', btnZh:'下载套装 (Linux)', btnEn:'Download (Linux)', noteZh:'解压后得到两个 AppImage 和一份《安装说明.txt》。① 打开终端进入解压目录，给两个文件加执行权限：chmod +x DeepWhale-Desktop-1.0.57-x86_64.AppImage DeepWhale-Lawyer-0.1.12-x86_64.AppImage；② 双击 DeepWhale Desktop 那个运行；③ ⚠️ 务必先双击运行一次律师端并完成激活 —— Linux 上的 deepwhale-law 链接协议是律师端「第一次运行时」才写入 ~/.local/share/applications/ 登记的，不打开则不登记，之后在深鲸桌面里选「法律模式」不会弹出律师端。建议把两个 AppImage 放到固定目录（如 ~/Applications）后再用。用法：打开深鲸桌面 → 新建会话 → 预设选「法律模式」→ 律师端自动弹出（默认是标准模式，不会自动弹）。', noteEn:'Unzip; chmod +x both AppImages; run the Desktop one; then run the Lawyer one once to register the deepwhale-law protocol. Then pick Legal Mode for a new session. Keep the AppImages in a permanent folder such as ~/Applications.'}
   ]}
 ];
 
@@ -549,7 +580,7 @@ function renderProducts(){
   var g = document.getElementById('products-grid');
   g.innerHTML = PRODUCTS.map(function(p){
     return '<div class="pcard"><div class="pbar"></div>' +
-      '<div class="emoji">' + p.emoji + '</div>' +
+      '<div class="emoji">' + (p.icon ? '<img src="' + p.icon + '" alt="">' : p.emoji) + '</div>' +
       '<span class="tag ' + (p.id==='future'?'soon':'now') + '">' + t(p.tag.zh, p.tag.en) + '</span>' +
       '<h3>' + t(p.nameZh, p.nameEn) + '</h3>' +
       '<p>' + t(p.descZh, p.descEn) + '</p>' +
@@ -568,7 +599,7 @@ function renderDownloads(){
     return !(HIDE_SUITE && d.group === 'suite');
   }).map(function(d){
     var cards = d.items.map(function(it){
-      return '<div class="card"><div class="emoji">' + it.emoji + '</div>' +
+      return '<div class="card"><div class="emoji">' + (it.icon ? '<img src="' + it.icon + '" alt="">' : it.emoji) + '</div>' +
         '<h4>' + t(it.nameZh, it.nameEn) + '</h4>' +
         '<p>' + t(it.descZh, it.descEn) + '</p>' +
         '<a class="btn" href="' + it.href + '">' + t(it.btnZh, it.btnEn) + '</a>' +

@@ -62,6 +62,11 @@
   flex-direction: column;
   gap: 6px;
   margin: 8px 0 14px;
+  /* 宠物多时列表必须自己滚，否则会把下面的开关/帧率控件挤出面板（2026-10-20 实测 54 个宠物撑爆） */
+  max-height: 300px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
 }
 
 .dsh-ext-item {
@@ -244,4 +249,62 @@
 }
 #dsh-ext-shell-actions button:hover {
   background: var(--dsw-alias-interactive-bg-hover, rgba(0, 0, 0, 0.05));
+}
+
+/* ── AI 造宠物（2026-10-20）──────────────────────────────────────── */
+.dsh-forge {
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin: 4px 0 16px;
+  background: var(--dsw-alias-bg-l1, rgba(0, 0, 0, 0.02));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.dsh-forge-title { font-weight: 600; font-size: 14px; }
+.dsh-forge-hint { font-size: 12px; opacity: 0.66; line-height: 1.6; }
+.dsh-forge-input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 8px;
+  font-size: 13px;
+  background: transparent;
+  color: inherit;
+}
+.dsh-forge-row { display: flex; flex-wrap: wrap; gap: 12px; }
+.dsh-forge-field { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.dsh-forge-field select {
+  min-height: 32px;
+  padding: 4px 8px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font-size: 13px;
+}
+.dsh-forge-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.dsh-forge-btn {
+  min-height: 34px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 8px;
+  background: var(--dsw-alias-accent, #4b7bec);
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
+.dsh-forge-btn:disabled { opacity: 0.6; cursor: default; }
+.dsh-forge-msg { font-size: 12px; line-height: 1.5; word-break: break-all; }
+.dsh-forge-msg.ok { color: #12a150; }
+.dsh-forge-msg.err { color: #d64545; }
+.dsh-forge-msg.warn { color: #c47f17; }
+.dsh-forge-msg.busy { opacity: 0.7; }
+.dsh-forge-btn-ghost {
+  background: transparent;
+  color: inherit;
+  border: 1px solid var(--dsw-alias-border-l1);
 }

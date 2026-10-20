@@ -52,6 +52,30 @@
       '    <h3>宠物</h3>' +
       '    <div class="dsh-ext-row">当前宠物：<b id="dsh-ext-pet-current">—</b></div>' +
       '    <div class="dsh-ext-preview" id="dsh-ext-pet-preview"><span class="ph">—</span></div>' +
+      '    <div class="dsh-forge">' +
+      '      <div class="dsh-forge-title">AI 造宠物</div>' +
+      '      <div class="dsh-forge-hint">用你已有的图像生成模型，一句话生成专属宠物。需自备 API Key（本软件不提供算力）。</div>' +
+      '      <input class="dsh-forge-input" id="dsh-forge-desc" maxlength="200" placeholder="例：一只穿法袍戴眼镜的熊猫，抱着一摞卷宗" />' +
+      '      <div class="dsh-forge-row">' +
+      '        <label class="dsh-forge-field"><span>动作风格</span><select id="dsh-forge-style">' +
+      '          <option value="generic">通用</option><option value="lawyer">律师</option>' +
+      '          <option value="judge">法官</option><option value="prosecutor">检察官</option>' +
+      '          <option value="bailiff">法警</option><option value="forensic">法医</option>' +
+      '          <option value="clerk">书记员</option><option value="chef">厨师</option>' +
+      '        </select></label>' +
+      '        <label class="dsh-forge-field"><span>生图接口</span><select id="dsh-forge-provider">' +
+      '          <option value="agnes">Agnes</option><option value="dashscope">通义万相</option>' +
+      '          <option value="doubao">豆包</option><option value="zhipu">智谱</option>' +
+      '          <option value="siliconflow">硅基流动</option><option value="openai">OpenAI</option>' +
+      '        </select></label>' +
+      '      </div>' +
+      '      <input class="dsh-forge-input" id="dsh-forge-key" type="password" placeholder="API Key（只保存在本机）" />' +
+      '      <div class="dsh-forge-actions">' +
+      '        <button class="dsh-forge-btn" id="dsh-forge-run">生成宠物</button>' +
+      '        <button class="dsh-forge-btn dsh-forge-btn-ghost" id="dsh-forge-doc">宠物怎么捏</button>' +
+      '        <span class="dsh-forge-msg" id="dsh-forge-msg"></span>' +
+      '      </div>' +
+      '    </div>' +
       '    <div class="dsh-ext-list" id="dsh-ext-pet-list"></div>' +
       '    <label class="dsh-ext-check"><input type="checkbox" id="dsh-ext-pet-visible" /> 显示宠物</label>' +
       '    <label class="dsh-ext-check"><input type="checkbox" id="dsh-ext-pet-clickthrough" /> 穿透点击（可点到宠物后面的内容）</label>' +
@@ -184,6 +208,13 @@
           petCurrentEl.textContent = n;
           Array.prototype.forEach.call(petListEl.children, function (c) { c.classList.remove('active'); });
           div.classList.add('active');
+          // 切完立刻刷新预览图，否则会一直显示上一只（2026-10-20 实测）
+          setTimeout(function () {
+            window.dsh.petState().then(function (s2) {
+              if (s2 && s2.previewDataUri) petPreviewEl.innerHTML = '<img src="' + s2.previewDataUri + '" alt="pet" />';
+              else petPreviewEl.innerHTML = '<span class="ph">' + n + '</span>';
+            });
+          }, 120);
         });
         petListEl.appendChild(div);
       });
@@ -202,6 +233,78 @@
         petPreviewEl.innerHTML = '<span class="ph">' + (current || '—') + '</span>';
       }
     }
+
+    // ---- AI 造宠物 ----
+    var forgeDescEl = document.getElementById('dsh-forge-desc');
+    var forgeStyleEl = document.getElementById('dsh-forge-style');
+    var forgeProvEl = document.getElementById('dsh-forge-provider');
+    var forgeKeyEl = document.getElementById('dsh-forge-key');
+    var forgeRunEl = document.getElementById('dsh-forge-run');
+    var forgeMsgEl = document.getElementById('dsh-forge-msg');
+    var forged = false;
+
+    function forgeSay(text, kind) {
+      forgeMsgEl.textContent = text || '';
+      forgeMsgEl.className = 'dsh-forge-msg' + (kind ? ' ' + kind : '');
+    }
+
+    if (window.dsh && window.dsh.petForgeConfig) {
+      window.dsh.petForgeConfig().then(function (cfg) {
+        if (!cfg) return;
+        if (cfg.provider) forgeProvEl.value = cfg.provider;
+        if (cfg.apiKey) forgeKeyEl.value = cfg.apiKey;
+      });
+    }
+
+    function saveForgeCfg() {
+      if (!window.dsh.petForgeSetConfig) return;
+      window.dsh.petForgeSetConfig({ provider: forgeProvEl.value, apiKey: forgeKeyEl.value });
+    }
+    forgeProvEl.addEventListener('change', saveForgeCfg);
+    forgeKeyEl.addEventListener('blur', saveForgeCfg);
+
+    var forgeDocEl = document.getElementById('dsh-forge-doc');
+    if (forgeDocEl) {
+      forgeDocEl.addEventListener('click', function () {
+        if (window.dsh && window.dsh.petForgeOpenDoc) {
+          window.dsh.petForgeOpenDoc().then(function (r) {
+            if (r && r.ok === false) forgeSay('打开说明失败：' + (r.error || r.path || ''), 'err');
+          });
+        }
+      });
+    }
+
+    forgeRunEl.addEventListener('click', function () {
+      var desc = (forgeDescEl.value || '').trim();
+      if (!desc) { forgeSay('先描述一下你想要的宠物', 'warn'); forgeDescEl.focus(); return; }
+      var key = (forgeKeyEl.value || '').trim();
+      if (!key) { forgeSay('请填 API Key（需支持图像生成，DeepSeek 模型不生图）', 'warn'); forgeKeyEl.focus(); return; }
+      saveForgeCfg();
+      forgeRunEl.disabled = true;
+      forgeRunEl.textContent = '生成中…';
+      forgeSay('正在生成，约需 30~60 秒，请稍候…', 'busy');
+      window.dsh.petForge({
+        description: desc,
+        style: forgeStyleEl.value,
+        provider: forgeProvEl.value,
+        apiKey: key
+      }).then(function (r) {
+        forgeRunEl.disabled = false;
+        forgeRunEl.textContent = '生成宠物';
+        if (r && r.ok) {
+          forged = true;
+          forgeSay('已生成「' + (r.name || '新宠物') + '」，已加入列表', 'ok');
+          forgeDescEl.value = '';
+          window.dsh.petState().then(renderPets);
+        } else {
+          forgeSay((r && r.error) || '生成失败', 'err');
+        }
+      }).catch(function (e) {
+        forgeRunEl.disabled = false;
+        forgeRunEl.textContent = '生成宠物';
+        forgeSay('生成失败：' + (e && e.message ? e.message : String(e)), 'err');
+      });
+    });
 
     window.dsh.petState().then(renderPets);
     petVisibleEl.addEventListener('change', function () { window.dsh.petSetVisible(petVisibleEl.checked); });

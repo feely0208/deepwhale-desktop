@@ -87,6 +87,10 @@ export interface Settings {
   petScale: number;
   /** 宠物窗口穿透点击 */
   clickThrough: boolean;
+  /** AI 造宠物的生图接口预设（agnes/dashscope/doubao/zhipu/siliconflow/openai） */
+  forgeProvider: string;
+  /** AI 造宠物的图像生成 API Key（用户自备，明文存本机 store） */
+  forgeApiKey: string;
   /** 关主窗口时最小化到托盘而非退出 */
   closeToTray: boolean;
   /** 用量面板是否显示 */
@@ -136,6 +140,8 @@ const DEFAULTS: Settings = {
   petFrameMs: 80,
   petScale: 1,
   clickThrough: false,
+  forgeProvider: 'agnes',
+  forgeApiKey: '',
   closeToTray: true,
   usagePanelVisible: true,
   keepDshRunning: true,

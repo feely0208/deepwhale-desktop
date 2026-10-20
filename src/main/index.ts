@@ -27,6 +27,7 @@ import { archiveLegacySessions, sessionSearchEnabled } from './session-legacy';
 import { createMainWindow } from './window';
 import { SkinManager } from './skin-manager';
 import { PetWindow } from './pet';
+import { forgePet, forgeDocPath, type ForgeOptions } from './pet-forge';
 import { createTray, applyMenu, buildAppMenuTemplate, TrayMenuActions } from './tray';
 import { UsageManager, UsageSnapshot } from './usage-manager';
 import { injectSettingsExtension, expectedVersionRow, resolveShellVersion } from './settings-inject';
@@ -1335,6 +1336,26 @@ function registerIpc(): void {
   // 「这版改了什么」：给渲染层（设置页卡片）用
   ipcMain.handle('shell:whatsnew', (_e, version: string) => notesFor(version));
 
+  // 宠物一键生成：调随包 Python（用户自备图像模型 Key，不消耗本产品算力）
+  ipcMain.handle('pet:forge', async (_e, opts: ForgeOptions) => {
+    if (!pet) return { ok: false, error: '宠物模块未初始化' };
+    pet.ensureUserPetsDir();
+    return forgePet(opts, pet.userPetsDir());
+  });
+  ipcMain.handle('pet:open-forge-doc', async () => {
+    const doc = forgeDocPath();
+    const err = await shell.openPath(doc);
+    return { ok: !err, path: doc, error: err || undefined };
+  });
+  ipcMain.handle('pet:forge-config:get', () => ({
+    provider: store.get('forgeProvider') ?? 'agnes',
+    apiKey: store.get('forgeApiKey') ?? '',
+  }));
+  ipcMain.handle('pet:forge-config:set', (_e, cfg: { provider?: string; apiKey?: string }) => {
+    if (typeof cfg?.provider === 'string') store.set('forgeProvider', cfg.provider);
+    if (typeof cfg?.apiKey === 'string') store.set('forgeApiKey', cfg.apiKey);
+    return { ok: true };
+  });
   ipcMain.handle('pet:list', () => pet?.listPets() ?? []);
   ipcMain.handle('pet:state', () => ({
     current: store.get('petGif'),

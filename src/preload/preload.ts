@@ -62,6 +62,13 @@ contextBridge.exposeInMainWorld('dsh', {
   petSetVisible: (visible: boolean) => ipcRenderer.send('pet:set-visible', visible),
   petSetClickThrough: (enabled: boolean) => ipcRenderer.send('pet:set-click-through', enabled),
   petSetConfig: (frameMs: number, scale: number) => ipcRenderer.send('pet:set-config', { frameMs, scale }),
+  // 宠物一键生成（用户自备图像模型 Key）
+  petForge: (opts: { description: string; name?: string; style?: string; provider?: string; apiKey?: string }) =>
+    ipcRenderer.invoke('pet:forge', opts),
+  petForgeOpenDoc: () => ipcRenderer.invoke('pet:open-forge-doc'),
+  petForgeConfig: () => ipcRenderer.invoke('pet:forge-config:get'),
+  petForgeSetConfig: (cfg: { provider?: string; apiKey?: string }) =>
+    ipcRenderer.invoke('pet:forge-config:set', cfg),
   petOpenFolder: () => ipcRenderer.send('pet:open-folder'),
 
   // ---- 宠物工坊 ----

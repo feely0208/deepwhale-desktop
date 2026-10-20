@@ -75,8 +75,18 @@ function headerVersion(file: string): number | null {
 }
 
 export interface LegacyScan {
-  /** 需要归档的会话目录绝对路径 */
+  /** 整个目录都要归档的会话（目录里只有旧版日志） */
   dirs: string[];
+  /**
+   * 只归档**旧日志文件**的会话（目录里同时有 v4 新日志）。
+   *
+   * 为什么不整目录搬：真机踩过 —— 老会话升级到 v4 后目录里会同时留着
+   * session.jsonl.zstd 与 session.v4.jsonl.zstd；把整目录搬走会让正在用的
+   * 会话打不开（ENOENT .../session.v4.jsonl.zstd）。但不搬旧日志，
+   * 搜索索引又会因为旧日志里不支持的 descriptor 整条失败。所以分开处理：
+   * 只搬 v<3 的旧文件，v4 日志和目录原地保留。
+   */
+  files: Array<{ dir: string; file: string }>;
   /** 检查过的会话目录总数 */
   total: number;
   /** 头部读不出来的会话数（计入「不确定」，不归档） */
@@ -86,7 +96,7 @@ export interface LegacyScan {
 /** 扫描出格式版本 < 3 的会话目录（只读，不改任何东西） */
 export function findLegacySessionDirs(home: string): LegacyScan {
   const root = path.join(home, 'sessions');
-  const out: LegacyScan = { dirs: [], total: 0, unreadable: 0 };
+  const out: LegacyScan = { dirs: [], files: [], total: 0, unreadable: 0 };
   let projects: string[] = [];
   try {
     projects = fs.readdirSync(root);
@@ -114,24 +124,27 @@ export function findLegacySessionDirs(home: string): LegacyScan {
       if (logs.length === 0) continue;
       out.total += 1;
       // ⚠️ 一个会话目录里可能同时留着**旧日志**（session.jsonl.zstd, v0）和
-      //    **升级后的当前日志**（session.v4.jsonl.zstd）。只看"有旧日志"就归档，
-      //    会把用户正在用的会话整目录搬走 → 打开时报
-      //    ENOENT .../sessions/<project>/<session>/session.v4.jsonl.zstd。
-      //    正确判据：只要存在任何一版 >= LEGACY_MAX_VERSION 的日志，这个会话就是"活的"，
-      //    不能归档（旧日志留着也不影响它正常打开；搜索索引以最新日志为准）。
+      //    **升级后的当前日志**（session.v4.jsonl.zstd）：
+      //      · 整目录搬走 → 正在用的会话打不开（ENOENT .../session.v4.jsonl.zstd）
+      //      · 什么都不搬 → 旧日志里的不支持记录会让**整条搜索**失败
+      //    所以按文件分：纯旧版目录整目录归档；混合会话只搬 v<3 的日志文件。
       let legacy = false;
       let modern = false;
       let unreadable = false;
+      const legacyLogs: string[] = [];
       for (const log of logs) {
         const v = headerVersion(path.join(dir, log));
         if (v === null) {
           unreadable = true;
           continue;
         }
-        if (v < LEGACY_MAX_VERSION) legacy = true;
-        else modern = true;
+        if (v < LEGACY_MAX_VERSION) {
+          legacy = true;
+          legacyLogs.push(log);
+        } else modern = true;
       }
       if (legacy && !modern) out.dirs.push(dir);
+      else if (legacy && modern) for (const file of legacyLogs) out.files.push({ dir, file });
       else if (unreadable && !modern) out.unreadable += 1;
     }
   }
@@ -143,7 +156,7 @@ function readmeText(archived: number, stamp: string, home: string): string {
     '# 旧版会话归档（sessions-legacy）',
     '',
     `归档时间：${stamp}`,
-    `归档数量：${archived} 个会话目录`,
+    `归档数量：${archived} 个（纯旧版会话整目录 / 混合会话只搬旧日志文件）`,
     '',
     '## 为什么在这里',
     '',
@@ -167,14 +180,14 @@ function readmeText(archived: number, stamp: string, home: string): string {
 
 /**
  * 把旧版会话目录移到 `<home>/sessions-legacy/<日期>/`（保留 project 层级）。
- * @returns 归档数量与目标目录（没有可归档的返回 0 / null）
+ * @returns 归档数量（目录或旧日志文件）与目标目录（没有可归档的返回 0 / null）
  */
 export function archiveLegacySessions(
   home: string,
   stamp = new Date().toISOString().slice(0, 10),
 ): { archived: number; dest: string | null; scan: LegacyScan } {
   const scan = findLegacySessionDirs(home);
-  if (scan.dirs.length === 0) return { archived: 0, dest: null, scan };
+  if (scan.dirs.length === 0 && scan.files.length === 0) return { archived: 0, dest: null, scan };
 
   const dest = path.join(home, 'sessions-legacy', stamp);
   let archived = 0;
@@ -187,6 +200,18 @@ export function archiveLegacySessions(
       archived += 1;
     } catch (error) {
       console.warn('[sessions-legacy] 移动会话失败（跳过）：', dir, error);
+    }
+  }
+  // 混合会话：只把 v<3 的旧日志搬走，v4 日志（正在用的那份）原地不动
+  for (const { dir, file } of scan.files) {
+    const project = path.basename(path.dirname(dir));
+    const target = path.join(dest, project, path.basename(dir), 'legacy-logs', file);
+    try {
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.renameSync(path.join(dir, file), target);
+      archived += 1;
+    } catch (error) {
+      console.warn('[sessions-legacy] 移动旧日志失败（跳过）：', path.join(dir, file), error);
     }
   }
   if (archived > 0) {

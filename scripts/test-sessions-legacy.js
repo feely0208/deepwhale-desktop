@@ -92,11 +92,13 @@ function main() {
     const scan = findLegacySessionDirs(home);
     if (scan.total === 5) ok('扫描到 5 个会话目录');
     else bad(`总数不对：${scan.total}`);
-    if (scan.dirs.length === 2) ok('识别出 2 个旧版会话（v0/v1）');
-    else bad(`旧版数量不对：${scan.dirs.length}`);
+    if (scan.dirs.length === 2) ok('识别出 2 个纯旧版会话（v0/v1）');
+    else bad(`纯旧版数量不对：${scan.dirs.length}`);
     const names = scan.dirs.map((d) => path.basename(d)).sort();
-    if (names.join(',') === 'session-old0,session-old1') ok('没有误判 v4 / 混合会话');
+    if (names.join(',') === 'session-old0,session-old1') ok('纯旧版识别正确（没把 v4 当旧版）');
     else bad(`误判：${names.join(',')}`);
+    if (scan.files.length === 1) ok('混合会话单独识别出 1 个旧日志文件');
+    else bad(`混合会话旧日志识别数量不对：${scan.files.length}`);
   }
 
   // ── ③ 归档：移动、保留层级、字节不变 ──
@@ -106,7 +108,7 @@ function main() {
       path.join(home, 'sessions', '--proj-a--', 'session-old0', 'session.jsonl.zstd'),
     );
     const result = archiveLegacySessions(home, '2026-10-20');
-    if (result.archived === 2) ok('归档 2 个旧版会话');
+    if (result.archived === 3) ok('归档 3 项（2 个整目录 + 1 个混合会话旧日志）');
     else bad(`归档数量不对：${result.archived}`);
     const moved = path.join(String(result.dest), '--proj-a--', 'session-old0', 'session.jsonl.zstd');
     if (fs.existsSync(moved)) ok('保留 project 层级（--proj-a--/session-old0）');
@@ -117,8 +119,15 @@ function main() {
     if (fs.existsSync(still)) ok('v4 会话原地保留');
     else bad('v4 会话被误移走');
     const mixed = path.join(home, 'sessions', '--proj-a--', 'session-mixed');
-    if (fs.existsSync(mixed) && fs.existsSync(path.join(mixed, 'session.v4.jsonl.zstd'))) ok('混合会话（老日志+v4）原地保留，不被误归档');
-    else bad('混合会话被误归档 —— 打开会 ENOENT（真机踩过）');
+    const mixedV4 = path.join(mixed, 'session.v4.jsonl.zstd');
+    const mixedOld = path.join(mixed, 'session.jsonl.zstd');
+    if (fs.existsSync(mixedV4)) ok('混合会话的 v4 日志原地保留（会话能正常打开）');
+    else bad('混合会话的 v4 日志被搬走 —— 打开会 ENOENT（真机踩过）');
+    if (!fs.existsSync(mixedOld)) ok('混合会话的旧日志已搬出（搜索不再被它拖垮）');
+    else bad('混合会话的旧日志还留在 sessions/ 里');
+    const movedOld = path.join(String(result.dest), '--proj-a--', 'session-mixed', 'legacy-logs', 'session.jsonl.zstd');
+    if (fs.existsSync(movedOld)) ok('旧日志归档到 legacy-logs/（可还原）');
+    else bad('旧日志归档位置不对');
     const gone = path.join(home, 'sessions', '--proj-a--', 'session-old0');
     if (!fs.existsSync(gone)) ok('旧版会话已从 sessions/ 移出');
     else bad('旧版会话还在 sessions/ 里');

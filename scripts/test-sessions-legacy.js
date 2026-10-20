@@ -62,11 +62,14 @@ function makeHome({ searchEnabled }) {
       ),
     );
   }
-  // 会话树：v0 / v1 各一条，v4 两条
+  // 会话树：v0 / v1 各一条，v4 两条，外加一条**老日志+新日志共存**的混合会话
+  // （真实场景：老会话升级到 v4 后目录里同时留着 session.jsonl.zstd 与 session.v4.jsonl.zstd）
   writeSession(path.join(home, 'sessions', '--proj-a--', 'session-old0'), 'session.jsonl.zstd', 0);
   writeSession(path.join(home, 'sessions', '--proj-a--', 'session-old1'), 'session.jsonl.zstd', 1);
   writeSession(path.join(home, 'sessions', '--proj-a--', 'session-new4'), 'session.v4.jsonl.zstd', 4);
   writeSession(path.join(home, 'sessions', '--proj-b--', 'session-new4b'), 'session.v4.jsonl.zstd', 4);
+  writeSession(path.join(home, 'sessions', '--proj-a--', 'session-mixed'), 'session.jsonl.zstd', 0);
+  writeSession(path.join(home, 'sessions', '--proj-a--', 'session-mixed'), 'session.v4.jsonl.zstd', 4);
   return home;
 }
 
@@ -87,12 +90,12 @@ function main() {
   {
     const home = makeHome({ searchEnabled: true });
     const scan = findLegacySessionDirs(home);
-    if (scan.total === 4) ok('扫描到 4 个会话目录');
+    if (scan.total === 5) ok('扫描到 5 个会话目录');
     else bad(`总数不对：${scan.total}`);
     if (scan.dirs.length === 2) ok('识别出 2 个旧版会话（v0/v1）');
     else bad(`旧版数量不对：${scan.dirs.length}`);
     const names = scan.dirs.map((d) => path.basename(d)).sort();
-    if (names.join(',') === 'session-old0,session-old1') ok('没有误判 v4');
+    if (names.join(',') === 'session-old0,session-old1') ok('没有误判 v4 / 混合会话');
     else bad(`误判：${names.join(',')}`);
   }
 
@@ -113,6 +116,9 @@ function main() {
     const still = path.join(home, 'sessions', '--proj-a--', 'session-new4');
     if (fs.existsSync(still)) ok('v4 会话原地保留');
     else bad('v4 会话被误移走');
+    const mixed = path.join(home, 'sessions', '--proj-a--', 'session-mixed');
+    if (fs.existsSync(mixed) && fs.existsSync(path.join(mixed, 'session.v4.jsonl.zstd'))) ok('混合会话（老日志+v4）原地保留，不被误归档');
+    else bad('混合会话被误归档 —— 打开会 ENOENT（真机踩过）');
     const gone = path.join(home, 'sessions', '--proj-a--', 'session-old0');
     if (!fs.existsSync(gone)) ok('旧版会话已从 sessions/ 移出');
     else bad('旧版会话还在 sessions/ 里');

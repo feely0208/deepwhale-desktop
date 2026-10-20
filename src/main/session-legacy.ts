@@ -113,7 +113,14 @@ export function findLegacySessionDirs(home: string): LegacyScan {
       }
       if (logs.length === 0) continue;
       out.total += 1;
+      // ⚠️ 一个会话目录里可能同时留着**旧日志**（session.jsonl.zstd, v0）和
+      //    **升级后的当前日志**（session.v4.jsonl.zstd）。只看"有旧日志"就归档，
+      //    会把用户正在用的会话整目录搬走 → 打开时报
+      //    ENOENT .../sessions/<project>/<session>/session.v4.jsonl.zstd。
+      //    正确判据：只要存在任何一版 >= LEGACY_MAX_VERSION 的日志，这个会话就是"活的"，
+      //    不能归档（旧日志留着也不影响它正常打开；搜索索引以最新日志为准）。
       let legacy = false;
+      let modern = false;
       let unreadable = false;
       for (const log of logs) {
         const v = headerVersion(path.join(dir, log));
@@ -122,9 +129,10 @@ export function findLegacySessionDirs(home: string): LegacyScan {
           continue;
         }
         if (v < LEGACY_MAX_VERSION) legacy = true;
+        else modern = true;
       }
-      if (legacy) out.dirs.push(dir);
-      else if (unreadable) out.unreadable += 1;
+      if (legacy && !modern) out.dirs.push(dir);
+      else if (unreadable && !modern) out.unreadable += 1;
     }
   }
   return out;

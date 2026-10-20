@@ -15,6 +15,21 @@
 
 ## [未发布] — 1.0.60 待办
 
+- [x] **修复「网页预览」拒绝内嵌后的浮层收不回去（幽灵按钮压在侧边栏）**（2026-10-20 用户现场，已修 + 回归测试）
+  - 触发：聊天里点一个 npm / GitHub 这类禁止内嵌的链接 → 右栏预览被拒 → 插件盖一层
+    「用浏览器打开」浮层 → 用浏览器打开后收起预览 → 浮层**留在页面上**，
+    变成一条竖着的按钮钉在左上角、盖住侧边栏，关不掉只能刷新。
+  - 根因（`shell-plugins/dsh-shell-web-preview/lib/client.js`）：
+    ① `destroy()` 定义了但**没有任何调用方**（没监听 iframe 被移除）；
+    ② `sync()` 无条件用 `getBoundingClientRect()` 定位，iframe 已不在文档里时全是 0，
+       宽高 0 但 padding/按钮还在 → 钉在 (0,0)。
+  - 修法：MutationObserver 监听 `removedNodes` 回收浮层（destroy + 解除 WeakMap）；
+    探测是异步的，`handle()` await 回来先判 `iframe.isConnected`（竞态：面板已关就别再显示）；
+    `sync()`/`show()` 加连接性与矩形塌缩护栏。
+  - 回归：`npm run test:web-preview-overlay`（最小 DOM 替身 + vm 独立上下文，5 项断言：
+    正常显示 / 移除即回收 / scroll 不再复现 / 异步竞态 / 矩形塌缩隐藏）；
+    **旧代码跑同一测试必挂 4 项**（反证已做）。
+
 - [x] **修复 GUI「添加插件」装不上任何插件（`spawn pnpm ENOENT`）**（2026-10-20 用户现场，已修 + 回归测试）
   - 根因：插件管理器在 **DSH 运行时进程**里执行 `pnpm view` / `pnpm add`，而桌面端从 Finder 启动时
     PATH 只有 `/usr/bin:/bin:/usr/sbin:/sbin` —— 既没有 pnpm 也没有 node，

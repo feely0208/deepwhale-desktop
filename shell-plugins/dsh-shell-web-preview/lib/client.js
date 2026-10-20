@@ -105,14 +105,33 @@ window.__ModuleLoader__.load({
           box, url: () => url,
           setUrl: (u) => { url = u; hint.textContent = u; },
           hide: () => { box.style.display = 'none'; },
-          show: () => { box.style.display = 'flex'; },
+          show: () => {
+            // ⚠️ 2026-10-20 用户现场：iframe 已经被移除后还 show 出来，
+            // 会变成一个钉在 (0,0)、盖住左侧边栏的"幽灵浮层"。
+            if (!iframe.isConnected) return;
+            box.style.display = 'flex';
+          },
           destroy: () => {
             window.removeEventListener('scroll', rec.sync, true);
             window.removeEventListener('resize', rec.sync);
             box.remove();
           },
           sync: () => {
+            // ⚠️ 2026-10-20：原来无条件按 iframe 的实时矩形定位。
+            // 一旦 iframe 被移除（关掉右栏预览 / 切会话 / SPA 换页），
+            // getBoundingClientRect() 全是 0 → 浮层被钉到左上角，
+            // 宽度高度 0 但 padding 和按钮还在 → 表现为一条竖着的
+            // 「用浏览器打开」按钮压在侧边栏上，关不掉（只能刷新）。
+            // 现在：iframe 不在文档里 / 矩形已塌缩 → 直接隐藏。
+            if (!iframe.isConnected) {
+              box.style.display = 'none';
+              return;
+            }
             const r = iframe.getBoundingClientRect();
+            if (!r || r.width < 2 || r.height < 2) {
+              box.style.display = 'none';
+              return;
+            }
             box.style.left = r.left + 'px';
             box.style.top = r.top + 'px';
             box.style.width = r.width + 'px';
@@ -137,6 +156,15 @@ window.__ModuleLoader__.load({
         const url = iframe.getAttribute('src') || iframe.src || '';
         if (!/^https?:\/\//i.test(url)) return;
         const verdict = await probe(url);
+        // 探测是异步的：等它回来时，预览面板可能已经被用户关掉了。
+        if (!iframe.isConnected) {
+          const stale = attached.get(iframe);
+          if (stale) {
+            stale.destroy();
+            attached.delete(iframe);
+          }
+          return;
+        }
         let rec = attached.get(iframe);
         if (verdict && verdict.frameable === false) {
           rec = ensure(iframe);
@@ -156,6 +184,22 @@ window.__ModuleLoader__.load({
         void handle(iframe);
       }
 
+      /** iframe 从文档里消失时，把它身上的浮层一起回收（destroy 之前没有任何调用方） */
+      function unmount(node) {
+        if (!node || node.nodeType !== 1) return;
+        const iframes = [];
+        if (node.tagName === 'IFRAME') iframes.push(node);
+        if (node.querySelectorAll) node.querySelectorAll('iframe').forEach((f) => iframes.push(f));
+        for (const iframe of iframes) {
+          const rec = attached.get(iframe);
+          if (rec) {
+            rec.destroy();
+            attached.delete(iframe);
+          }
+          iframe.__dshWebPreviewWatched = false;
+        }
+      }
+
       function scan(root) {
         if (!root || root.nodeType !== 1) return;
         if (root.tagName === 'IFRAME') watch(root);
@@ -169,6 +213,7 @@ window.__ModuleLoader__.load({
         for (const m of muts) {
           if (m.type === 'childList') {
             m.addedNodes.forEach(scan);
+            m.removedNodes.forEach(unmount);
           } else if (m.type === 'attributes' && m.target.tagName === 'IFRAME') {
             void handle(m.target);
           }

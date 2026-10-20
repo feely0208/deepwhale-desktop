@@ -2,6 +2,10 @@
 
 本项目所有重要变更都会记录在此。
 
+## [未发布]
+
+（下个版本待办；新条目写在这里）
+
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [SemVer](https://semver.org/lang/zh-CN/)。
 
 > **关于 1.0.39 起的维护口径（2026-10-08 补记）**
@@ -13,28 +17,16 @@
 >（App 内「本版更新内容」与官网同源）。本文件只记录对开发者有影响的变更；
 > 1.0.39~1.0.54 未逐条维护，**自 1.0.55 起恢复**。
 
-## [未发布] — 1.0.60 待办
+## [未发布] 修复：会话搜索归档误伤「老日志+新日志共存」的会话（2026-10-20）
 
-- [x] **修复「会话搜索」开关是开的却一直不可用**（2026-10-20 用户现场，已修 + 真语料验证）
-  - 现象：设置里「会话搜索（实验性）」已开启、工具也挂上了，但每次调用都报
-    `SESSION_QUERY_PERSISTENCE_FAILED: session history storage is unavailable`。
-  - **真实根因**（隔离实例 probe 抓到的原文，不是猜的）：
-    `subagent/descriptor 0 uses unsupported descriptor version 2; source v0 artifact remains unchanged
-    (raw log: …/session.jsonl.zstd)` —— 早期 **v0 格式**会话日志里有当前格式链不支持的记录；
-    而实验性搜索会把**全部历史会话**建索引，**一条读不了就整条查询失败**（不是跳过该条）。
-    实测语料：80 条 v4 + 66 条 v0。
-  - 修法（`src/main/session-legacy.ts` 新增）：检测到会话搜索已启用时，在**拉起 DSH 之前**
-    把格式版本 <3 的会话目录移到 `<home>/sessions-legacy/<日期>/`（保留 project 层级、
-    **只移动不删除**、写 README 含还原命令）。没开搜索不动用户数据；复用已在跑的 DSH 时一个字都不写。
-  - 验证：`npm run test:sessions-legacy`（13 项：开关判定/只认 <v3/v4 不动/字节不变/幂等/README）；
-    **真实语料闭环**：归档 66 条后 probe 直接跑通 `listSessions`（73）与 `searchSessions`（20 条命中）。
-  - ⚠️ 副作用：这 66 条早期会话会从会话列表消失（已移到 sessions-legacy，README 里有 mv 还原命令）。
+- 现象：打开某条历史会话报 `ENOENT …/sessions/<project>/<session>/session.v4.jsonl.zstd`，前端显示「本轮运行失败」。
+- 根因：`sessions-legacy` 归档判据只看「目录里有没有 < v3 的旧日志」，而升级过的会话目录会**同时**保留
+  `session.jsonl.zstd`（v0）与 `session.v4.jsonl.zstd`（v4）→ 整目录被搬走，运行时按新路径找不到文件。
+- 修复：只要目录里存在任意 >= v3 的日志就视为活跃会话，不再归档（只归档“全部日志都 < v3”的目录）；
+  回归测试补了混合会话用例。
+- 已把 7 条被误归档的混合会话移回 `sessions/`（含报错的那条），归档目录 README 记录了补充说明。
 
-- [x] **模型显示名跟官方检查点 `DeepSeek-V4.1-Flash-1017`**（2026-10-20，已修 + 冒烟）
-  - 事实：DSH 0.2.1-rc.2 适配了 `-1017` 检查点，但包内 `dsh-llm-deepseek` 的 DEFAULT_MODELS 里 name 仍是 `DeepSeek-V4.1-Flash`（官方 /models 只返回 id `deepseek-flash`）。
-  - 修法（`src/main/patch-extras.ts` 新增）：home 级 `<home>/cordis.patch.yml` 追加一条 id 定向覆盖 `llm-deepseek.config.models`，两条模型（flash/pro）字段照官方 catalog 原样，仅 flash 的 `name` 改为 `DeepSeek-V4.1-Flash-1017`；带 `# == shell:model-label` 幂等标记，已有 webserver/office 块不受影响。
-  - **风险与维护**：`config.models` 是**整数组替换** —— 上游以后新增模型不会自动出现（升级随包运行时后要核对官方 DEFAULT_MODELS 并补齐）；写错字段会让 DSH 起不来（与 1.0.58 `host: 0.0.0.0` 同类死法）。
-  - **验证**：`npm run test:model-label`（16 项：写入/YAML 合法/字段正确/幂等/不破坏已有块）；隔离实例（DSH 0.2.1-rc.2）实跑：dump-config 显示 `-1017`、服务启动干净、无 startup 错误。
+## [1.0.60] - 2026-10-20
 
 - [x] **CI：`watch-upstream` 不再开公开 Issue**（2026-10-20 用户提出）
   - 原方案「有新版本就开 Issue / 追加评论」有两个副作用：①仓库是 PUBLIC，等于把「我们落后上游几个版本、升级要跑哪些检查」写成公开页面；②每条评论都给 owner 发 GitHub 通知邮件（Cc 里带 `…@noreply.github.com` / `Subscribed` 伪地址，容易被误读成"有人被抄送"）。
@@ -70,6 +62,38 @@
   - **回归**：`npm run test:plugin-toolchain`（离线）——「Finder 极简 PATH」下真跑 `dsh plugin add`（`file:` 本地包）
     断言依赖写入 profile；同一环境不注入 PATH 必须失败（反证）；并断言 ServiceManager 传下去的子进程 PATH 首项正确。
 
+- [x] **宠物设置页「宠物一多就动不了」**（2026-10-20 用户现场，已修）
+  - 现象：`pets/` 里宠物变多后，`设置 -> 宠物` 页面被列表撑爆 —— 下面的「显示宠物 / 点击穿透 / 帧率 / 缩放」全被挤出可视区，**且无法滚动**，用户体感是"动都动不了"。
+  - 根因：`src/settings/settings-ext.css` 的 `.dsh-ext-list` **没有 max-height / overflow**，列表项无限向下堆。
+  - 修法：加 `max-height: 300px` + `overflow-y: auto` + `overscroll-behavior: contain`。
+  - 附带修：切换宠物后**预览图不刷新**（一直显示上一只）→ 切换后 120ms 重新拉 `petState()` 刷新。
+  - 触发背景：内置 12 生肖后宠物数从 3 变成 15，暴露了这个隐藏布局缺陷。
+
+- [x] **内置「十二生肖职业宠物」系列（12 只）**（2026-10-20）
+  - 12 个不同物种 × 12 种职业：鼠书记员 / 牛法官 / 虎法警 / 兔律师 / 龙检察官 / 蛇法医 / 马行政执法 / 羊公证员 / 猴仲裁员 / 鸡记者 / 狗消防搜救 / 猪厨师。
+  - 每只 **18 个动作状态 / 105 帧**（比原内置宠物多一倍槽位：dash / flip / ball / swimming / diving / standing / sleeping 等全部填满）。
+  - 每个角色有**独立动作档案**（节奏与语义不同：法官慢半拍、法警干脆、厨师颠勺、法医俯身检查）。
+  - 放在 `assets/pets/`，随包分发（约 34MB），首次启动自动同步到用户宠物目录。
+  - 合规：所有徽章均为**抽象图形**（无国徽 / 警徽 / 检徽 / 法徽真实图案）；律师袍按全国律协标准（敞口黑袍 + 深红平角领巾）。
+
+- [x] **AI 一句话生成桌宠（GUI + 命令行 + 使用说明）**（2026-10-20）
+  - 流程：一句话描述 -> 用户自己的图像生成 API 出图 -> 自动裁边距 -> 色键抠图 -> 18 状态程序化动画 -> 打包安装。
+  - **GUI 入口**：`设置 -> 宠物 -> AI 造宠物` 区块 —— 描述输入框 + 动作风格 + 生图接口 + API Key + 生成按钮，生成中显示进度、完成自动刷新列表（新增 `src/main/pet-forge.ts`，IPC `pet:forge`）。Key 存在本机 store，不上传。
+  - **使用说明**：随包《宠物怎么捏》文档（`assets/tools/petforge/宠物怎么捏.md`），界面上「宠物怎么捏」按钮可直接打开；含各家 Key 申请地址与步骤、描述写法、风格选择、常见报错对照。
+  - **打包**：`assets/tools` 走 `extraResources` 物化到 `Resources/tools/`（asar 内文件外部进程读不到，Python 脚本必须外置）。
+  - **本项目不提供算力**：需用户自备 Key；DeepSeek 系列模型不生图，须单独申请图像生成服务。
+  - 已适配预设：agnes / dashscope（通义万相）/ doubao（豆包）/ zhipu / siliconflow / openai；也可用 `--base-url` `--model` 自定义任意 OpenAI 兼容接口。
+
+- [x] **随包运行时升级至 DSH 0.2.1-rc.2**（版本文件与生成物已改；**安装 + 回归待发版窗口**）
+  - `dsh-runtime.version`：`0.2.1-rc.1` → `0.2.1-rc.2`；`src/main/dsh-version.generated.ts` 已重新生成；备份 `dsh-runtime.version.bak-20261019-105528`。
+  - rc.2 只有两条增量：① 适配 DeepSeek-V4.1-Flash-1017；② **适配官方 Search & Fetch API**（新增包 `dsh-web-deepseek-api`，端点 `https://api.deepseek.com/v1/tools` 的 `/search`、`/fetch`）。
+  - **rc.1 没有那个包** → 不升 rc.2 就用不了官方搜索。实测（独立实例 3096，2026-10-19）：`/search` 200 返回 5 条真实结果，`/fetch` 200 返回正文（注意请求体是**单数 `url`**，传 `urls` 会 400）。
+  - **计费**：官方 Search/Fetch 免费至 **2026-10-31 16:00 UTC**（北京 11-01 00:00），之后 **$0.75 / 1000 次**，由用户 DeepSeek 账户扣费。`dsh-web` **无硬编码默认 provider**（只有 `searchProvider: z.string().volatile()` + `DSH_WEB_SEARCH_PROVIDER` 兜底）→ 全新安装默认无搜索，**默认关闭成立**，无需额外改代码。
+  - 面向用户文案已写入 `assets/whatsnew.json` 的 `1.0.60`（含计费须知，`date` 暂填 `2026-10-28`，**发版时改成实际发布日**）。
+  - 模型显示纠偏：官方 `/models` 只返回 `deepseek-flash` / `deepseek-v4-pro`；`V4.1-Flash-1017` 是**显示名**，id 仍是 `deepseek-flash` → **不需要新增模型条目**。
+  - ⚠️ 回归重点：**手机连接**（`dsh-host-webserver` 在 rc.1 时收紧过绑定策略，1.0.58 踩过发布级事故）、法律模式插件、`dsh-shell-*` 系列、office/canvas。
+  - 安装命令（发版流程内执行，勿在生产机直接换）：
+    `npm install "@deepseek-ai/dsh@0.2.1-rc.2" --prefix dsh-runtime --no-audit --no-fund` → `node scripts/dsh-runtime-version.js --check`
 - [ ] **用量面板浅色下文字发灰看不清**（2026-10-19 用户实测；源码已修，**待发版才生效**）
   - 根因：2026-10-18 把 `@media (prefers-color-scheme: dark)` 展开成 `body[data-ds-dark-theme]` 时，
     每组只给**第一个**选择器加了前缀，后面的（`.row .k = #9aa1ad`、`.row .v = #e6e8ec` 等 19 条）全漏了
@@ -96,6 +120,94 @@
   - 现象：全新 home 首次启动时客户端插件清单里没有 `ui-legal-mode`，重载一次才补上（`legal-mode setup: pending=true` 的时序）。
   - 不是 1.0.58 的回归（老用户无影响），但是新装体验瑕疵。
 - [ ] **CDN 上无参数的 `whatsnew.json` 是旧版**（应用始终带 `?v=` 已规避；如需外部消费要刷新该对象）。
+
+### 1.0.60 本机验证版明细（2026-10-19）
+
+**手机端 1.2.0：附件 / 审批卡 / 轨迹 tab / chips 切换 / 令牌根治五件事全做完，并修了桌面端三个"重启后手机必废"的根因。**
+
+### 桌面端（必须重启应用才生效）
+1. **`rememberEnabled(true)` 从来没被调用** → 用户点过「关闭手机访问」之后 `enabled` 永远是 false，
+   `autoStartMobileGateway()` 重启直接跳过 → 用户出门前不开面板就永远连不上。
+2. **自动恢复只挂在「手机连接」菜单回调里** → 用户重启桌面后不去点菜单，网关根本不开。
+   现在 `service.ensureReady()` 之后自动拉起（`ensureMobileGatewayAutoStart()`）。
+3. **「换一个配对码」会连令牌一起换，却只持久化配对码** → 状态文件留旧令牌，重启复用旧令牌 →
+   手机上已保存的令牌全部 401（真机实测：设备令牌 health=200，文件里令牌 health=401）。
+   新增 `rotatePairCode()`（只换码不换令牌），面板改用它，并顺手把当前端口/令牌写回状态文件。
+4. `scripts/test-mobile-gateway.js` 增加「只换配对码：旧令牌仍有效 / 旧码 403 / 新码 200」断言；
+   `scripts/check-mobile-panel.js` 增加上述三条根因的守卫（含"启动流程里必须有自动恢复调用点"）。
+
+### 插件 `@deepwhale-cn/dsh-shell-mobile` 0.2.0
+- **`/mobile/api/chat`**：聊天全文 + 附件元数据。直接增量解析 DSH 事件日志（多帧 zstd，
+  只读新增字节，按 mtime 缓存），取代投影 turnOutline —— 后者 prompt 截断 50 字、且**没有附件**。
+- **`/mobile/api/attachment`**：附件字节（图片给 `<img>` 直接用、文件可下载），
+  只允许本会话日志真实引用过的 attachmentId。
+- **SSE `/mobile/api/stream`**：新增 `chat`（首帧全量、之后只推尾巴）与 `approval` 事件。
+- **手机审批**：宿主 `approval/request` waterfall answerer —— 只有手机正开着该会话的 SSE 时才接管，
+  60s 无回答交回桌面；`/mobile/api/approvals` + `/mobile/api/approval/answer`。
+- **会话列表以磁盘为准**：`sessions.list()` 只有进程内活着的会话，桌面重启后是空的 →
+  手机列表必须枚举 `<DSH_HOME>/sessions/*/*` + 投影缓存（标题/轮数/预览），否则重启后列表空白。
+- `readProjectionMeta` 增加 `provider`（chips 切换模型要用）。
+
+### 手机端界面 1.2.0
+- **附件**：拍照 / 相册 / 文件三个入口；图片先压到长边 1600、JPEG 0.82 再传（中继隧道下必须）；
+  待发送缩略图可删；发送走 DSH 官方 RPC（图片 base64 content part、文件 `uploadFileBinary` + receiptId）。
+  聊天里图片按需加载、可点开大图，文件显示名字/大小。
+- **审批卡**：聊天页内「拒绝 / 允许一次」，SSE + 3s 轮询兜底。
+- **轨迹 tab**：完整列表（按轮分组的思考段落 + 工具调用；没有 trace 时退回事件时间线）。
+- **chips 切换**：模型（`session/modelCatalog` → `session/selectModel`）与推理强度可真改。
+- **令牌失效 UX**：health 401/403 → 回连接页并明确提示重新扫码（不再"进去了但全死"）。
+- 深色主题下 `.tabs` 白条修复。
+- 冷启动进列表页时隐藏聊天输入区（E2E 抓到的：以前只在点返回时才隐藏，底部白占 1/3 屏）。
+- 「这个模型不支持图片」不再是英文报错：识别错误码后给中文引导并**自动弹出模型面板**，附件保留可直接重发。
+- `authQuery` 按目标路径决定 `?`/`&`（旧实现会拼出 `…?id=…?token=…`，靠网关剥 token 才没炸）。
+- 自动启动网关时把配对码落盘（以前只有"已开着/换码"才写，文件里的码和二维码对不上）。
+- 手机端 UI：删掉 composer 里和模型混淆的 workspace chip；顶部指示器改成静态「本机 · 全部会话」；
+  修深色主题 body 一直是浅色的选择器 bug；修发送键在浅色下变白圆圈、箭头只剩细描边的问题；
+  大图查看器遮罩按主题取色。
+- 修复外出（公网中继）下手机端 404：接口基地址补上页面路径里的 `/_relay/t/<id>` 前缀（列表/任务等恢复）。
+- Android 壳 1.1.2（真机验收通过）：配对后保存令牌、启动自动进入；WebViewClient 覆盖（仅官网外链走系统浏览器，
+  网关导航留在 App 内）；返回键：聊天→列表、列表→后台；release APK 重签；新增 `scripts/check-mobile-shell-android.js`
+  守卫（配对→跳转→列表→重开自动进入）。真机证据 `手机端-交付/真机-验收-最终/android/`。
+- 「我的」页：去重复标题/版本/返回键；箭头只保留给真正跳转的行；反馈邮箱更正为 service@deepwhale.org；
+  版本读不到更新说明时无箭头且点击无反应；删「使用说明」行；
+版本读不到时隐藏箭头；插件支持 CDN 回退读更新说明。
+- 模型 chip 字号/内边距调小 + 文本省略号兜底（长模型名不再溢出按钮）；权限面板改成严格的单行排版。
+- 手机端「我的」页：加返回按钮；服务器改显示真实连接状态（局域网/公网中继/未连接）；
+  官网点击外链在系统浏览器打开（鸿蒙壳新增 onLoadIntercept）；版本 → 本版更新面板（插件读 assets/whatsnew.json）。
+- composer 增加「权限」chip（附件/模型/强度/权限），权限面板一键可达。
+- 手机端「+」菜单对齐桌面端：文件 + 宿主指令（目标/计划/反馈/压缩/权限/模型/下载日志/插件命令），
+  走官方 `commands/list` / `commands/execute`；新增权限预设面板（`permissionPresets/catalog` + 会话投影当前值）。
+- composer 三枚 chip 撑满一行：模型 chip 吃满剩余宽度 + 显示 catalog 展示名（不再右侧空一截）。
+- 手机端「排队消息」：插件读宿主 `agent.inbox` 并经 SSE `queue` 帧推送，composer 上方出现「排队中」dock，
+  支持 插话发送 / 编辑 / 删除（官方 `session/updateQueue` 的 steer/edit/remove）。
+- 手机端「停止」按钮：插件订阅宿主 `api-session/status`（SSE `status` + 2.5s 轮询兜底）暴露运行状态，
+  运行中发送键切换成「蓝圆 + 白方块」，点击走官方 `session/cancel`（对齐桌面端）。
+- 发送图标改成与桌面端一致的向上箭头（不再是播放三角）。
+- 新增 `POST /mobile/api/model-caps`（插件代查宿主 `llm.resolveModelInfo().inputModalities`）：
+  手机端模型面板给不支持图片的模型打标，带图发送前提前拦截并引导切模型。
+- 鸿蒙壳（`WebPage.ets`）补 `onShowFileSelector`：ArkWeb 的 `<input type=file>` 不会自己弹选择器，
+  不实现就等于「拍照/相册/文件」按钮全死（真机才暴露）；并按 `isCapture`/accept+mime 分派
+  cameraPicker / PhotoViewPicker / DocumentViewPicker（ArkWeb 的 accept 会落在 `getMimeTypes()` 里）。
+- 浅色跟随系统的样式补齐：`.sheet` / `.att-file` / `.trace-item.tool`；chips 长名截断防折行。
+- 新增 `scripts/check-device-mobile.mjs`（`npm run check:device-mobile`）：hdc 真机逐页截图；
+  记录了 ArkWeb 的坐标换算（388×772 CSS / dpr 3.25 / 状态栏 +90 设备像素）与点击坑。
+- 新增 `scripts/check-packaged-app-mobile.mjs`（`npm run check:packaged-mobile`）：
+  在隔离 userData/端口里起**真 .app**，断言插件/界面版本、自动开网关、配对码可用、
+  打包插件能读带附件的聊天并取回附件字节 —— 防"源码绿、包里没有"那一类假绿。
+- **修一个会让人以为"消息永远不更新"的读取 bug**：事件日志增量读取以前"解压没抛错就当完整帧"，
+  而 Node 的 zstd 对**截断帧不报错**（返回已解码部分/0 字节）→ 读到半帧时偏移被推进到帧中间，
+  之后整条日志都错位、新消息永远出不来。现在按 RFC 8878 走帧头+块头算出帧长，不够长就不消费；
+  纯魔数切帧的地方（trace）也统一成同一套遍历。新增 `scripts/test-mobile-session-readers.mjs`
+  （`npm run test:mobile-readers`）用合成 fixture 钉死：列表过滤 / 附件元数据 / 半帧 / 增量 / 坏数据 resync。
+
+### 验证
+- `scripts/check-mobile-attachments.mjs`（新增，真 DSH）：图片/文件附件端到端 + 重启后会话列表持久化 +
+  SSE chat + **真实模型触发的手机审批全链路**（approvals → 允许一次 → `approval/decided`）。
+- `scripts/check-mobile-features-e2e.mjs`（新增，Electron + 我们自己的网关）：附件展示/点开图片/
+  轨迹 tab/模型面板/界面里带附件发送/审批卡点击。
+- `scripts/check-mobile-ui-layout.js`：2 主题 × 4 机型排版断言仍全绿。
+- 鸿蒙 HAP：`ConnectPage.ets` 修「自动进入」与「令牌失效分类处理」（网络失败保留令牌、401 才清）；
+  真机验证自动进入 + 保留令牌提示（见交付截图）。
 
 ## [1.0.59] - 2026-10-18
 

@@ -45,6 +45,14 @@ files:
   #    引擎走 extraResources 发真实目录，DSH 子进程用 NODE_PATH 解析（见
   #    src/main/service-manager.ts）；物化源见 src/main/office-runtime.ts。
   - '!dsh-runtime/node_modules/@deepseek-ai/libreoffice-kit-*'
+  # pnpm 包里的 pn / pnpx / pnx 是 pnpm 的**硬链接别名**（源目录里 5 个名字共享同一份
+  # 40MB 二进制，磁盘只占 1 份）。但电子打包会把硬链接**展开成独立文件** →
+  # app.asar.unpacked 里白白多出 3 × 40MB = 120MB，下载包直接胖一圈（2026-10-20 实测：
+  # 1.0.60 的 zip 486MB，其中 120MB 是这三个用不到的别名）。
+  # 我们只用 `pnpm` 命令，不需要这三个别名，直接不打包。
+  - '!node_modules/pnpm/pn'
+  - '!node_modules/pnpm/pnpx'
+  - '!node_modules/pnpm/pnx'
 # ── asar：2026-10-14 改回 true（用户要求：装得快、别占 C 盘）────────────────
 #
 # 2026-10-02 曾改成 false，当时的原因（原文保留在下面，别再踩一遍）：
@@ -78,6 +86,7 @@ asarUnpack:
   # 插件安装工具链（2026-10-20）：pnpm 是**原生可执行文件**，必须留在 asar 外 ——
   # asar 里的文件 stat 一律 0644（无执行位），spawn 会 EACCES。
   # 运行时由 src/main/plugin-toolchain.ts 物化到 <DSH_HOME>/runtime-bin/。
+  # 只剩 pnpm 本体（pn/pnpx/pnx 已在 files 里排除，见上）
   - node_modules/pnpm/**
   # pnpm 的原生二进制也可能来自可选依赖（生命周期脚本被拦时）
   - node_modules/@pnpm/**
@@ -96,6 +105,9 @@ asarUnpack:
 extraResources:
   - from: legal-mode
     to: legal-mode
+  # 随包小工具（petforge 等）：asar 内文件外部进程读不到，python 脚本必须物化成真实文件
+  - from: assets/tools
+    to: tools
   # office 载荷：精简 CPython + 文档库（Word / Excel / PPT 生成）。
   # ⚠️ 这一份必须留在 extraResources（真实文件），不能进 asar —— Python 解释器与
   # 扩展模块要被操作系统 exec/dlopen，asar 里的文件做不到。

@@ -18,7 +18,8 @@
 - [x] **CI：`watch-upstream` 不再开公开 Issue**（2026-10-20 用户提出）
   - 原方案「有新版本就开 Issue / 追加评论」有两个副作用：①仓库是 PUBLIC，等于把「我们落后上游几个版本、升级要跑哪些检查」写成公开页面；②每条评论都给 owner 发 GitHub 通知邮件（Cc 里带 `…@noreply.github.com` / `Subscribed` 伪地址，容易被误读成"有人被抄送"）。
   - 现在改为：**不建 Issue、不写评论**，结果写进 Actions Job Summary + 一条 `::warning` 注解；`permissions` 从 `contents+issues` 收回到 `contents: read`；保留每日两次 + 手动 `workflow_dispatch`。
-  - ⚠️ 公开仓库的 Actions 摘要同样公开可读；要完全不公开，只能把 `scripts/check-upstream-dsh.py` 搬到本机跑，或仓库转私有。
+  - 同日第二次收紧（用户补充「内部的东西不要给别人看到」）：**去掉 schedule**（GitHub 上不再有定时公开运行记录，只留手动 `workflow_dispatch`）；摘要只写 4 行版本数字，不再渲染「为什么要紧 / 建议动作 / 涉及哪些源文件」。日常检测改到本机（`python3 scripts/check-upstream-dsh.py`，建议挂每日本地定时任务）。
+  - ⚠️ 公开仓库的 Actions 运行记录/摘要本身匿名可读（实测 `curl` 未登录即 200）；要彻底不公开只能仓库转私有。
 
 - [x] **修复「网页预览」拒绝内嵌后的浮层收不回去（幽灵按钮压在侧边栏）**（2026-10-20 用户现场，已修 + 回归测试）
   - 触发：聊天里点一个 npm / GitHub 这类禁止内嵌的链接 → 右栏预览被拒 → 插件盖一层

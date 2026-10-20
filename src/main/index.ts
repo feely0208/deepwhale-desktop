@@ -22,6 +22,7 @@ import { ensureLegalModeSetup, legalModeHome, legalModePayloadDir, migrateLegacy
 import { bundledDshBin, dshNodeModulesDir } from './dsh-runtime';
 import { ensureOfficeSetup, officePayloadDir } from './office-runtime';
 import { ensureBundledPlugins, bundledPluginsPayloadDir } from './bundled-plugins';
+import { MODEL_LABEL_MARKER, ensureModelLabelPatch } from './patch-extras';
 import { createMainWindow } from './window';
 import { SkinManager } from './skin-manager';
 import { PetWindow } from './pet';
@@ -1812,7 +1813,12 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
       // 中途被覆盖就重新注入（三个 ensure 都是幂等的，重跑无副作用）。
       const INJECT_ATTEMPTS = 12;
       const INJECT_RETRY_MS = 1500;
-      const injectedIds = ['ui-legal-mode', 'skill-office', 'tool-workspace-dependencies'];
+      const injectedIds = [
+        'ui-legal-mode',
+        'skill-office',
+        'tool-workspace-dependencies',
+        'llm-deepseek',
+      ];
       // ⚠️ 看护的是 **home 级** patch，不再看 profile 级（2026-10-01 去重复）。
       //    home 级是壳自己创建、DSH 不会重写的那个文件，也是真正生效的那份；
       //    profile 级归 DSH 管（它改设置时会重写），我们的行已从那里清掉。
@@ -1828,6 +1834,7 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
       let after: { changed: boolean; profilePending: boolean } = { changed: false, profilePending: false };
       let afterOffice: { changed: boolean; profilePending: boolean } = { changed: false, profilePending: false };
       let afterPlugins: { changed: boolean; profilePending: boolean } = { changed: false, profilePending: false };
+      let afterModel: { changed: boolean } = { changed: false };
       let stableRounds = 0;
       // ⚠️ 累计标记：**有没有任何一轮写过盘**。
       //
@@ -1868,8 +1875,19 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
           } catch (error) {
             logInjectionFailure('plugins', 'profile 注入', error);
           }
+          // 模型显示名（2026-10-20）：home patch 里覆盖 llm-deepseek 的 config.models。
+          // 已在隔离实例冒烟：name 生效、启动干净；模型增删的维护要求见 patch-extras.ts。
+          try {
+            afterModel = { changed: ensureModelLabelPatch(legalHome) };
+          } catch (error) {
+            logInjectionFailure('model-label', 'home patch 注入', error);
+          }
           anyChanged =
-            anyChanged || after.changed || afterOffice.changed || afterPlugins.changed;
+            anyChanged ||
+            after.changed ||
+            afterOffice.changed ||
+            afterPlugins.changed ||
+            afterModel.changed;
           const ready =
             !after.profilePending && !afterOffice.profilePending && !afterPlugins.profilePending;
           const rows = patchHasAllRows();

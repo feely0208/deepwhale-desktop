@@ -15,6 +15,12 @@
 
 ## [未发布] — 1.0.60 待办
 
+- [x] **模型显示名跟官方检查点 `DeepSeek-V4.1-Flash-1017`**（2026-10-20，已修 + 冒烟）
+  - 事实：DSH 0.2.1-rc.2 适配了 `-1017` 检查点，但包内 `dsh-llm-deepseek` 的 DEFAULT_MODELS 里 name 仍是 `DeepSeek-V4.1-Flash`（官方 /models 只返回 id `deepseek-flash`）。
+  - 修法（`src/main/patch-extras.ts` 新增）：home 级 `<home>/cordis.patch.yml` 追加一条 id 定向覆盖 `llm-deepseek.config.models`，两条模型（flash/pro）字段照官方 catalog 原样，仅 flash 的 `name` 改为 `DeepSeek-V4.1-Flash-1017`；带 `# == shell:model-label` 幂等标记，已有 webserver/office 块不受影响。
+  - **风险与维护**：`config.models` 是**整数组替换** —— 上游以后新增模型不会自动出现（升级随包运行时后要核对官方 DEFAULT_MODELS 并补齐）；写错字段会让 DSH 起不来（与 1.0.58 `host: 0.0.0.0` 同类死法）。
+  - **验证**：`npm run test:model-label`（16 项：写入/YAML 合法/字段正确/幂等/不破坏已有块）；隔离实例（DSH 0.2.1-rc.2）实跑：dump-config 显示 `-1017`、服务启动干净、无 startup 错误。
+
 - [x] **CI：`watch-upstream` 不再开公开 Issue**（2026-10-20 用户提出）
   - 原方案「有新版本就开 Issue / 追加评论」有两个副作用：①仓库是 PUBLIC，等于把「我们落后上游几个版本、升级要跑哪些检查」写成公开页面；②每条评论都给 owner 发 GitHub 通知邮件（Cc 里带 `…@noreply.github.com` / `Subscribed` 伪地址，容易被误读成"有人被抄送"）。
   - 现在改为：**不建 Issue、不写评论**，结果写进 Actions Job Summary + 一条 `::warning` 注解；`permissions` 从 `contents+issues` 收回到 `contents: read`；保留每日两次 + 手动 `workflow_dispatch`。

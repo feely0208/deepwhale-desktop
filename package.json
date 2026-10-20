@@ -60,7 +60,8 @@
     "check:whatsnew-entry": "node scripts/check-whatsnew-entry.js",
     "smoke:isolated": "node scripts/smoke-isolated.js",
     "test:plugin-toolchain": "npm run build && node scripts/test-plugin-toolchain.js",
-    "test:web-preview-overlay": "node scripts/test-web-preview-overlay.js"
+    "test:web-preview-overlay": "node scripts/test-web-preview-overlay.js",
+    "test:model-label": "npm run build && node scripts/test-model-label.js"
   },
   "dependencies": {
     "electron-updater": "^6.8.9",

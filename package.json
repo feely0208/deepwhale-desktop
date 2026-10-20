@@ -61,7 +61,8 @@
     "smoke:isolated": "node scripts/smoke-isolated.js",
     "test:plugin-toolchain": "npm run build && node scripts/test-plugin-toolchain.js",
     "test:web-preview-overlay": "node scripts/test-web-preview-overlay.js",
-    "test:model-label": "npm run build && node scripts/test-model-label.js"
+    "test:model-label": "npm run build && node scripts/test-model-label.js",
+    "test:sessions-legacy": "npm run build && node scripts/test-sessions-legacy.js"
   },
   "dependencies": {
     "electron-updater": "^6.8.9",

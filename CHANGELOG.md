@@ -15,6 +15,21 @@
 
 ## [未发布] — 1.0.60 待办
 
+- [x] **修复「会话搜索」开关是开的却一直不可用**（2026-10-20 用户现场，已修 + 真语料验证）
+  - 现象：设置里「会话搜索（实验性）」已开启、工具也挂上了，但每次调用都报
+    `SESSION_QUERY_PERSISTENCE_FAILED: session history storage is unavailable`。
+  - **真实根因**（隔离实例 probe 抓到的原文，不是猜的）：
+    `subagent/descriptor 0 uses unsupported descriptor version 2; source v0 artifact remains unchanged
+    (raw log: …/session.jsonl.zstd)` —— 早期 **v0 格式**会话日志里有当前格式链不支持的记录；
+    而实验性搜索会把**全部历史会话**建索引，**一条读不了就整条查询失败**（不是跳过该条）。
+    实测语料：80 条 v4 + 66 条 v0。
+  - 修法（`src/main/session-legacy.ts` 新增）：检测到会话搜索已启用时，在**拉起 DSH 之前**
+    把格式版本 <3 的会话目录移到 `<home>/sessions-legacy/<日期>/`（保留 project 层级、
+    **只移动不删除**、写 README 含还原命令）。没开搜索不动用户数据；复用已在跑的 DSH 时一个字都不写。
+  - 验证：`npm run test:sessions-legacy`（13 项：开关判定/只认 <v3/v4 不动/字节不变/幂等/README）；
+    **真实语料闭环**：归档 66 条后 probe 直接跑通 `listSessions`（73）与 `searchSessions`（20 条命中）。
+  - ⚠️ 副作用：这 66 条早期会话会从会话列表消失（已移到 sessions-legacy，README 里有 mv 还原命令）。
+
 - [x] **模型显示名跟官方检查点 `DeepSeek-V4.1-Flash-1017`**（2026-10-20，已修 + 冒烟）
   - 事实：DSH 0.2.1-rc.2 适配了 `-1017` 检查点，但包内 `dsh-llm-deepseek` 的 DEFAULT_MODELS 里 name 仍是 `DeepSeek-V4.1-Flash`（官方 /models 只返回 id `deepseek-flash`）。
   - 修法（`src/main/patch-extras.ts` 新增）：home 级 `<home>/cordis.patch.yml` 追加一条 id 定向覆盖 `llm-deepseek.config.models`，两条模型（flash/pro）字段照官方 catalog 原样，仅 flash 的 `name` 改为 `DeepSeek-V4.1-Flash-1017`；带 `# == shell:model-label` 幂等标记，已有 webserver/office 块不受影响。

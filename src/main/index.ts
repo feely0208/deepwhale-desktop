@@ -23,6 +23,7 @@ import { bundledDshBin, dshNodeModulesDir } from './dsh-runtime';
 import { ensureOfficeSetup, officePayloadDir } from './office-runtime';
 import { ensureBundledPlugins, bundledPluginsPayloadDir } from './bundled-plugins';
 import { MODEL_LABEL_MARKER, ensureModelLabelPatch } from './patch-extras';
+import { archiveLegacySessions, sessionSearchEnabled } from './session-legacy';
 import { createMainWindow } from './window';
 import { SkinManager } from './skin-manager';
 import { PetWindow } from './pet';
@@ -1790,6 +1791,30 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
      * 而"我们自己刚把它拉起来"这条路径，正该补写。
      */
     const dshAlreadyUp = await dshPortAnswered();
+
+    // 会话搜索兼容归档（2026-10-20）：
+    // 实验性「会话搜索」会把全部历史会话建索引，而早期 v0/v1/v2 日志里有
+    // 当前格式链不支持的记录 → 一条读不了就整条搜索失败（用户看到的就是
+    // 开关开着、搜不了）。这里在**拉起 DSH 之前**把旧版会话目录移到
+    // <home>/sessions-legacy/<日期>/（只移动、不删除、可还原）。
+    // 只在「会话搜索已启用」时做；复用已在跑的 DSH 时一个字都不写。
+    if (!dshAlreadyUp) {
+      try {
+        if (sessionSearchEnabled(legalHome)) {
+          const archived = archiveLegacySessions(legalHome);
+          if (archived.archived > 0) {
+            console.log(
+              `[sessions-legacy] 已归档 ${String(archived.archived)} 个旧版会话 → ${String(archived.dest)}` +
+                '（只移动未删除，README 里有还原命令）',
+            );
+          } else if (SMOKE) {
+            console.log('[sessions-legacy] 没有需要归档的旧版会话');
+          }
+        }
+      } catch (error) {
+        console.warn('[sessions-legacy] 归档失败（不影响启动）：', error);
+      }
+    }
 
     let dshReady = false;
     try {

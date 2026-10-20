@@ -61,6 +61,11 @@ if (/gateway\.rotate\(\)/.test(mainPanelCode)) {
   problems.push('「换一个配对码」调了 gateway.rotate()（会连令牌一起换，已配对的手机全部 401）→ 应改用 rotatePairCode()');
 }
 if (!/rotatePairCode\(\)/.test(mainPanelCode)) problems.push('「换一个配对码」没有调用 rotatePairCode()（只换码不换令牌）');
+// 配对码也要在**启动路径**落盘：否则自动启动后状态文件里的码对不上内存里的码（排障/自动化会被骗）
+// （already 分支 1 次 + 换码 1 次 + 启动 1 次 = 至少 3 处）
+if ((mainPanelCode.match(/rememberPairCode\(/g) || []).length < 3) {
+  problems.push('配对码没有在启动路径持久化（状态文件里的 pairCode 会对不上真实二维码）');
+}
 // 开启后必须把 enabled=true 写回：否则重启后 autoStartMobileGateway() 永远跳过
 if (!/rememberEnabled\(true\)/.test(mainPanel)) {
   problems.push('开启手机访问后没有写 enabled=true → 重启不会自动恢复（旧代码只有 rememberEnabled(false)）');

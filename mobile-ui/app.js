@@ -19,13 +19,22 @@
       el.textContent += (el.textContent ? '\n' : '') + String(text).slice(0, 400);
     } catch (e) { /* 连错误条都建不出来就只能认了 */ }
   }
-  window.addEventListener('error', function (ev) {
-    bar('JS 错误：' + (ev.message || '') + '\n@' + String(ev.filename || '').split('/').pop() + ':' + ev.lineno);
-  });
-  window.addEventListener('unhandledrejection', function (ev) {
-    var r = ev.reason;
-    bar('未捕获 Promise：' + String((r && (r.message || r)) || ''));
-  });
+  // ⚠️ 默认**不**常驻显示（用户会看到一条吓人的红条）；排障时加 ?jsdebug=1 或
+  //    localStorage.dshMobile.jsdebug='1' 再开（真机排障仍可用）
+  var DEBUG_ERRS = false;
+  try {
+    DEBUG_ERRS = /(?:[?&]jsdebug=1(?:&|$))/.test(location.search) ||
+      localStorage.getItem('dshMobile.jsdebug') === '1';
+  } catch (e) { DEBUG_ERRS = false; }
+  if (DEBUG_ERRS) {
+    window.addEventListener('error', function (ev) {
+      bar('JS 错误：' + (ev.message || '') + '\n@' + String(ev.filename || '').split('/').pop() + ':' + ev.lineno);
+    });
+    window.addEventListener('unhandledrejection', function (ev) {
+      var r = ev.reason;
+      bar('未捕获 Promise：' + String((r && (r.message || r)) || ''));
+    });
+  }
   window.__dshErrorBar = bar;
 })();
 
@@ -86,14 +95,36 @@
   var ONLINE = false;
 
   /** 当前所有请求的基地址（独立 App 时是网关地址；同源打开时空串） */
+  /**
+   * API 的基地址。
+   * ⚠️ 中继模式（外出）下页面地址是 `https://deepwhale.org.cn/_relay/t/<id>/mobile/`，
+   *    接口是 `/mobile/api/*`（**绝对路径**）。若 base 为空，浏览器会把它解析成
+   *    `https://deepwhale.org.cn/mobile/api/*` —— 丢了 `/_relay/t/<id>` 前缀 → 中继 404
+   *    （真机现场：列表/任务都报 404）。所以同源时必须带上"页面路径里 `/mobile/` 之前的前缀"。
+   */
   function base() {
     if (conn && conn.origin) return conn.origin;
-    return '';
+    try {
+      if (!/^https?:$/.test(location.protocol)) return '';   // file:// 等离线场景
+      var p = String(location.pathname || '');
+      var i = p.indexOf('/mobile/');
+      if (i > 0) return location.origin + p.slice(0, i);
+      return location.origin;
+    } catch (e) {
+      return '';
+    }
   }
-  function authQuery() {
-    // 同源（origin 为空）也要带令牌：网关要求显式令牌，不是所有部署都会下发 cookie
-    if (conn && conn.token) return (base().indexOf('?') >= 0 ? '&' : '?') + 'token=' + encodeURIComponent(conn.token);
-    return '';
+  /**
+   * 令牌查询串。⚠️ 必须按**目标路径**决定 `?` 还是 `&`：
+   *   旧实现看的是 base() 里有没有 `?` —— 而 base 是 origin（永远没有 `?`），
+   *   于是 `/mobile/api/chat?id=…` 会被拼成 `…?id=…?token=…`（两个问号）。
+   *   之前能跑是因为**网关**在转发前把 `token=` 那段从 URL 里剥掉了（顺带把第二个 `?` 收拾干净）；
+   *   但这是"靠网关擦屁股"，直连 DSH 时 id 就会带着 `?token=…` → 查不到会话。现在按路径判断。
+   */
+  function authQuery(path) {
+    if (!(conn && conn.token)) return '';
+    var sep = String(path || '').indexOf('?') >= 0 ? '&' : '?';
+    return sep + 'token=' + encodeURIComponent(conn.token);
   }
   function enc(v) {
     return encodeURIComponent(String(v == null ? '' : v));
@@ -137,7 +168,7 @@
   // API_FAIL_TOAST：真机调试用 —— 接口失败时把「路径 + 状态码」显示出来，
   // 否则手机上只能看到空列表，完全不知道是 401/502/网络错（局域网能过、公网不行时尤其难查）。
   function jfetch(path, opts) {
-    var url = base() + path + authQuery();
+    var url = base() + path + authQuery(path);
     // 跨域（独立 App）时必须带凭据：DSH 的鉴权是 cookie，omit 会让网关拿到 403（实测）
     return fetch(url, Object.assign({ credentials: base() ? 'include' : 'same-origin' }, opts || {})).then(function (r) {
       return r.json().catch(function () {
@@ -145,6 +176,15 @@
         return { ok: false, reason: 'bad-json', status: r.status };
       });
     });
+  }
+
+  /** 和 jfetch 一样，但**失败不弹 toast**（后台探测用，比如本版更新说明读不到时不该打扰用户） */
+  function jfetchQuiet(path, opts) {
+    var url = base() + path + authQuery(path);
+    return fetch(url, Object.assign({ credentials: base() ? 'include' : 'same-origin' }, opts || {})).then(function (r) {
+      if (!r.ok) return { ok: false, reason: 'http-' + r.status, status: r.status };
+      return r.json().catch(function () { return { ok: false, reason: 'bad-json', status: r.status }; });
+    }).catch(function () { return { ok: false, reason: 'network' }; });
   }
 
   /** DSH 基础 RPC：POST /api/<ns>/<method>，body 见协议文档 */
@@ -167,6 +207,24 @@
   }
   function rpc(nsMethod, args) {
     return rpcArgs(nsMethod, { request: args || {} });
+  }
+  /** 和 rpc() 的区别：args 原样当 args 字段（commands/list 这类入参不是 {request} 的 RPC） */
+  function rpcRaw(nsMethod, args) {
+    var rid = 'mobile-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+    return jfetch('/api/' + nsMethod, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        type: 'client-request',
+        rpcId: rid,
+        method: nsMethod,
+        payload: { args: args || {} },
+      }),
+    }).then(function (res) {
+      var r = res && res.result;
+      if (r && r.ok) return { ok: true, value: r.value };
+      return { ok: false, error: (r && r.error) || res };
+    });
   }
   function rpcNoArg(nsMethod) {
     return rpcArgs(nsMethod, {});
@@ -195,6 +253,38 @@
     approvals: function (sid) {
       return jfetch('/mobile/api/approvals?sid=' + enc(sid));
     },
+    /** 这个会话是否正在跑一轮（手机端「停止」按钮靠它） */
+    sessionStatus: function (id) {
+      return jfetch('/mobile/api/session-status?id=' + enc(id));
+    },
+    /** 停止当前这一轮（官方 RPC，桌面端「停止」用的同一个） */
+    cancel: function (id) {
+      return rpc('session/cancel', { sessionId: id });
+    },
+    /** 正在排队的消息（桌面端能 插话发送 / 编辑 / 删除，手机端也要） */
+    queue: function (id) {
+      return jfetch('/mobile/api/queue?id=' + enc(id));
+    },
+    /** 改一条排队消息：{kind:'steer'|'remove'|'edit'}（记法见宿主 QueueAction） */
+    updateQueue: function (sid, itemId, action) {
+      return rpc('session/updateQueue', { sessionId: sid, itemId: itemId, action: action });
+    },
+    /** 斜杠指令目录（桌面端加号菜单就是它：目标/计划/压缩/权限/模型/导出日志/插件命令…） */
+    commands: function (sid) {
+      return rpcRaw('commands/list', { agentId: sid });
+    },
+    /** 执行一条斜杠指令（不发给模型，走宿主 commands.execute） */
+    runCommand: function (sid, line) {
+      return rpcRaw('commands/execute', { agentId: sid, line: line, submittedAttachments: [] });
+    },
+    /** 权限预设目录（只读/工作区/完全权限/自动审查） */
+    permissionCatalog: function () {
+      return rpcRaw('permissionPresets/catalog', {});
+    },
+    /** 本版更新内容（桌面端随包 assets/whatsnew.json，插件代读） */
+    whatsnew: function () {
+      return jfetchQuiet('/mobile/api/whatsnew');
+    },
     answerApproval: function (id, outcome) {
       return jfetch('/mobile/api/approval/answer', {
         method: 'POST',
@@ -203,7 +293,8 @@
       });
     },
     attachmentUrl: function (sid, part) {
-      return base() + '/mobile/api/attachment?sid=' + enc(sid) + '&id=' + enc(part.attachmentId) + authQuery();
+      var p = '/mobile/api/attachment?sid=' + enc(sid) + '&id=' + enc(part.attachmentId);
+      return base() + p + authQuery(p);
     },
     create: function () {
       return rpc('session/create', {});
@@ -222,8 +313,9 @@
     uploadFile: function (sessionId, file, onProgress) {
       return new Promise(function (resolve) {
         try {
-          var url = base() + '/api/session/uploadFileBinary?sessionId=' + enc(sessionId) +
-            '&name=' + enc(file.name || 'file') + authQuery();
+          var uploadPath = '/api/session/uploadFileBinary?sessionId=' + enc(sessionId) +
+            '&name=' + enc(file.name || 'file');
+          var url = base() + uploadPath + authQuery(uploadPath);
           var xhr = new XMLHttpRequest();
           xhr.open('POST', url, true);
           xhr.setRequestHeader('content-type', 'application/octet-stream');
@@ -248,6 +340,14 @@
     },
     modelCatalog: function () {
       return rpcNoArg('session/modelCatalog');
+    },
+    /** 模型能力（能不能读图）：会话目录不返回 inputModalities，插件代查宿主 llm */
+    modelCaps: function (pairs) {
+      return jfetch('/mobile/api/model-caps', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ pairs: pairs || [] }),
+      });
     },
     selectModel: function (sessionId, provider, model, reasoningEffort) {
       var req = { sessionId: sessionId, provider: provider, model: model };
@@ -406,10 +506,17 @@
   var chatSubscribedId = '';     // SSE 正在跟的会话 id
   var traceTimer = null, traceSig = '';
   var traceVisible = false;
+  var sessionRunning = false;     // 当前会话是否正在跑一轮
+  var queueItems = [];            // 正在排队的消息（跑着的时候发出去的话）
+  var editingQueueId = null;      // 正在编辑的排队消息 id
+  var runningPollTimer = null;
   var approvalPollTimer = null;
   var pendingApprovals = [];     // 手机待审批
   var pendingAtts = [];          // 待发送附件
   var modelCatalog = null;       // session/modelCatalog 结果
+  var modelCaps = {};            // "provider/model" → { inputModalities, supportsImages }
+  var modelCapsLoading = false;
+  var modelCapsFetched = false;   // 每次目录只查一次（否则 render→load→render 会自循环）
   var currentModel = { provider: '', model: '' };   // 当前会话的模型（投影里的真值）
   var attachmentUrlCache = {};   // attachmentId → 已加载过的图片 url
 
@@ -486,23 +593,33 @@
       var h = el('div', 'mine-section', title);
       list.appendChild(h);
     }
-    function row(label, value, onClick) {
+    // opts.chev === false → 不要“›”（只有真的会跳转下一步的才配箭头）
+    function row(label, value, onClick, opts) {
+      var o = opts || {};
       var r = el('button', 'mine-row');
       var l = el('span', 'mine-label', label);
       r.appendChild(l);
       if (value) r.appendChild(el('span', 'mine-value', value));
-      r.appendChild(el('span', 'mine-chev', '›'));
+      if (o.chev !== false) r.appendChild(el('span', 'mine-chev', '›'));
       if (onClick) r.addEventListener('click', onClick);
       list.appendChild(r);
       return r;
     }
     list.textContent = '';
+    var host = '';
+    try { host = String(location.hostname || ''); } catch (e) { host = ''; }
+    var mode = /^[0-9.]+$/.test(host) || host === 'localhost' ? '局域网' : (host ? '公网中继' : '未知网络');
+    var isConnected = !!ONLINE;
     section('连接');
-    row('服务器', origin || '未连接', function () {
-      if (typeof toast === 'function') toast(origin || '还没连接');
+    row('服务器', isConnected ? ('已连接 · ' + mode) : '未连接', null, { chev: false });
+    row('模型', (document.getElementById('chip-model') || {}).textContent || '—', function () {
+      if (window.__dshOpenModelSheet) window.__dshOpenModelSheet();
+      if (window.__dshOpenSheetById) window.__dshOpenSheetById('sheet-model');
     });
-    row('模型', (document.getElementById('chip-model') || {}).textContent || '—');
-    row('强度', (document.getElementById('chip-effort') || {}).textContent || '—');
+    row('强度', (document.getElementById('chip-effort') || {}).textContent || '—', function () {
+      if (window.__dshOpenEffortSheet) window.__dshOpenEffortSheet();
+      if (window.__dshOpenSheetById) window.__dshOpenSheetById('sheet-effort');
+    });
 
     section('设置');
     row('外观', theme === 'light' ? '浅色' : theme === 'dark' ? '深色' : '跟随系统', function () {
@@ -513,31 +630,139 @@
       else document.documentElement.setAttribute('data-theme', cur);
       try { localStorage.setItem('dshMobile.theme', cur); } catch (e) {}
       renderMine();
-    });
+    }, { chev: false });
     row('清空界面缓存', '会重新拉取页面', function () {
       try { localStorage.removeItem('dshMobile.mineVer'); } catch (e) {}
       if (typeof toast === 'function') toast('已清空，重新进入即可');
-    });
+    }, { chev: false });
 
     section('帮助');
-    row('意见反馈', 'contact@deepwhale.org.cn', function () {
-      if (typeof toast === 'function') toast('意见反馈：contact@deepwhale.org.cn');
-    });
-    row('使用说明 / 常见问题', '官网', function () {
-      if (typeof toast === 'function') toast('https://deepwhale.org.cn');
-    });
+    row('意见反馈', 'service@deepwhale.org', function () {
+      if (typeof toast === 'function') toast('意见反馈邮箱：service@deepwhale.org');
+    }, { chev: false });
+    var OFFICIAL = 'https://deepwhale.org.cn';
+    function openExternal(url, label) {
+      // 鸿蒙壳会拦截外链并用系统浏览器打开（见 手机端交付/HAP）；桌面浏览器直接跳
+      try {
+        location.href = url;
+      } catch (e) {
+        if (typeof toast === 'function') toast(label + '：' + url);
+      }
+    }
+    row('官网', 'deepwhale.org.cn', function () { openExternal(OFFICIAL, '官网'); });
 
     section('关于');
-    row('版本', VERSION);
+    var versionRow = row('版本', 'v' + VERSION + (desktopAppVersion ? ' · 桌面 ' + desktopAppVersion : ''), function () {
+      if (whatsnewFailed) return;   // 读不到就别弹"读不到"给用户看
+      openWhatsnew();
+    });
+    // 读不到更新说明时：不留一个点了没反应的箭头（真机反馈）
+    if (whatsnewFailed && versionRow) hideVersionChevron();
     row('断开连接', '需要重新扫码', function () {
       try { localStorage.removeItem('dshMobile.conn'); } catch (e) {}
       conn = null;
       ONLINE = false;
       stopChatStream();
       stopApprovalPoll();
+      stopRunningPoll();
+      sessionRunning = false;
       if (window.__dshMobile && window.__dshMobile.showPage) window.__dshMobile.showPage('connect');
     });
+    prefetchWhatsnew();
   }
+  var desktopAppVersion = '';
+  var whatsnewFailed = false;
+  var whatsnewPrefetching = false;
+  /** 读不到更新说明时把「版本」行的箭头藏起来（别留一个点了没反应的箭头） */
+  function hideVersionChevron() {
+    var rows = document.querySelectorAll('#mine-list .mine-row');
+    for (var i = 0; i < rows.length; i += 1) {
+      if (/版本/.test(rows[i].textContent || '')) {
+        var chev = rows[i].querySelector('.mine-chev');
+        if (chev) chev.style.visibility = 'hidden';
+        rows[i].onclick = null;
+        return;
+      }
+    }
+  }
+  var whatsnewData = null;
+  function renderWhatsnew() {
+    var box = document.getElementById('whatsnew-list');
+    var sub = document.getElementById('whatsnew-sub');
+    if (!box) return;
+    box.textContent = '';
+    if (sub) sub.textContent = '';
+    var draw = function (data) {
+      var versions = (data && data.versions) || {};
+      var keys = Object.keys(versions);
+      if (sub) sub.textContent = data && data.appVersion ? ('桌面 v' + data.appVersion + ' / 手机 v' + VERSION) : ('手机 v' + VERSION);
+      if (!keys.length) {
+        box.appendChild(el('div', 'list-empty', '没有更新说明'));
+        return;
+      }
+      keys.slice(0, 2).forEach(function (k, idx) {
+        var v = versions[k] || {};
+        box.appendChild(el('div', 'whatsnew-ver', (idx === 0 ? '最新：' : '上一版：') + 'v' + k + (v['date'] ? ' · ' + v['date'] : '')));
+        if (v.title) box.appendChild(el('div', 'whatsnew-title', String(v.title)));
+        (v.items || []).forEach(function (it) {
+          var row = el('div', 'whatsnew-item');
+          row.appendChild(el('span', 'kind', String(it.kind || 'note')));
+          row.appendChild(el('div', '', String(it.text || '')));
+          box.appendChild(row);
+        });
+      });
+    };
+    if (whatsnewData) draw(whatsnewData);
+    else box.appendChild(el('div', 'list-empty', '正在读取…'));
+    api.whatsnew().then(function (r) {
+      if (r && r.ok) {
+        whatsnewData = r;
+        desktopAppVersion = String(r.appVersion || desktopAppVersion || '');
+        draw(r);
+      } else {
+        whatsnewFailed = true;
+        box.textContent = '读不到更新说明（桌面端可能还没带 assets/whatsnew.json）';
+        hideVersionChevron();
+      }
+    }).catch(function () {
+      whatsnewFailed = true;
+      box.textContent = '读不到更新说明（网络）';
+      hideVersionChevron();
+    });
+  }
+  /** 进「我的」页就预读一次：失败就把版本行的箭头藏掉（别等用户点了才没反应） */
+  function prefetchWhatsnew() {
+    if (whatsnewData || whatsnewFailed || whatsnewPrefetching) return;
+    whatsnewPrefetching = true;
+    api.whatsnew().then(function (r) {
+      whatsnewPrefetching = false;
+      if (r && r.ok) {
+        whatsnewData = r;
+        desktopAppVersion = String(r.appVersion || desktopAppVersion || '');
+        var rows = document.querySelectorAll('#mine-list .mine-row');
+        for (var i = 0; i < rows.length; i += 1) {
+          if (/版本/.test(rows[i].textContent || '')) {
+            var v = rows[i].querySelector('.mine-value');
+            if (v) v.textContent = 'v' + VERSION + (desktopAppVersion ? ' · 桌面 ' + desktopAppVersion : '');
+          }
+        }
+      } else {
+        whatsnewFailed = true;
+        hideVersionChevron();
+      }
+    }).catch(function () {
+      whatsnewPrefetching = false;
+      whatsnewFailed = true;
+      hideVersionChevron();
+    });
+  }
+
+  function openWhatsnew() {
+    renderWhatsnew();
+    if (window.__dshOpenSheetById) window.__dshOpenSheetById('sheet-whatsnew');
+  }
+  window.__dshRenderWhatsnew = renderWhatsnew;
+
   window.__dshRenderMine = renderMine;
 
   // ══════════════════════════════════════════════════════════════════════
@@ -723,6 +948,24 @@
       sessionId: currentSessionId,
       turns: chatTurns.length,
       approvals: pendingApprovals.length,
+      running: sessionRunning,
+      permission: currentPermission,
+      permissionChip: (document.getElementById('chip-permission') || {}).textContent || '',
+      serverText: (function () {
+        var rows = document.querySelectorAll('#mine-list .mine-row');
+        for (var i = 0; i < rows.length; i += 1) {
+          if (rows[i].querySelector('.mine-label') && /服务器/.test(rows[i].textContent || '')) {
+            var v = rows[i].querySelector('.mine-value');
+            return v ? String(v.textContent) : '';
+          }
+        }
+        return '';
+      })(),
+      commandCount: (commandDescriptors || []).length,
+      queueCount: queueItems.length,
+      queueTexts: queueItems.map(function (x) { return x.text; }),
+      modelCapsKnown: Object.keys(modelCaps).length,
+      modelCapsNoImage: Object.keys(modelCaps).filter(function (k) { return modelCaps[k] && modelCaps[k].supportsImages === false; }).length,
       pendingAtts: pendingAtts.length,
       sending: sending,
       page: (document.getElementById('page-chat') || {}).hidden === false ? 'chat' : 'other',
@@ -755,13 +998,17 @@
       dd.appendChild(el('span', 's', '点击加载' + (part.width && part.height ? ' · ' + part.width + '×' + part.height : '') + (part.bytes ? ' · ' + fmtBytes(part.bytes) : '')));
       ph.appendChild(dd);
       ph.addEventListener('click', function () {
+        // ⚠️ 不能用 `ph.replaceWith(wrap)`：wrap 是 ph 的父节点，会抛
+        //    HierarchyRequestError: The new child element contains the parent（真机/E2E 都炸）
+        //    正确做法：把占位卡从 wrap 里换掉，再把 <img> 放进 wrap（wrap 已经在 DOM 里）。
+        if (ph.parentNode) ph.parentNode.removeChild(ph);
         if (attachmentUrlCache[part.attachmentId]) {
           img.src = attachmentUrlCache[part.attachmentId];
         } else {
           img.src = api.attachmentUrl(sid, part);
           attachmentUrlCache[part.attachmentId] = img.src;
         }
-        ph.replaceWith(wrap);
+        wrap.appendChild(img);
       });
       wrap.appendChild(ph);
       return wrap;
@@ -881,9 +1128,409 @@
   }
 
   // ══════════════════════════════════════════════════════════════════════
+  // 发送 / 停止按钮
+  //   桌面端：跑的时候右侧按钮变成"蓝圆 + 白方块"，点了取消这一轮。
+  //   手机端以前永远只有"上箭头"，用户反馈「没有停止按钮，等于停不了」→ 对齐桌面端。
+  // ══════════════════════════════════════════════════════════════════════
+  var ICON_SEND = '<svg class="ic" viewBox="0 0 24 24" width="20" height="20"><path d="M12 19.5V5"/><path d="M5.5 11.5 12 5l6.5 6.5"/></svg>';
+  var ICON_STOP = '<svg class="ic" viewBox="0 0 24 24" width="20" height="20"><rect x="7.2" y="7.2" width="9.6" height="9.6" rx="2.6"/></svg>';
+
+  function renderSendButton() {
+    var b = document.getElementById('btn-send');
+    if (!b) return;
+    if (sessionRunning) {
+      b.classList.add('stop');
+      b.setAttribute('aria-label', '停止');
+      b.innerHTML = ICON_STOP;
+    } else {
+      b.classList.remove('stop');
+      b.setAttribute('aria-label', '发送');
+      b.innerHTML = ICON_SEND;
+    }
+  }
+
+  function setRunning(v) {
+    var next = v === true;
+    if (next === sessionRunning) return;
+    sessionRunning = next;
+    renderSendButton();
+  }
+  window.__dshIsRunning = function () { return sessionRunning; };
+  window.__dshSetRunning = setRunning;   // E2E/排障用（真机由 SSE status + 轮询驱动）
+
+  function cancelTurn() {
+    if (!currentSessionId) { toast('先进入一个会话'); return; }
+    toast('正在停止…');
+    api.cancel(currentSessionId).then(function (r) {
+      if (r && r.ok) toast('已请求停止');
+      else toast('停止失败：' + ((r && r.error && (r.error.code || r.error.message)) || '未知原因'));
+      setTimeout(refreshRunning, 500);
+    }).catch(function () { toast('停止失败：网络错误'); });
+  }
+
+  function refreshRunning() {
+    if (!ONLINE || !currentSessionId) return;
+    api.sessionStatus(currentSessionId).then(function (r) {
+      if (r && r.ok) setRunning(r.running === true);
+    }).catch(function () {});
+    refreshQueue();
+  }
+
+  function startRunningPoll() {
+    stopRunningPoll();
+    if (!ONLINE) return;
+    refreshRunning();
+    runningPollTimer = setInterval(refreshRunning, 2500);
+  }
+
+  function stopRunningPoll() {
+    if (runningPollTimer) { clearInterval(runningPollTimer); runningPollTimer = null; }
+  }
+
+  // ── 排队消息 dock：和桌面端一样，排队中的消息可以「插话发送 / 编辑 / 删除」──
+  function queueEl(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text !== undefined) n.textContent = String(text);
+    return n;
+  }
+
+  function queueItemLabel(it) {
+    var bits = [];
+    if (it.text) bits.push(String(it.text).replace(/\s+/g, ' ').trim());
+    if (it.images) bits.push('（图片 ' + it.images + '）');
+    if (it.files) bits.push('（文件 ' + it.files + '）');
+    return bits.join(' ') || '（空消息）';
+  }
+
+  function renderQueueDock() {
+    var dock = document.getElementById('queue-dock');
+    if (!dock) return;
+    dock.textContent = '';
+    if (!currentSessionId || (!queueItems.length && !editingQueueId)) {
+      dock.hidden = true;
+      return;
+    }
+    dock.hidden = false;
+    if (editingQueueId) {
+      var it0 = null;
+      for (var i0 = 0; i0 < queueItems.length; i0 += 1) if (queueItems[i0].id === editingQueueId) it0 = queueItems[i0];
+      var wrap = queueEl('div', 'queue-edit');
+      var ta = document.createElement('textarea');
+      ta.id = 'queue-edit-input';
+      ta.value = it0 ? it0.text : '';
+      ta.setAttribute('aria-label', '编辑排队消息');
+      wrap.appendChild(ta);
+      var btns = queueEl('div', 'q-btns');
+      var save = queueEl('button', 'save', '保存');
+      var cancel = queueEl('button', '', '取消');
+      save.addEventListener('click', saveQueueEdit);
+      cancel.addEventListener('click', function () { editingQueueId = null; renderQueueDock(); });
+      btns.appendChild(save);
+      btns.appendChild(cancel);
+      wrap.appendChild(btns);
+      dock.appendChild(wrap);
+      return;
+    }
+    queueItems.forEach(function (it) {
+      var row = queueEl('div', 'queue-item');
+      row.setAttribute('data-queue-id', it.id);
+      row.appendChild(queueEl('span', 'qtag', '排队中'));
+      row.appendChild(queueEl('div', 'qtxt', queueItemLabel(it)));
+      var acts = queueEl('div', 'queue-acts');
+      var steer = queueEl('button', 'q-steer', '插话发送');
+      var edit = queueEl('button', 'q-edit', '编辑');
+      var del = queueEl('button', 'q-del', '删除');
+      steer.addEventListener('click', function () { queueAction(it.id, { kind: 'steer' }, '已插话发送'); });
+      edit.addEventListener('click', function () {
+        editingQueueId = it.id;
+        renderQueueDock();
+        var ta = document.getElementById('queue-edit-input');
+        if (ta) { try { ta.focus(); } catch (e) {} }
+      });
+      del.addEventListener('click', function () { queueAction(it.id, { kind: 'remove' }, '已删除排队消息'); });
+      acts.appendChild(steer);
+      acts.appendChild(edit);
+      acts.appendChild(del);
+      row.appendChild(acts);
+      dock.appendChild(row);
+    });
+  }
+
+  function queueAction(itemId, action, okText) {
+    if (!currentSessionId) return;
+    api.updateQueue(currentSessionId, itemId, action).then(function (r) {
+      if (r && r.ok) {
+        toast(okText);
+        if (editingQueueId === itemId) editingQueueId = null;
+        setTimeout(refreshQueue, 300);
+      } else {
+        toast('操作失败：' + ((r && r.error && (r.error.code || r.error.message)) || '未知原因'));
+      }
+    }).catch(function () { toast('操作失败：网络错误'); });
+  }
+
+  function saveQueueEdit() {
+    var itemId = editingQueueId;
+    var ta = document.getElementById('queue-edit-input');
+    var text = ta ? String(ta.value || '').trim() : '';
+    if (!itemId) return;
+    if (!text) { toast('内容不能为空'); return; }
+    api.updateQueue(currentSessionId, itemId, { kind: 'edit', content: [{ type: 'text', text: text }] }).then(function (r) {
+      if (r && r.ok) {
+        toast('已保存修改');
+        editingQueueId = null;
+        setTimeout(refreshQueue, 300);
+        renderQueueDock();
+      } else {
+        toast('保存失败：' + ((r && r.error && (r.error.code || r.error.message)) || '未知原因'));
+      }
+    }).catch(function () { toast('保存失败：网络错误'); });
+  }
+  window.__dshRenderQueue = renderQueueDock;
+
+  function refreshQueue() {
+    if (!ONLINE || !currentSessionId) return;
+    api.queue(currentSessionId).then(function (r) {
+      if (r && r.ok && Array.isArray(r.items)) {
+        queueItems = r.items;
+        if (editingQueueId && !queueItems.some(function (x) { return x.id === editingQueueId; })) editingQueueId = null;
+        renderQueueDock();
+      }
+    }).catch(function () {});
+  }
+
+  // 右上角按钮点击：跑着 → 停止；空闲 → 发送
+  window.__dshSendAction = function () {
+    if (sessionRunning && currentSessionId) { cancelTurn(); return; }
+    if (window.__dshDoSend) window.__dshDoSend();
+  };
+  window.__dshRenderSendButton = renderSendButton;
+
+
+
+  /** chip 里的文字统一放进 .txt span：长模型名靠 CSS 省略号收住，不会溢出按钮 */
+  function setChipLabel(elOrId, text) {
+    var el = typeof elOrId === 'string' ? document.getElementById(elOrId) : elOrId;
+    if (!el) return;
+    el.textContent = '';
+    var span = document.createElement('span');
+    span.className = 'txt';
+    span.textContent = String(text == null ? '' : text);
+    el.appendChild(span);
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // 加号菜单（文件 + 斜杠指令）与权限预设 —— 对齐桌面端 composer 的「+」和「权限」
+  // ══════════════════════════════════════════════════════════════════════
+  var COMMAND_LABELS = {
+    goal: ['目标', '设置或查看长期任务目标'],
+    plan: ['计划', '进入或退出计划模式'],
+    feedback: ['反馈', '发送关于当前会话的反馈'],
+    compact: ['压缩', '压缩以上对话内容'],
+    permission: ['权限', '切换权限预设（沙箱模式与审批策略）'],
+    model: ['模型', '选择本会话使用的模型'],
+    export: ['下载日志', '将当前会话内容导出为 ZIP'],
+  };
+  var COMMAND_ORDER = ['goal', 'plan', 'feedback', 'compact', 'permission', 'model', 'export'];
+  var PERMISSION_LABELS = {
+    'read-only': ['仅可查看', '不允许修改文件'],
+    'workspace-write': ['工作区内修改', '只能改工作区里的文件'],
+    'danger-full-access': ['完全权限', '不限制沙箱（谨慎）'],
+    auto: ['自动审查', '由自动审查决定（EXP）'],
+  };
+  var commandDescriptors = null;
+  var commandSessionId = '';
+  var currentPermission = '';
+
+  function commandLabel(d) {
+    var m = COMMAND_LABELS[d.name];
+    return m ? m[0] : String(d.name);
+  }
+  function commandDesc(d) {
+    var m = COMMAND_LABELS[d.name];
+    if (m && m[1]) return m[1];
+    return String(d.description || '');
+  }
+
+  function renderCommands() {
+    var box = document.getElementById('command-list');
+    if (!box) return;
+    box.textContent = '';
+    if (!currentSessionId) {
+      box.appendChild(el('div', 'list-empty', '先进入一个会话'));
+      return;
+    }
+    var draw = function (list) {
+      var byName = {};
+      (list || []).forEach(function (x) { byName[String(x.name)] = x; });
+      // 「模型」在桌面端是客户端条目而不是宿主指令，这里补一条 synthetic（命令目录里没有也要显示）
+      if (!byName.model) byName.model = { name: 'model', description: '选择本会话使用的模型' };
+      var names = [];
+      COMMAND_ORDER.forEach(function (n) { if (byName[n]) { names.push(n); } });
+      Object.keys(byName).forEach(function (n) { if (names.indexOf(n) < 0) { names.push(n); } });
+      box.textContent = '';
+      if (!names.length) {
+        box.appendChild(el('div', 'list-empty', '没有可用指令'));
+        return;
+      }
+      names.forEach(function (n) {
+        var d = byName[n];
+        var b = el('button', 'opt');
+        b.setAttribute('data-command', n);
+        b.appendChild(document.createTextNode(commandLabel(d)));
+        b.appendChild(el('span', 'cname', String(d.name)));
+        var sub = commandDesc(d);
+        if (sub) b.appendChild(el('span', 'sub', sub.length > 16 ? sub.slice(0, 16) + '…' : sub));
+        b.addEventListener('click', function () { onCommandPicked(d); });
+        box.appendChild(b);
+      });
+    };
+    if (commandDescriptors && commandSessionId === currentSessionId) {
+      draw(commandDescriptors);
+      return;
+    }
+    box.appendChild(el('div', 'list-empty', '正在读取指令…'));
+    api.commands(currentSessionId).then(function (r) {
+      if (r && r.ok) {
+        commandDescriptors = r.value || [];
+        commandSessionId = currentSessionId;
+        draw(commandDescriptors);
+      } else {
+        box.textContent = '读不到指令列表';
+      }
+    }).catch(function () { box.textContent = '读不到指令列表（网络）'; });
+  }
+
+  function onCommandPicked(d) {
+    if (window.__dshCloseSheets) window.__dshCloseSheets();
+    if (d.name === 'model') {
+      if (window.__dshOpenModelSheet) window.__dshOpenModelSheet();
+      if (window.__dshOpenSheetById) window.__dshOpenSheetById('sheet-model');
+      return;
+    }
+    if (d.name === 'permission') {
+      renderPermissions();
+      if (window.__dshOpenSheetById) window.__dshOpenSheetById('sheet-permission');
+      return;
+    }
+    if (d.input && d.input.hint) {
+      var ta = document.getElementById('input');
+      if (ta) {
+        ta.value = '/' + d.name + ' ';
+        try { ta.focus(); } catch (e) {}
+        toast(String(d.input.hint));
+      }
+      return;
+    }
+    executeCommand('/' + d.name);
+  }
+
+  function executeCommand(line) {
+    if (!currentSessionId) { toast('先进入一个会话'); return; }
+    toast('执行 ' + line + '…');
+    api.runCommand(currentSessionId, line).then(function (r) {
+      if (r && r.ok) {
+        var res = (r.value && r.value.result) || {};
+        if (res.kind === 'error') toast(String(res.text || '执行失败'));
+        else if (res.text) toast(String(res.text).slice(0, 80));
+        else toast(line + ' 已执行');
+        refreshChatSnapshot();
+        refreshQueue();
+        refreshPermission();
+      } else {
+        toast('执行失败：' + ((r && r.error && (r.error.message || r.error.code)) || '未知原因'));
+      }
+    }).catch(function () { toast('执行失败：网络错误'); });
+  }
+
+  function refreshPermission() {
+    if (!ONLINE || !currentSessionId) return;
+    api.session(currentSessionId).then(function (r) {
+      if (r && r.ok && r.value && r.value.meta) {
+        currentPermission = String(r.value.meta.permission || '');
+        renderPermissionChip();
+        renderPermissionsIfOpen();
+      }
+    }).catch(function () {});
+  }
+
+  function renderPermissions() {
+    var box = document.getElementById('permission-list');
+    if (!box) return;
+    box.textContent = '';
+    box.appendChild(el('div', 'list-empty', '正在读取权限预设…'));
+    Promise.all([api.permissionCatalog(), api.session(currentSessionId)]).then(function (arr) {
+      var cat = (arr[0] && arr[0].ok && arr[0].value) || { options: [] };
+      var meta = (arr[1] && arr[1].ok && arr[1].value && arr[1].value.meta) || {};
+      currentPermission = String(meta.permission || currentPermission || '');
+      box.textContent = '';
+      (cat.options || []).forEach(function (o) {
+        var lab = PERMISSION_LABELS[o.value] || [String(o.name || o.value), String(o.description || '')];
+        var b = el('button', 'opt perm-row');
+        b.setAttribute('data-permission', String(o.value));
+        b.setAttribute('title', String(o.value));
+        b.appendChild(el('span', 'perm-label', lab[0]));
+        var desc = lab[1] || String(o.description || '');
+        b.appendChild(el('span', 'perm-desc', desc || String(o.value)));
+        var isCur = String(o.value) === currentPermission;
+        if (isCur) b.setAttribute('aria-current', 'true');
+        b.appendChild(el('span', 'ck', isCur ? '✓' : ''));
+        b.addEventListener('click', function () { setPermission(o.value, lab[0]); });
+        box.appendChild(b);
+      });
+      if (!(cat.options || []).length) box.appendChild(el('div', 'list-empty', '没有可用预设'));
+    }).catch(function () { box.textContent = '读不到权限预设'; });
+  }
+
+  var PERMISSION_CHIP_LABELS = {
+    'read-only': '仅可查看',
+    'workspace-write': '工作区内',
+    'danger-full-access': '完全权限',
+    auto: '自动审查',
+  };
+  function renderPermissionChip() {
+    var b = document.getElementById('chip-permission');
+    if (!b) return;
+    setChipLabel(b, PERMISSION_CHIP_LABELS[currentPermission] || '权限');
+    b.setAttribute('aria-label', '权限：' + (PERMISSION_CHIP_LABELS[currentPermission] || '未设置'));
+  }
+
+  function setPermission(value, label) {
+    if (value === currentPermission) {
+      toast('已经是「' + label + '」');
+      if (window.__dshCloseSheets) window.__dshCloseSheets();
+      return;
+    }
+    if (window.__dshCloseSheets) window.__dshCloseSheets();
+    toast('切换权限：' + label + '…');
+    api.runCommand(currentSessionId, '/permission ' + value).then(function (r) {
+      if (r && r.ok) {
+        currentPermission = value;
+        renderPermissionChip();
+        toast('权限已切换：' + label);
+        refreshPermission();
+      } else {
+        toast('切换失败：' + ((r && r.error && (r.error.message || r.error.code)) || '未知原因'));
+      }
+    }).catch(function () { toast('切换失败：网络错误'); });
+  }
+
+  function renderPermissionsIfOpen() {
+    var sheet = document.getElementById('sheet-permission');
+    if (sheet && !sheet.hidden) renderPermissions();
+  }
+
+  window.__dshRenderCommands = renderCommands;
+  window.__dshRenderPermissions = renderPermissions;
+  window.__dshRenderPermissionChip = renderPermissionChip;
+
+  // ══════════════════════════════════════════════════════════════════════
   // 审批
   // ══════════════════════════════════════════════════════════════════════
   function renderApprovals(list) {
+    var prevCount = pendingApprovals.length;
+    var wasNearBottom = pageNearBottom();
     pendingApprovals = list || [];
     var slot = document.getElementById('approval-slot');
     var demo = document.getElementById('approval-card');
@@ -935,6 +1582,16 @@
       card.appendChild(acts);
       slot.appendChild(card);
     });
+    // 新审批必须**看得见**：卡片在聊天流末尾，用户可能停在上面读消息。
+    // 只在用户本来就贴着底部时自动滚（避免把正在翻旧消息的人拽走），并保留 toast 提醒。
+    if (pendingApprovals.length > prevCount && wasNearBottom) {
+      setTimeout(function () {
+        try {
+          var first = slot.querySelector('.approval');
+          if (first && first.scrollIntoView) first.scrollIntoView({ block: 'nearest' });
+        } catch (e) {}
+      }, 30);
+    }
   }
 
   function refreshApprovals() {
@@ -1089,7 +1746,8 @@
     if (!id || !ONLINE) return;
     if (typeof EventSource === 'undefined') return;
     chatSubscribedId = id;
-    var url = base() + '/mobile/api/stream?id=' + enc(id) + authQuery();
+    var sp = '/mobile/api/stream?id=' + enc(id);
+    var url = base() + sp + authQuery(sp);
     try {
       var es = new EventSource(url);
       chatStream = es;
@@ -1108,6 +1766,22 @@
           var had = pendingApprovals.length;
           renderApprovals(list);
           if (list.length > had) toast('有新的审批请求（可在这里允许/拒绝）');
+        } catch (e) {}
+      });
+      es.addEventListener('queue', function (ev) {
+        if (currentSessionId !== id) return;
+        try {
+          var d = JSON.parse(ev.data || '{}');
+          queueItems = Array.isArray(d.items) ? d.items : [];
+          if (editingQueueId && !queueItems.some(function (x) { return x.id === editingQueueId; })) editingQueueId = null;
+          renderQueueDock();
+        } catch (e) {}
+      });
+      es.addEventListener('status', function (ev) {
+        if (currentSessionId !== id) return;
+        try {
+          var d = JSON.parse(ev.data || '{}');
+          setRunning(d.running === true);
         } catch (e) {}
       });
       es.addEventListener('turns', function () {
@@ -1161,17 +1835,40 @@
     }
     subscribeChat(id);            // 先订阅，避免首屏之后的变化丢掉
     refreshChatSnapshot();       // 首屏快照（SSE 也会推一份，谁先到谁渲染）
+    sessionRunning = false;      // 先按空闲渲染，紧接的状态查询/SSE 会纠正
+    queueItems = [];
+    editingQueueId = null;
+    renderSendButton();
+    renderQueueDock();
     startApprovalPoll();
+    startRunningPoll();
     api.session(id).then(function (r) {
       // chips 显示**真值**（模型/强度/工作区来自投影 modelSelection 等，不是写死的假标签）
       var meta = (r && r.meta) || {};
       currentModel = { provider: String(meta.provider || ''), model: String(meta.model || '') };
+      currentPermission = String(meta.permission || '');
+      renderPermissionChip();
       var cm = document.getElementById('chip-model');
-      if (cm && meta.model) cm.textContent = shortModelName(String(meta.model));
+      if (cm && meta.model) setChipLabel(cm, shortModelName(String(meta.model)));
+      // chip 上尽量显示**目录里的展示名**（DeepSeek-V4.1-Flash）而不是 id（deepseek-flash）
+      if (cm && meta.model) {
+        var applyDisplayName = function () {
+          var shown = catalogModelName(meta.provider, meta.model);
+          if (shown) setChipLabel(cm, shortModelName(shown));
+        };
+        if (modelCatalog) applyDisplayName();
+        else if (!modelCapsLoading) api.modelCatalog().then(function (r) {
+          if (r && r.ok && r.value) { modelCatalog = r.value; applyDisplayName(); }
+        }).catch(function () {});
+      }
       var ce = document.getElementById('chip-effort');
-      if (ce && meta.effort) ce.textContent = String(meta.effort);
+      if (ce && meta.effort) setChipLabel(ce, String(meta.effort));
       var cw = document.getElementById('chip-ws');
-      if (cw && meta.workspace) { var parts = String(meta.workspace).split('/'); cw.textContent = parts[parts.length - 1] || '未分组'; }
+      if (cw && meta.workspace) {
+        var parts = String(meta.workspace).split('/');
+        var wsName = parts[parts.length - 1] || '未分组';
+        cw.textContent = wsName.length > 10 ? wsName.slice(0, 9) + '…' : wsName;
+      }
       // 如果 SSE 还没来，用 /session 返回的 chat 字段兜底
       if (!chatTurns.length && r && r.chat && Array.isArray(r.chat.turns)) {
         chatTurns = r.chat.turns;
@@ -1182,9 +1879,49 @@
 
   function shortModelName(m) {
     var s = String(m || '');
-    // 模型 id 形如 deepseek-chat / deepseek-reasoner / deepseek-v4；chip 上只放可读的一段
-    return s.length > 18 ? s.slice(0, 18) + '…' : s;
+    // 现在 composer 只有 3 枚 chip（附件/模型/强度），模型 chip 吃满剩余宽度 → 尽量显示全名，
+    // 只有极端长的自定义模型名才截断（面板里始终能看到全名）。
+    return s.length > 24 ? s.slice(0, 23) + '…' : s;
   }
+
+  /**
+   * 发送失败的**分类**处理（别把宿主的结构化错误原样丢给用户）。
+   * 最常踩的一种：当前模型是纯文本模型，却带了图片 → 宿主报
+   * `session/attachment-invalid` + details.reason=`MODEL_DOES_NOT_SUPPORT_IMAGES`。
+   * 这时光弹一句英文错误没用，用户不知道下一步做什么 —— 直接告诉他换模型，并把模型面板弹出来。
+   * 待发送附件**不清空**（失败后保留），换完模型可以直接重发。
+   */
+  function handleSendFailure(res) {
+    var err = res && res.prompt && res.prompt.error;
+    var code = err && err.code ? String(err.code) : '';
+    var reason = err && err.details && err.details.reason ? String(err.details.reason) : '';
+    var raw = code || (err && err.message) || '未知原因';
+    if (code === 'session/attachment-invalid' && /MODEL_DOES_NOT_SUPPORT_IMAGES/.test(reason)) {
+      if (currentModel && currentModel.model) {
+        modelCaps[capsKey(currentModel.provider, currentModel.model)] = {
+          provider: currentModel.provider,
+          model: currentModel.model,
+          inputModalities: ['text'],
+          supportsImages: false,
+        };
+        try { localStorage.setItem('dshMobile.modelCaps', JSON.stringify(modelCaps)); } catch (e) {}
+      }
+      toast('这个模型不支持图片输入：换一个支持图片的模型再发（附件已保留）');
+      setTimeout(function () {
+        try {
+          if (window.__dshOpenModelSheet) window.__dshOpenModelSheet();
+          if (window.__dshOpenSheetById) window.__dshOpenSheetById('sheet-model');
+        } catch (e) {}
+      }, 350);
+      return;
+    }
+    if (code === 'session/attachment-invalid' && /FILE_NOT_STAGED/.test(reason)) {
+      toast('文件上传的凭据过期了，请重新选择文件再发');
+      return;
+    }
+    toast('发送失败：' + raw);
+  }
+  window.__dshHandleSendFailure = handleSendFailure;   // E2E/排障用（和 __dshState 同类）
 
   /** 发送：先建会话（若还没有），传附件，再 prompt */
   var sending = false;
@@ -1194,7 +1931,20 @@
       if (!hasAtt) return Promise.resolve({ ok: false, reason: 'empty' });
     }
     if (sending) { toast('上一条还在发送…'); return Promise.resolve({ ok: false, reason: 'busy' }); }
+    // 先看"当前模型能不能读图"：宿主有 inputModalities（插件代查），别等发出去 401/报错才提示
+    var hasImage = pendingAtts.some(function (a) { return a.kind === 'image'; });
+    if (hasImage && currentModel && currentModel.model) {
+      var capsNow = capsOf(currentModel.provider, currentModel.model);
+      if (capsNow && capsNow.supportsImages === false) {
+        toast('当前模型不支持图片：先切一个能读图的模型（附件已保留）');
+        if (window.__dshOpenModelSheet) window.__dshOpenModelSheet();
+        // 光渲染列表不够，面板本身要打开（面板开关在 index.html 的内联脚本里）
+        if (window.__dshOpenSheetById) window.__dshOpenSheetById('sheet-model');
+        return Promise.resolve({ ok: false, reason: 'model-no-image' });
+      }
+    }
     sending = true;
+    setTimeout(refreshQueue, 1200);   // 跑着的时候这条会进"排队中"dock
     // ⚠️ 必须切到会话页：只在 openSession 里切是不够的 —— 用户直接输入发送时
     //    页面还停在列表页，消息渲染了但看不见（E2E 断言抓到的真实 bug）。
     if (window.__dshMobile && window.__dshMobile.showPage) window.__dshMobile.showPage('chat');
@@ -1258,7 +2008,7 @@
           setTimeout(scrollChatToBottom, 60);
           return res;
         }
-        toast('发送失败：' + ((res.prompt && res.prompt.error && (res.prompt.error.code || res.prompt.error.message)) || '未知原因'));
+        handleSendFailure(res);
         return res;
       })
       .catch(function (e) {
@@ -1344,6 +2094,46 @@
     return null;
   }
 
+  /** modelCatalog 里按 provider/model id 找展示名（找不到就返回空，调用方保持原样） */
+  function catalogModelName(provider, modelId) {
+    var groups = (modelCatalog && modelCatalog.groups) || [];
+    for (var i = 0; i < groups.length; i += 1) {
+      var g = groups[i];
+      if (provider && g.id !== provider) continue;
+      var models = g.models || [];
+      for (var j = 0; j < models.length; j += 1) {
+        if (models[j].id === modelId) return String(models[j].name || '');
+      }
+    }
+    return '';
+  }
+
+  function capsKey(provider, model) { return String(provider || '') + '/' + String(model || ''); }
+  function capsOf(provider, model) { return modelCaps[capsKey(provider, model)] || null; }
+  /** 读一次所有目录模型的"能不能读图"（插件代查宿主，10 分钟缓存，失败静默） */
+  function loadModelCaps(done) {
+    if (modelCapsLoading || modelCapsFetched || !modelCatalog) return;
+    var pairs = [];
+    (modelCatalog.groups || []).forEach(function (g) {
+      (g.models || []).forEach(function (m) { pairs.push({ provider: g.id, model: m.id }); });
+    });
+    if (!pairs.length) return;
+    modelCapsLoading = true;
+    modelCapsFetched = true;
+    api.modelCaps(pairs).then(function (r) {
+      modelCapsLoading = false;
+      if (r && r.ok && r.caps) {
+        Object.keys(r.caps).forEach(function (k) { modelCaps[k] = r.caps[k]; });
+        try { localStorage.setItem('dshMobile.modelCaps', JSON.stringify(modelCaps)); } catch (e) {}
+        if (typeof done === 'function') done();
+      }
+    }).catch(function () { modelCapsLoading = false; });
+  }
+  try {
+    var savedCaps = localStorage.getItem('dshMobile.modelCaps');
+    if (savedCaps) modelCaps = JSON.parse(savedCaps) || {};
+  } catch (e) { modelCaps = {}; }
+
   function renderModelSheet() {
     var box = document.getElementById('model-list');
     if (!box) return;
@@ -1362,6 +2152,8 @@
         var b = el('button', 'opt');
         b.appendChild(document.createTextNode(String(m.name || m.id)));
         if (m.description) b.appendChild(el('span', 'sub', String(m.description).slice(0, 14)));
+        var caps = capsOf(g.id, m.id);
+        if (caps && caps.supportsImages === false) b.appendChild(el('span', 'cap-warn', '不支持图片'));
         var selected = cur && cur.provider === g.id && cur.model.id === m.id;
         if (selected) b.setAttribute('aria-current', 'true');
         b.appendChild(el('span', 'ck', selected ? '✓' : ''));
@@ -1376,6 +2168,7 @@
     if (!(modelCatalog.groups || []).length) {
       box.appendChild(el('div', 'list-empty', '没有可用模型（电脑端没配 API Key？）'));
     }
+    loadModelCaps(function () { renderModelSheet(); });
   }
 
   function pickModel(provider, model, effort, btn) {
@@ -1386,10 +2179,10 @@
       if (r && r.ok) {
         currentModel = { provider: provider, model: model.id };
         var cm = document.getElementById('chip-model');
-        if (cm) cm.textContent = shortModelName(model.name || model.id);
+        if (cm) setChipLabel(cm, shortModelName(model.name || model.id));
         var ce = document.getElementById('chip-effort');
         var eff = (r.value && r.value.selected && r.value.selected.reasoningEffort) || effort || '';
-        if (ce) ce.textContent = eff || '默认';
+        if (ce) setChipLabel(ce, eff || '默认');
         toast('已切到 ' + String(model.name || model.id));
         if (window.__dshCloseSheets) window.__dshCloseSheets();
       } else {
@@ -1517,6 +2310,10 @@
       // 有令牌即可在线（同源或跨源都一样）
       ONLINE = true;
       SAME_ORIGIN = !conn.origin;
+      // ⚠️ 必须显式切到列表页：showPage 负责**隐藏输入区/chips**（列表页不该挂聊天输入框，
+      //    上一版真机反馈"列表页底部白占 1/3 屏"就是它）——以前只有点返回才调用它，
+      //    冷启动直接进列表时 composer 还是可见的（E2E 截图抓到）。
+      if (window.__dshMobile && window.__dshMobile.showPage) window.__dshMobile.showPage('list');
       startOnline();
       return;
     }

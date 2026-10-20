@@ -59,6 +59,24 @@ const server = http.createServer((req, res) => {
   for (let i = 0; i < 40 && !base; i++) { const m = /dsh web:\s*(https?:\/\/[^\s?]+)\/?\?token=([^\s]+)/.exec(log); if (m) { base = m[1]; token = m[2]; } else await wait(500); }
   if (!base) { console.log('DSH 未就绪'); dsh.kill('SIGKILL'); process.exit(1); }
   const gw = await startMobileGateway({ dshBase: base, dshToken: token });
+  // 临时 home 是空的：先用插件接口建一个会话，才能断言“列表里真的有东西”
+  await new Promise((res) => {
+    const body = JSON.stringify({});
+    const httpMod = require('http');
+    const r = httpMod.request(
+      {
+        host: '127.0.0.1',
+        port: gw.port,
+        path: `/mobile/api/session?token=${encodeURIComponent(gw.session.token)}`,
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body) },
+      },
+      (x) => { x.resume(); x.on('end', res); },
+    );
+    r.on('error', () => res());
+    r.write(body);
+    r.end();
+  });
   await new Promise((r) => server.listen(UI_PORT, '127.0.0.1', r));
 
   // 直接探测静态资源（决定性证据：HTML 到得了、app.js 到不到）
@@ -86,7 +104,7 @@ const server = http.createServer((req, res) => {
   });
   console.log('  跳转 URL 实测 →', withApp.status, withApp.len + 'B', JSON.stringify(String(withApp.head).slice(0, 160)));
 
-  const el = sp(path.join(REPO, 'node_modules/.bin/electron'), ['/tmp/android-shell-run.js'], {
+  const el = sp(path.join(REPO, 'node_modules/.bin/electron'), [path.join(REPO, 'scripts/_android-shell-run.js')], {
     env: { ...process.env, ELECTRON_RUN_AS_NODE: '', ANDROID_PAGE: `http://127.0.0.1:${UI_PORT}/index.html`,
       GW: `http://127.0.0.1:${gw.port}`, CODE: gw.session.pairCode }, stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -97,14 +115,19 @@ const server = http.createServer((req, res) => {
   if (!m) { console.log('❌ 没拿到结果:\n' + out.slice(-800)); process.exit(1); }
   const r = JSON.parse(m[1]);
   const problems = [];
-  if (!(r.url && /\/mobile\//.test(r.url))) problems.push(`没有跳到手机端界面（url=${r.url}）`);
-  if (!(r.rows >= 1)) problems.push(`界面没有列出会话（rows=${r.rows}）`);
-  if (r.firstId && !/^session-/.test(String(r.firstId))) problems.push(`列出的不是真实会话（firstId=${r.firstId}）`);
+  const first = r.first || {};
+  let diag = {};
+  try { diag = JSON.parse(first.diag || '{}'); } catch (e) {}
+  const rows = diag.rows != null ? diag.rows : (diag.state && diag.state.rows);
+  if (!(first.url && /\/mobile\//.test(first.url))) problems.push(`没有跳到手机端界面（url=${first.url}）`);
+  if (!(rows >= 1)) problems.push(`界面没有列出会话（rows=${rows}, listOk=${diag.listOk}）`);
+  if (!r.second || r.second.autoEntered !== true) problems.push(`重新打开壳页没有自动进入（url=${r.second && r.second.url}）`);
   if (problems.length) {
+    console.error('DEBUG ' + JSON.stringify(r).slice(0, 800));
     console.error('❌ Android 壳流程失败：');
     problems.forEach((x, i) => console.error(`   ${i + 1}. ${x}`));
     process.exit(1);
   }
-  console.log(`✅ Android 壳流程通过（配对 → 跳 /mobile/ → 列出 ${r.rows} 行真实会话 ${r.firstId}）`);
+  console.log(`✅ Android 壳流程通过（配对 → 跳 /mobile/ → 列出 ${rows} 行 → 重开自动进入）`);
   process.exit(0);
 })();

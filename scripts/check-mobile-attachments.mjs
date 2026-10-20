@@ -102,12 +102,16 @@ function jsonOf(res) {
 
 /** 官方 typed RPC（与手机/桌面客户端同一条路） */
 async function rpc(method, requestArgs) {
+  return rpcArgs(method, { request: requestArgs ?? {} });
+}
+/** payload.args 不带 request 包装的方法（如 session/modelCatalog） */
+async function rpcArgs(method, args) {
   const rpcId = randomUUID();
   const payload = JSON.stringify({
     type: 'client-request',
     rpcId,
     method,
-    payload: { args: { request: requestArgs ?? {} } },
+    payload: { args: args ?? {} },
   });
   const res = await request(`/api/${method}`, { method: 'POST', body: payload, contentType: 'application/json' });
   const j = jsonOf(res) || {};
@@ -318,6 +322,21 @@ async function main() {
   // ① 图片：prompt 里带 image content part → 宿主准入落盘 → 我们能读回
   // ═════════════════════════════════════════════════════════════════
   console.log('\n== ① 图片附件 ==');
+  // ⚠️ 先确保模型支持图片输入：temp home 的"全局默认模型"会被界面断言（chips 切换）改成纯文本模型，
+  //    纯文本模型发图会被宿主拒（MODEL_DOES_NOT_SUPPORT_IMAGES）——那不是插件/链路的问题。
+  const catalog = await rpcArgs('session/modelCatalog', {});
+  let vision = null;
+  for (const g of catalog.value?.groups || []) {
+    for (const m of g.models || []) {
+      if (String(m.id).includes('flash') || String(m.name || '').includes('Flash')) vision = { provider: g.id, model: m.id };
+    }
+  }
+  if (vision) {
+    const sel = await rpc('session/selectModel', { sessionId, provider: vision.provider, model: vision.model });
+    ok(sel.ok === true, `已切到支持图片的模型（${vision.provider}/${vision.model}）`);
+  } else {
+    skip('没有找到带图片能力的模型（flash），图片用例可能被宿主拒');
+  }
   const imgPrompt = await rpc('session/prompt', {
     requestId: `attach-img-${Date.now().toString(36)}`,
     sessionId,
@@ -432,6 +451,14 @@ async function main() {
   const minTurns = done.count ? 2 : 1;
   ok((listed?.turnCount || 0) >= minTurns, `重启后列表带真实轮数（${listed?.turnCount}，期望 ≥${minTurns}）`);
   ok(!!(listed?.preview && listed.preview.length > 0), '重启后列表带内容预览（不再是「新会话」）');
+
+  // 供界面断言（check-mobile-features-e2e）精确打开"带附件的那个会话"
+  try {
+    writeFileSync(
+      join(OUT, 'latest-session.json'),
+      JSON.stringify({ sessionId, hasImage: true, hasFile: true, at: new Date().toISOString() }, null, 2),
+    );
+  } catch {}
 
   // ═════════════════════════════════════════════════════════════════
   // ③ SSE：聊天全文事件真的推送（手机端实时同步用）

@@ -86,6 +86,9 @@ function isLoopback(req) {
   return addr === '127.0.0.1' || addr === '::1' || addr === '::ffff:127.0.0.1';
 }
 
+const WHATS_NEW_CDN = 'https://dl.deepwhale.org.cn/whatsnew.json';
+const modelCapsCache = new Map();   // provider/model → { at, value }
+
 function json(res, code, body) {
   const text = JSON.stringify(body);
   res.writeHead(code, {
@@ -224,7 +227,7 @@ export function readProjectionTurns(id, home) {
  * 且手机端本来就是只读展示（切换模型以后再说），读文件最稳、可核对。
  */
 export function readProjectionMeta(id, home) {
-  const empty = { provider: '', model: '', effort: '', preset: '', workspace: '' };
+  const empty = { provider: '', model: '', effort: '', preset: '', workspace: '', permission: '' };
   try {
     const base = home || process.env.DSH_HOME || '';
     if (!base || !id) return empty;
@@ -246,6 +249,14 @@ export function readProjectionMeta(id, home) {
       effort: pick('reasoningEffort'),
       preset: typeof rows.agentPreset?.val === 'string' ? rows.agentPreset.val : '',
       workspace: typeof rows.workingDirectory?.val === 'string' ? rows.workingDirectory.val : '',
+      // 权限预设（手机端「权限」面板要显示当前值；桌面端是 composer 下方那个下拉）
+      permission: (() => {
+        const perm = rows.permissions?.val;
+        if (!perm) return '';
+        if (typeof perm.preset === 'string') return perm.preset;
+        if (typeof perm.currentValue === 'string') return perm.currentValue;
+        return '';
+      })(),
     };
   } catch {
     return empty;
@@ -280,13 +291,72 @@ function readProjectionSummary(id, home) {
     const turns = readProjectionTurns(id, home);
     const last = turns.length ? turns[turns.length - 1] : null;
     const preview = last ? String(last.response || last.prompt || '').replace(/\s+/g, ' ').trim().slice(0, 80) : '';
-    const summary = { file, mtimeMs: st.mtimeMs, title, lastPromptAt, workspace, turnCount: turns.length, preview };
+    // subagent 子会话不该出现在手机端的顶层列表里（实测用户 98 个投影缓存里 95 个是子会话）
+    const isSubagent = !!(rows.subagent && rows.subagent.val);
+    const summary = { file, mtimeMs: st.mtimeMs, title, lastPromptAt, workspace, turnCount: turns.length, preview, isSubagent };
     if (projSummaryCache.size > 400) projSummaryCache.clear(); // 防内存无界（正常用户远小于此）
     projSummaryCache.set(id, summary);
     return summary;
   } catch {
     return null;
   }
+}
+
+/**
+ * 读会话日志**第一帧**里的 header（`{"type":"session","origin":"subagent",…}`）。
+ *
+ * 为什么需要：投影缓存里分不出 subagent 子会话（`rows.subagent.val` 对普通会话也是 `{}`，
+ * 实测用户 98 个投影里 95 个是 `{}`，按它过滤会把正常会话全砍掉 ✗）。
+ * 真正的身份只在事件日志头里：`origin:"subagent"` + `parentSession`。
+ * 只读第一帧（通常 <64KB），按 id 缓存。
+ */
+const sessionHeaderCache = new Map();
+function readSessionHeader(id, home) {
+  const cached = sessionHeaderCache.get(id);
+  if (cached !== undefined) return cached;
+  const base = home || process.env.DSH_HOME || '';
+  const file = base ? findSessionFile(id, base) : '';
+  if (!file) {
+    sessionHeaderCache.set(id, null);
+    return null;
+  }
+  const attempt = (bytes) => {
+    let fd;
+    try {
+      fd = openSyncFs(file, 'r');
+      const buf = Buffer.alloc(Math.min(bytes, statSyncFs(file).size));
+      const n = readSyncFs(fd, buf, 0, buf.length, 0);
+      closeSyncFs(fd);
+      fd = undefined;
+      const chunk = buf.subarray(0, n);
+      const magic = chunk.indexOf(ZSTD_MAGIC);
+      if (magic < 0) return undefined; // 还没写头
+      const next = chunk.indexOf(ZSTD_MAGIC, magic + 4);
+      const end = next < 0 ? chunk.length : next;
+      const text = zstdDecompressSync(chunk.subarray(magic, end)).toString('utf8');
+      const first = text.split('\n').find((line) => line.trim() !== '');
+      if (!first) return undefined;
+      const ev = JSON.parse(first);
+      if (!ev || ev.type !== 'session') return undefined;
+      return {
+        origin: typeof ev.origin === 'string' ? ev.origin : '',
+        parentSession: typeof ev.parentSession === 'string' ? ev.parentSession : '',
+        agentPreset: typeof ev.agentPreset === 'string' ? ev.agentPreset : '',
+        createdAt: typeof ev.createdAt === 'number' ? ev.createdAt : null,
+      };
+    } catch (e) {
+      if (fd !== undefined) {
+        try { closeSyncFs(fd); } catch {}
+      }
+      return undefined;
+    }
+  };
+  let header = attempt(64 * 1024);
+  if (header === undefined) header = attempt(2 * 1024 * 1024);
+  const value = header ?? null;
+  if (sessionHeaderCache.size > 400) sessionHeaderCache.clear();
+  sessionHeaderCache.set(id, value);
+  return value;
 }
 
 /** 磁盘上存在的事件日志里，这个会话的「最后活动时间」近似值（投影缓存没有时用文件 mtime） */
@@ -325,15 +395,27 @@ export function listPersistedSessions(home) {
       const id = entry.name;
       if (!id || id.startsWith('.')) continue;
       const dir = joinPath(wsDir, id);
-      const mtime = sessionFileMtime(dir);
       const summary = readProjectionSummary(id, home);
+      // ⚠️ 过滤规则（2026-10-19 在用户真实数据上核对过）：
+      //   · subagent 子会话 → 不进手机端顶层列表（用户 98 个投影里 95 个是子会话，全列出会很吓人）；
+      //   · 没有投影缓存（从没跑过一轮 / 旧格式）→ 列出来也是「新会话」空行，跳过；
+      //     （正在用的新会话由 sessions.list() 的 live 行补充，不会漏）
+      //   · 没标题且 0 轮 → 纯空会话，跳过。
+      if (!summary) continue;
+      const mtime = sessionFileMtime(dir);
+      if (!mtime) continue; // 目录里没有事件日志（残留/已删）→ 打开也是空
+      const header = readSessionHeader(id, home);
+      if (!header) continue;      // 头都读不出来 → 不当正常会话展示
+      if (header.origin === 'subagent') continue;   // 子会话不进顶层列表
+      const title = summary.title && summary.title.trim() !== '' ? summary.title : null;
+      if (!title && summary.turnCount === 0) continue;
       out.push({
         id,
-        title: summary?.title && summary.title.trim() !== '' ? summary.title : null,
-        updatedAt: summary?.lastPromptAt ?? mtime ?? null,
-        workspace: summary?.workspace || null,
-        turnCount: summary?.turnCount ?? 0,
-        preview: summary?.preview ?? '',
+        title,
+        updatedAt: summary.lastPromptAt ?? mtime ?? null,
+        workspace: summary.workspace || null,
+        turnCount: summary.turnCount || 0,
+        preview: summary.preview || '',
       });
     }
   }
@@ -411,20 +493,28 @@ export async function readSessionTrace(id, home) {
   // ⚠️ DSH 的 .zstd 是**多个独立 zstd 帧拼接**（实测魔数在 0 和 155…）：
   //    Node 的 createZstdDecompress 流解到第二帧就报 "Unknown frame descriptor" ✗；
   //    Python zstandard 也只出第一帧 ✗。唯一稳的办法：按 zstd 魔数 28 B5 2F FD 切成单帧逐个解。
+  // 与 readSessionChat 同一套帧结构遍历（不要退回"按魔数切"：压缩数据里可能出现魔数字节，
+  // 而且末尾半帧按魔数切会被当成完整帧解出半截文本）
   const text = (() => {
     const buf = readFileSyncFs(file);
-    const MAGIC = Buffer.from([0x28, 0xb5, 0x2f, 0xfd]);
     const out = [];
-    let start = buf.indexOf(MAGIC);
-    while (start >= 0) {
-      const next = buf.indexOf(MAGIC, start + 4);
-      const end = next < 0 ? buf.length : next;
-      try {
-        out.push(zstdDecompressSync(buf.subarray(start, end)).toString('utf8'));
-      } catch {
-        /* 坏帧/误判跳过 */
+    let pos = buf.indexOf(ZSTD_MAGIC);
+    while (pos >= 0 && pos < buf.length) {
+      const span = zstdFrameSpan(buf, pos);
+      if (!span.complete) {
+        const resync = buf.indexOf(ZSTD_MAGIC, pos + 1);
+        if (resync < 0) break;
+        pos = resync;
+        continue;
       }
-      start = next;
+      try {
+        out.push(zstdDecompressSync(buf.subarray(pos, pos + span.length)).toString('utf8'));
+      } catch {
+        /* 坏帧跳过 */
+      }
+      pos += span.length;
+      const nextMagic = buf.indexOf(ZSTD_MAGIC, pos);
+      if (nextMagic !== pos) pos = nextMagic;
     }
     return out.join('');
   })();
@@ -478,6 +568,66 @@ export async function readSessionTrace(id, home) {
  * 只读、不改；解析失败返回已有的（不抛）。
  */
 const ZSTD_MAGIC = Buffer.from([0x28, 0xb5, 0x2f, 0xfd]);
+
+/**
+ * 算出一个 zstd 帧的**精确长度**（RFC 8878 的帧头 + 块头走一遍）。
+ *
+ * 为什么必须自己走结构（不能只靠"按魔数切"）：DSH 的日志是**追加**写，
+ * 我们读到的最后一段可能只写了半帧。Node 的 zstdDecompressSync 对**截断帧不报错**，
+ * 只会吐出已解码的部分（实测：截断到一半 → 返回 0 字节且不抛；截掉校验和 → 返回完整内容）。
+ * 结果是：如果只看"解压成功没抛"，半帧会被当成完整帧消费掉 → 偏移推进到帧中间 →
+ * **并且后半段是在下次追加后才到，从此再也对不齐帧**（真机测试里表现为"新消息永远不出现"）。
+ * 所以这里按 RFC 8878 算出"这一帧应该多长"，长度不够就**不消费**、等下次再读。
+ *
+ * @returns {{complete:boolean, length:number, notMagic?:boolean, bad?:boolean}}
+ */
+function zstdFrameSpan(buf, start) {
+  if (start >= buf.length) return { complete: false, length: 0 };
+  if (buf.length - start < 5) return { complete: false, length: 0 };
+  if (buf.readUInt32BE(start) !== 0x28b52ffd) return { complete: false, length: 0, notMagic: true };
+  const desc = buf.readUInt8(start + 4);
+  const fcsFlag = desc >> 6;
+  const single = (desc >> 5) & 1;
+  const checksum = (desc >> 2) & 1;
+  const dictFlag = desc & 3;
+  let off = start + 5;
+  if (!single) off += 1; // Window_Descriptor
+  const dictSizes = [0, 1, 2, 4];
+  off += dictSizes[dictFlag];
+  let fcsSize = [0, 2, 4, 8][fcsFlag];
+  if (fcsFlag === 0 && single === 1) fcsSize = 1;
+  off += fcsSize;
+  if (off > buf.length) return { complete: false, length: 0 };
+  for (;;) {
+    if (buf.length < off + 3) return { complete: false, length: 0 };
+    const h = buf.readUIntLE(off, 3);
+    const last = h & 1;
+    const type = (h >> 1) & 3;
+    const size = h >> 3;
+    off += 3;
+    if (type === 0) {
+      // Raw_Block：后面就是 size 字节原文
+      if (buf.length < off + size) return { complete: false, length: 0 };
+      off += size;
+    } else if (type === 1) {
+      // RLE_Block：1 字节重复 size 次
+      if (buf.length < off + 1) return { complete: false, length: 0 };
+      off += 1;
+    } else if (type === 2) {
+      // Compressed_Block：后面是 size 字节压缩数据
+      if (buf.length < off + size) return { complete: false, length: 0 };
+      off += size;
+    } else {
+      return { complete: false, length: 0, bad: true };
+    }
+    if (last) break;
+  }
+  if (checksum) {
+    if (buf.length < off + 4) return { complete: false, length: 0 };
+    off += 4;
+  }
+  return { complete: true, length: off - start };
+}
 /** 会话 id → 日志文件路径（避免每次全盘 readdir） */
 const sessionFileCache = new Map();
 /** 会话 id → 增量解析状态 {file, offset, size, mtimeMs, lineTail, turns, byTurn, currentTurn} */
@@ -681,33 +831,40 @@ export function readSessionChat(id, home) {
   const baseOffset = state.offset;
   let pos = 0;
   let consumed = 0;
+  let parsed = false;
   for (;;) {
-    const magic = buf.indexOf(ZSTD_MAGIC, pos);
-    if (magic < 0) break;
-    const next = buf.indexOf(ZSTD_MAGIC, magic + 4);
-    const end = next < 0 ? buf.length : next;
+    const span = zstdFrameSpan(buf, pos);
+    if (!span.complete) {
+      if (span.notMagic || span.bad) {
+        // 偏移没对齐/坏帧：用魔数重新同步（跳过一个字节继续找）
+        const resync = buf.indexOf(ZSTD_MAGIC, pos + 1);
+        if (resync < 0) break;
+        pos = resync;
+        consumed = pos;
+        continue;
+      }
+      // 最后一段只写了一半：**不消费**，等下次追加完整后再读
+      break;
+    }
     let text;
     try {
-      text = zstdDecompressSync(buf.subarray(magic, end)).toString('utf8');
+      text = zstdDecompressSync(buf.subarray(pos, pos + span.length)).toString('utf8');
     } catch {
-      // 最后一帧可能还在写 → 不推进偏移，下次重试；中间坏帧 → 跳过
-      if (next < 0) break;
-      pos = next;
-      consumed = next;
+      const resync = buf.indexOf(ZSTD_MAGIC, pos + 1);
+      if (resync < 0) break;
+      pos = resync;
+      consumed = pos;
       continue;
     }
     applyChatText(state, text);
-    if (next < 0) {
-      consumed = buf.length;
-      break;
-    }
-    pos = next;
-    consumed = next;
+    parsed = true;
+    pos += span.length;
+    consumed = pos;
   }
   state.offset = baseOffset + consumed;
   state.size = st.size;
   state.mtimeMs = st.mtimeMs;
-  return { ok: true, turns: state.turns, count: state.turns.length, changed: true };
+  return { ok: true, turns: state.turns, count: state.turns.length, changed: parsed };
 }
 
 /** 从聊天缓存里按 attachmentId 找到附件元数据（看图/下文件要用） */
@@ -745,7 +902,58 @@ const watchingSessions = new Map();
 const pendingApprovals = new Map();
 /** sessionId → Set<{send}>（SSE 推送审批变化用） */
 const sseClients = new Map();
+
+/** 把宿主 agent.inbox 里还没消费的消息读成手机端能渲染的形状（排队消息） */
+function readQueue(agents, sessionId) {
+  try {
+    const agent = agents?.get?.(sessionId);
+    const inbox = agent?.inbox;
+    if (!inbox) return [];
+    const out = [];
+    const pushList = (list, target) => {
+      for (const msg of list ?? []) {
+        const parts = Array.isArray(msg?.content) ? msg.content : [];
+        const texts = parts.filter((x) => x && x.type === 'text').map((x) => String(x.text ?? ''));
+        const images = parts.filter((x) => x && x.type === 'image').length;
+        const files = parts.filter((x) => x && x.type === 'file').length;
+        out.push({
+          id: String(msg?.id ?? ''),
+          target,
+          text: texts.join('\n').trim(),
+          images,
+          files,
+        });
+      }
+    };
+    pushList(inbox.nextStep, 'nextStep');
+    pushList(inbox.nextTurn, 'nextTurn');
+    return out.filter((x) => x.id);
+  } catch {
+    return [];
+  }
+}
+/** sessionId → 该会话是否正在跑一轮（桌面端「停止」按钮要靠它显示；宿主事件 api-session/status 维护） */
+const runningSessions = new Map();
 let approvalCounter = 0;
+
+/** 队列内容的轻量签名（id + 文本长度 + 目标），变了才推 SSE */
+function queueSignature(items) {
+  return (items ?? []).map((x) => `${x.id}|${x.target}|${x.text.length}|${x.images}|${x.files}`).join('\n');
+}
+
+/** 把"正在跑/跑完了"推给正看着这个会话的手机（没有 SSE 连接就只更新本地表） */
+function broadcastRunning(sessionId, running) {
+  runningSessions.set(String(sessionId), !!running);
+  const set = sseClients.get(String(sessionId));
+  if (!set) return;
+  for (const client of set) {
+    try {
+      client.send('status', { running: !!running });
+    } catch {
+      /* 单个连接写失败不影响别的 */
+    }
+  }
+}
 
 function publicApproval(entry) {
   return {
@@ -826,6 +1034,21 @@ export function apply(ctx) {
     }
   } catch (e) {
     services.__error = String(e?.message ?? e);
+  }
+
+  // ── 运行状态（手机端「停止」按钮）：宿主会在 Agent 开始/结束时发 api-session/status ──
+  try {
+    if (typeof ctx.on === 'function') {
+      ctx.on('api-session/status', (sessionId, running) => {
+        try {
+          broadcastRunning(String(sessionId), running);
+        } catch (e) {
+          warn(`推送运行状态失败：${String(e?.message ?? e)}`);
+        }
+      });
+    }
+  } catch (e) {
+    warn(`订阅 api-session/status 失败（手机端停止按钮会退化为轮询）：${String(e?.message ?? e)}`);
   }
 
   // ── 手机审批 answerer：只在手机正看着这个会话时接管 ────────────────────
@@ -1208,6 +1431,7 @@ export function apply(ctx) {
       let lastMtime = -1;
       let closed = false;
       let chatSig = '';
+      let queueSig = '';
       let sentChatTurns = 0;
       const send = (event, data) => {
         if (!closed) res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
@@ -1233,7 +1457,21 @@ export function apply(ctx) {
         } catch {
           /* 日志还没生成：等下次 */
         }
-        // ② 投影（兼容旧界面）
+        // ② 运行状态（真机反馈：跑的时候没有停止按钮）
+        sendStatus();
+        // ②b 排队消息（桌面端有 插话/编辑/删除，手机端也要）
+        try {
+          const agents = typeof ctx.get === 'function' ? ctx.get('agents') : undefined;
+          const items = readQueue(agents, sid);
+          const sig = queueSignature(items);
+          if (sig !== queueSig) {
+            queueSig = sig;
+            send('queue', { items });
+          }
+        } catch {
+          /* 读不到就等下次 */
+        }
+        // ③ 投影（兼容旧界面）
         try {
           const home = process.env.DSH_HOME || '';
           const file = joinPath(home, 'storages', 'session_projcache', 'sessions', `${sid}.json`);
@@ -1255,7 +1493,16 @@ export function apply(ctx) {
       }
       const client = { send };
       clients.add(client);
+      let statusSent;
+      const sendStatus = () => {
+        const r = runningSessions.get(sid) === true;
+        if (r === statusSent) return;
+        statusSent = r;
+        send('status', { running: r });
+      };
+      client.sendStatus = sendStatus;
       flush(); // 立刻给一次当前状态（含待审批）
+      sendStatus();
       const pending = approvalsFor(sid);
       if (pending.length > 0) send('approval', { approvals: pending });
       const timer = setInterval(flush, 1000);
@@ -1407,6 +1654,85 @@ export function apply(ctx) {
       return;
     }
 
+    if (path === `${ROUTE}/model-caps`) {
+      // 模型能力：`session/modelCatalog` **不返回** inputModalities，手机端因此没法预判
+      // "这个模型能不能读图"（现在的兜底是发送失败后看 MODEL_DOES_NOT_SUPPORT_IMAGES）。
+      // 宿主自己就是用 llm.resolveModelInfo(...).inputModalities 判的，插件跑在宿主进程里，
+      // 直接代查一次即可（结果缓存 10 分钟，模型能力不会频繁变）。
+      // 服务访问要包 try：ctx.get(未知服务) 在部分版本会直接抛，抛出去就是 400 空响应
+      let llm;
+      try {
+        llm = ctx && ctx.llm ? ctx.llm : undefined;
+      } catch {
+        llm = undefined;
+      }
+      if (!llm) {
+        try {
+          llm = typeof ctx.get === 'function' ? ctx.get('llm') : undefined;
+        } catch {
+          llm = undefined;
+        }
+      }
+      if (!llm || typeof llm.resolveModelInfo !== 'function') {
+        json(res, 200, { ok: false, reason: 'llm-unavailable' });
+        return;
+      }
+      let payload = {};
+      if ((req.method ?? 'GET').toUpperCase() === 'POST') {
+        const body = await new Promise((resolve) => {
+          let b = '';
+          req.on('data', (c) => {
+            b += c;
+          });
+          req.on('end', () => resolve(b));
+        });
+        try {
+          payload = JSON.parse(body || '{}');
+        } catch {
+          payload = {};
+        }
+      }
+      let pairs = Array.isArray(payload.pairs) ? payload.pairs : [];
+      if (!pairs.length) {
+        const qp = url.searchParams.get('provider');
+        const qm = url.searchParams.get('model');
+        if (qp && qm) pairs = [{ provider: qp, model: qm }];
+      }
+      if (!pairs.length) {
+        json(res, 200, { ok: false, reason: 'missing-pairs' });
+        return;
+      }
+      const caps = {};
+      for (const pair of pairs.slice(0, 40)) {
+        const provider = String(pair?.provider ?? '');
+        const model = String(pair?.model ?? '');
+        if (!provider || !model) continue;
+        const key = `${provider}/${model}`;
+        const cached = modelCapsCache.get(key);
+        if (cached && Date.now() - cached.at < 10 * 60 * 1000) {
+          caps[key] = cached.value;
+          continue;
+        }
+        try {
+          const info = await llm.resolveModelInfo(provider, model);
+          const mods = Array.isArray(info?.inputModalities) ? info.inputModalities.map(String) : null;
+          const value = {
+            provider,
+            model,
+            inputModalities: mods,
+            // null = 宿主没给这个字段（未知），true/false = 已知
+            supportsImages: mods === null ? null : mods.includes('image'),
+          };
+          modelCapsCache.set(key, { at: Date.now(), value });
+          caps[key] = value;
+        } catch (e) {
+          caps[key] = { provider, model, error: String(e?.message ?? e).slice(0, 120) };
+        }
+      }
+      json(res, 200, { ok: true, caps });
+      return;
+    }
+
     if (path === `${ROUTE}/sessions`) {
       json(res, 200, await listSessions());
       return;
@@ -1513,6 +1839,116 @@ export function apply(ctx) {
       } catch (e) {
         json(res, 500, { ok: false, reason: 'read-failed', error: String(e?.message ?? e).slice(0, 200) });
       }
+      return;
+    }
+
+    if (path === `${ROUTE}/queue`) {
+      const sid = url.searchParams.get('id') ?? url.searchParams.get('sid') ?? '';
+      if (!sid) {
+        json(res, 200, { ok: false, reason: 'missing-id' });
+        return;
+      }
+      const agents = typeof ctx.get === 'function' ? ctx.get('agents') : undefined;
+      json(res, 200, { ok: true, sessionId: sid, items: readQueue(agents, sid) });
+      return;
+    }
+
+    if (path === `${ROUTE}/whatsnew`) {
+      // 手机端「我的 → 版本 → 本版更新内容」：桌面端随包的 assets/whatsnew.json
+      // （打包后在 app.asar 里；开发时回退仓库 assets/）
+      const readJson = (file) => {
+        try {
+          return JSON.parse(readFileSyncFs(file, 'utf8'));
+        } catch {
+          return null;
+        }
+      };
+      const execDir = (() => {
+        try {
+          return dirname(process.execPath);
+        } catch {
+          return '';
+        }
+      })();
+      const resources = execDir ? joinPath(execDir, '..', 'Resources') : '';
+      const argvAsar = (() => {
+        for (const a of process.argv) {
+          const i = String(a).indexOf('app.asar');
+          if (i > 0) return String(a).slice(0, i);
+        }
+        return '';
+      })();
+      const candidates = [
+        process.env.DSH_MOBILE_ASSETS_DIR && joinPath(process.env.DSH_MOBILE_ASSETS_DIR, 'whatsnew.json'),
+        resources && joinPath(resources, 'app.asar', 'assets', 'whatsnew.json'),
+        resources && joinPath(resources, 'assets', 'whatsnew.json'),
+        argvAsar && joinPath(argvAsar, 'assets', 'whatsnew.json'),
+        joinPath(process.cwd(), 'assets', 'whatsnew.json'),
+      ].filter(Boolean);
+      let data = null;
+      let from = '';
+      for (const f of candidates) {
+        data = readJson(f);
+        if (data) {
+          from = f;
+          break;
+        }
+      }
+      const pkgCandidates = [
+        resources && joinPath(resources, 'app.asar', 'package.json'),
+        resources && joinPath(resources, 'package.json'),
+        argvAsar && joinPath(argvAsar, 'package.json'),
+        joinPath(process.cwd(), 'package.json'),
+      ].filter(Boolean);
+      let appVersion = '';
+      for (const f of pkgCandidates) {
+        const pkg = readJson(f);
+        if (pkg && typeof pkg.version === 'string') {
+          appVersion = pkg.version;
+          break;
+        }
+      }
+      if (!data) {
+        // 本地随包文件读不到（旧构建/找不到 app.asar）→ 回退 CDN（发布时会同步这份，旧版本也能读新版本说明）
+        try {
+          const r = await fetch(`${WHATS_NEW_CDN}?t=${Date.now()}`, { redirect: 'follow' });
+          if (r.ok) {
+            data = await r.json();
+            from = WHATS_NEW_CDN;
+          }
+        } catch (e) {
+          warn(`whatsnew CDN 回退失败：${String(e?.message ?? e)}`);
+        }
+      }
+      if (!data) {
+        json(res, 200, { ok: false, reason: 'whatsnew-not-found', appVersion });
+        return;
+      }
+      json(res, 200, { ok: true, appVersion, versions: data.versions ?? data, from });
+      return;
+    }
+
+    if (path === `${ROUTE}/session-status`) {
+      // 手机端「发送 → 停止」按钮用的状态查询（SSE 的 status 事件是主路径，这个是兜底）
+      const sid = url.searchParams.get('id') ?? url.searchParams.get('sid') ?? '';
+      if (!sid) {
+        json(res, 200, { ok: false, reason: 'missing-id' });
+        return;
+      }
+      let running = runningSessions.get(sid);
+      if (running === undefined) {
+        // 事件还没来过时，尝试从宿主会话列表里读一次既有状态
+        try {
+          const sessions = typeof ctx.get === 'function' ? ctx.get('sessions') : undefined;
+          const v = await sessions?.list?.();
+          const arr = Array.isArray(v) ? v : Array.isArray(v?.items) ? v.items : Array.isArray(v?.sessions) ? v.sessions : [];
+          const row = arr.find((x) => String(x?.id ?? x?.sessionId ?? '') === sid);
+          if (row && typeof row.running === 'boolean') running = row.running;
+        } catch {
+          /* 读不到就当 false */
+        }
+      }
+      json(res, 200, { ok: true, sessionId: sid, running: running === true });
       return;
     }
 

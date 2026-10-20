@@ -58,7 +58,7 @@
     -webkit-text-size-adjust:100%;
   }
   /* 浅色：同配方换色 */
-  html[data-theme="light"] html,body{background-color:#eaf1fb;
+  html[data-theme="light"] body{background-color:#eaf1fb;
       background-image:
         radial-gradient(circle closest-side at center, rgba(160,197,241,.90) 0%, rgba(160,197,241,.72) 25%, rgba(160,197,241,.432) 50%, rgba(160,197,241,.171) 75%, rgba(160,197,241,0) 100%),
         radial-gradient(circle closest-side at center, rgba(132,178,234,.95) 0%, rgba(132,178,234,.76) 25%, rgba(132,178,234,.456) 50%, rgba(132,178,234,.181) 75%, rgba(132,178,234,0) 100%),
@@ -185,17 +185,57 @@
   .btn.danger{border-color:rgba(229,83,75,.55);color:#ffb9b4;background:transparent}
   .btn.primary{border-color:transparent;color:#f2f8ff;font-weight:600;
     background:linear-gradient(180deg,#5c9ad4,#2d5f9e);box-shadow:var(--glow)}
+  /* 发送箭头必须是**实心**：全局 `.ic path{fill:none}` 会把内联 fill 覆盖掉（CSS 胜内联属性），
+     真机上就变成"只有圆圈、没有箭头"。这里用更高优先级把它填回来。 */
+  /* 和桌面端一致的「向上箭头」：描边 + 圆头（不要 fill，否则两条线会被填成怪形状） */
+  .send .ic path{fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+  /* 停止态：白色圆角方块（和桌面端一致） */
+  .send.stop .ic rect{fill:currentColor;stroke:none}
+  /* 浅色主题的 `button{background:rgba(255,255,255,.62)}` 优先级压过了 `.send` 的渐变
+     （属性选择器+类型 = 比类高）→ 发送键在浅色下变成白圆圈、白箭头看不见。用更高优先级钉住。 */
+  html body #btn-send{background:linear-gradient(180deg,#5c9ad4,#2d5f9e);color:#f4f9ff;border:0;box-shadow:var(--glow)}
+  html body #btn-send:disabled{opacity:.55}
 
   /* ── 输入区 ─────────────────────────────────────────────────── */
   .composer{border-top:1px solid rgba(255,255,255,.08);background:rgba(12,17,25,.58);
     -webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);padding:10px 14px}
   html[data-theme="light"] .composer{background:rgba(255,255,255,.60);border-top-color:rgba(20,40,70,.08)}
   .chips-wrap{position:relative}
+  /* 排队消息 dock：桌面端跑的时候能看到"排队中"那条，并且有 插话发送 / 编辑 / 删除 */
+  .queue-dock{display:flex;flex-direction:column;gap:8px;padding:0 0 10px 0}
+  .queue-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:12px;
+    background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.10)}
+  .queue-item .qtxt{flex:1 1 auto;min-width:0;font-size:13px;line-height:1.45;opacity:.88;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}
+  .queue-item .qtag{flex:0 0 auto;font-size:11px;opacity:.6;margin-right:2px}
+  .queue-acts{display:flex;gap:6px;flex:0 0 auto}
+  .queue-acts button{height:30px;padding:0 10px;border-radius:999px;font-size:12px;
+    border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.07);color:inherit}
+  .queue-acts button.q-edit{opacity:.85}
+  .queue-acts button.q-del{color:#f2a0a0}
+  .queue-edit{display:flex;gap:8px;align-items:flex-end;padding:8px 10px;border-radius:12px;
+    background:rgba(255,255,255,.06);border:1px solid rgba(124,186,240,.35)}
+  .queue-edit textarea{flex:1 1 auto;min-height:40px;max-height:120px;resize:none;font:inherit;font-size:13px;
+    padding:8px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.05);color:inherit}
+  .queue-edit .q-btns{display:flex;flex-direction:column;gap:6px}
+  .queue-edit button{height:30px;padding:0 10px;border-radius:999px;font-size:12px;
+    border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.07);color:inherit}
+  .queue-edit button.save{background:linear-gradient(180deg,#5c9ad4,#2d5f9e);border:0;color:#f4f9ff}
+  html[data-theme="light"] .queue-item,html:not([data-theme]) .queue-item{background:rgba(255,255,255,.62);border-color:rgba(20,40,70,.10)}
+  html[data-theme="light"] .queue-acts button,html:not([data-theme]) .queue-acts button{border-color:rgba(20,40,70,.14);background:rgba(255,255,255,.7)}
+  html[data-theme="light"] .queue-edit,html:not([data-theme]) .queue-edit{background:rgba(255,255,255,.62);border-color:rgba(20,40,70,.14)}
+  html[data-theme="light"] .queue-edit textarea,html:not([data-theme]) .queue-edit textarea{border-color:rgba(20,40,70,.14)}
   /* chip 行**换行**而不是横向滚动：滚动 + 右缘渐隐在玻璃层上会变成一块难看的深色方块（实测） */
-  .chips{display:flex;flex-wrap:wrap;gap:9px;padding-bottom:10px}
-  .chip{height:var(--tap-min);padding:0 15px;border-radius:999px;background:rgba(255,255,255,.06);
+  /* 三个 chip 撑满一行：附件/强度按内容宽度，模型吃满剩余空间（真机反馈右侧大片空白） */
+  .chips{display:flex;flex-wrap:nowrap;gap:9px;padding-bottom:10px;align-items:stretch}
+  /* 模型面板：不支持图片的模型直接标出来（能力来自宿主 llm.resolveModelInfo，插件代查） */
+  .cap-warn{font-size:11px;color:#f0a35e;opacity:.95;margin-left:8px}
+  .chip{height:var(--tap-min);padding:0 13px;border-radius:999px;background:rgba(255,255,255,.06);
     border:1px solid rgba(255,255,255,.11);color:inherit;font-size:13.5px;white-space:nowrap;
-    display:inline-flex;align-items:center;gap:6px;flex:0 0 auto;opacity:.88}
+    display:inline-flex;align-items:center;justify-content:center;gap:6px;flex:0 0 auto;opacity:.88;min-width:0}
+  /* 模型名可能很长：chip 吃剩余宽度 + 字号略小 + 文本节点省略号（真机反馈长名溢出到按钮外） */
+  #chip-model{flex:1 1 auto;min-width:0;padding:0 10px;font-size:12.5px}
+  .chip > .txt{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
   .input-row{display:flex;align-items:flex-end;gap:12px}
   textarea{flex:1 1 auto;min-width:0;min-height:var(--btn-h-primary);max-height:120px;resize:none;
     padding:12px 14px;border-radius:var(--r-md);border:1px solid rgba(255,255,255,.10);
@@ -231,7 +271,7 @@
     border-top:1px dashed rgba(120,140,170,.25);margin-top:4px;word-break:break-all}
   /* 跟随系统：没手动选过（无 data-theme）时按系统浅色 */
   @media (prefers-color-scheme: light){
-html:not([data-theme]) html,body{background-color:#eaf1fb;
+html:not([data-theme]) body{background-color:#eaf1fb;
       background-image:
         radial-gradient(circle closest-side at center, rgba(160,197,241,.90) 0%, rgba(160,197,241,.72) 25%, rgba(160,197,241,.432) 50%, rgba(160,197,241,.171) 75%, rgba(160,197,241,0) 100%),
         radial-gradient(circle closest-side at center, rgba(132,178,234,.95) 0%, rgba(132,178,234,.76) 25%, rgba(132,178,234,.456) 50%, rgba(132,178,234,.181) 75%, rgba(132,178,234,0) 100%),
@@ -247,6 +287,14 @@ html:not([data-theme]) .plugin-row{border-bottom-color:rgba(20,40,70,.07)}
 html:not([data-theme]) .connect input{border-color:rgba(20,40,70,.14);background:rgba(255,255,255,.7)}
 html:not([data-theme]) .composer{background:rgba(255,255,255,.60);border-top-color:rgba(20,40,70,.08)}
 html:not([data-theme]) .tabbar{background:rgba(255,255,255,.62);border-top-color:rgba(20,40,70,.08)}
+html:not([data-theme]) .sheet{background:#f7fafe}
+html:not([data-theme]) .sheet button.opt{background:rgba(255,255,255,.7);border-color:rgba(20,40,70,.10)}
+html:not([data-theme]) .att-file{background:rgba(255,255,255,.62);border-color:rgba(20,40,70,.12)}
+html:not([data-theme]) .att-thumb{border-color:rgba(20,40,70,.16)}
+html:not([data-theme]) .trace-turn{background:rgba(255,255,255,.62);border-color:rgba(20,40,70,.10)}
+html:not([data-theme]) .trace-item.tool{color:#2d5f9e}
+html:not([data-theme]) .cap-warn{color:#b45309}
+html:not([data-theme]) .viewer{background:rgba(234,241,251,.97)}
   }
   /* 我的页 */
   .mine-section{padding:16px 16px 6px;font-size:12px;opacity:.5;letter-spacing:.5px}
@@ -295,9 +343,29 @@ html:not([data-theme]) .tabbar{background:rgba(255,255,255,.62);border-top-color
     border-radius:14px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.11);
     color:inherit;font-size:15px;text-align:left}
   html[data-theme="light"] .sheet button.opt{background:rgba(255,255,255,.7);border-color:rgba(20,40,70,.10)}
+  html[data-theme="light"] .trace-item.tool{color:#2d5f9e}
+  html[data-theme="light"] .sheet{background:#f7fafe}
+  html[data-theme="light"] .att-file{background:rgba(255,255,255,.62);border-color:rgba(20,40,70,.12)}
+  html[data-theme="light"] .att-thumb{border-color:rgba(20,40,70,.16)}
+  html[data-theme="light"] .trace-turn{background:rgba(255,255,255,.62);border-color:rgba(20,40,70,.10)}
+  html[data-theme="light"] .cap-warn{color:#b45309}
   .sheet button.opt[aria-current="true"]{border-color:rgba(124,186,240,.55);background:rgba(124,186,240,.16)}
   .sheet button.opt .sub{font-size:12px;opacity:.55;margin-left:auto}
   .sheet button.opt .ck{margin-left:auto;color:#9ecbf5;font-size:15px}
+  .sheet button.opt .cname{font-size:12px;opacity:.45;margin-left:6px;margin-right:auto}
+  /* 本版更新 */
+  /* 权限预设行：只占一行（真机反馈：标签被英文 key/说明挤成两行，排版乱） */
+  .sheet button.opt.perm-row{display:flex;align-items:center;gap:10px;min-height:52px;overflow:hidden}
+  .perm-row .perm-label{flex:0 0 auto;font-size:15px;white-space:nowrap}
+  .perm-row .perm-desc{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    font-size:12px;opacity:.55;text-align:right}
+  .perm-row .ck{flex:0 0 auto;margin-left:4px}
+  .whatsnew-ver{font-size:12px;opacity:.55;padding:2px 4px 6px}
+  .whatsnew-title{font-size:14.5px;font-weight:600;padding:0 4px 8px;line-height:1.45}
+  .whatsnew-item{display:flex;gap:8px;font-size:13.5px;line-height:1.55;padding:6px 4px}
+  .whatsnew-item .kind{flex:0 0 auto;font-size:11px;padding:1px 7px;border-radius:999px;height:20px;line-height:18px;
+    border:1px solid rgba(124,186,240,.45);color:#9ecbf5;opacity:.9}
+  html[data-theme="light"] .whatsnew-item .kind,html:not([data-theme]) .whatsnew-item .kind{color:#2d5f9e;border-color:rgba(45,95,158,.35)}
   .sheet .scrollable{max-height:52vh;overflow-y:auto;display:flex;flex-direction:column;gap:9px}
 
   /* 审批卡（手机批准/拒绝） */
@@ -326,13 +394,14 @@ html:not([data-theme]) .tabbar{background:rgba(255,255,255,.62);border-top-color
   .viewer{position:fixed;inset:0;z-index:300;background:rgba(2,5,10,.92);display:flex;align-items:center;
     justify-content:center;padding:16px}
   .viewer img{max-width:100%;max-height:100%;object-fit:contain}
+  html[data-theme="light"] .viewer{background:rgba(234,241,251,.97)}
 </style>
 </head>
 <body>
 <div class="app">
   <!-- 顶部 -->
   <header class="top">
-    <button class="ws" id="ws-chip"><span class="dot"></span>未分组 · 本机</button>
+    <div class="ws" id="ws-chip" title="本机会话列表"><span class="dot"></span>本机 · 全部会话</div>
     <span class="grow"></span>
     <button class="icon-btn" id="btn-refresh" aria-label="刷新"><svg class="ic" viewBox="0 0 24 24" width="20" height="20"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg></button>
     <button class="icon-btn" id="btn-settings" aria-label="设置"><svg class="ic" viewBox="0 0 24 24" width="20" height="20"><circle cx="12" cy="12" r="3"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"/></svg></button>
@@ -368,7 +437,6 @@ html:not([data-theme]) .tabbar{background:rgba(255,255,255,.62);border-top-color
   <!-- 会话页（默认隐藏，供断言/联调切换） -->
 
   <main class="scroll" id="page-mine" hidden>
-    <div class="page-head"><span class="page-title">我的</span><span class="page-sub" id="mine-ver">深鲸 Mobile</span></div>
     <div id="mine-list" class="plugins-list"></div>
   </main>
 
@@ -406,16 +474,17 @@ html:not([data-theme]) .tabbar{background:rgba(255,255,255,.62);border-top-color
   <!-- 输入区 + 标签栏 -->
   <div class="composer">
     <div class="att-strip" id="att-strip" hidden></div>
+    <div class="queue-dock" id="queue-dock" hidden></div>
     <div class="chips-wrap"><div class="chips" id="chips">
       <button class="chip" id="chip-attach"><svg class="ic" viewBox="0 0 24 24" width="16" height="16"><path d="M21.4 11.6l-8.9 8.9a5.6 5.6 0 0 1-7.9-7.9l9.6-9.6a3.8 3.8 0 0 1 5.4 5.4l-9.4 9.4a1.9 1.9 0 0 1-2.7-2.7l8.5-8.5"/></svg>附件</button>
-      <button class="chip" id="chip-ws">未分组</button>
       <button class="chip" id="chip-model">模型</button>
       <button class="chip" id="chip-effort">强度</button>
+      <button class="chip" id="chip-permission">权限</button>
     </div></div>
     <div class="input-row">
       <button class="icon-44" id="btn-plus" aria-label="附件"><svg class="ic" viewBox="0 0 24 24" width="20" height="20"><path d="M12 5v14M5 12h14"/></svg></button>
       <textarea id="input" rows="1" placeholder="描述你想要构建的内容"></textarea>
-      <button class="send" id="btn-send" aria-label="发送"><svg class="ic" viewBox="0 0 24 24" width="20" height="20"><path d="M5 4l14 8-14 8z" fill="currentColor" stroke="none"/></svg></button>
+      <button class="send" id="btn-send" aria-label="发送"><svg class="ic" viewBox="0 0 24 24" width="20" height="20"><path d="M12 19.5V5"/><path d="M5.5 11.5 12 5l6.5 6.5"/></svg></button>
     </div>
   </div>
   <nav class="tabbar">
@@ -431,6 +500,25 @@ html:not([data-theme]) .tabbar{background:rgba(255,255,255,.62);border-top-color
     <button class="opt" id="att-camera"><svg class="ic" viewBox="0 0 24 24" width="22" height="22"><path d="M4 8h3l2-2h6l2 2h3v12H4z"/><circle cx="12" cy="13" r="3.4"/></svg>拍照</button>
     <button class="opt" id="att-gallery"><svg class="ic" viewBox="0 0 24 24" width="22" height="22"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.6"/><path d="M4 18l5-5 4 4 3-3 4 4"/></svg>从相册选择</button>
     <button class="opt" id="att-file"><svg class="ic" viewBox="0 0 24 24" width="22" height="22"><path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4"/></svg>选择文件</button>
+  </div>
+</div>
+<div class="sheet-mask" id="sheet-commands" hidden>
+  <div class="sheet">
+    <div class="sh"><b>更多</b><span>指令与插件</span><button class="x2" data-close-sheet="sheet-commands" aria-label="关闭">✕</button></div>
+    <button class="opt" id="cmd-file"><svg class="ic" viewBox="0 0 24 24" width="20" height="20"><path d="M21.4 11.6l-8.9 8.9a5.6 5.6 0 0 1-7.9-7.9l9.6-9.6a3.8 3.8 0 0 1 5.4 5.4l-9.4 9.4a1.9 1.9 0 0 1-2.7-2.7l8.5-8.5"/></svg>文件<span class="cname">file</span><span class="sub">添加图片或文件</span></button>
+    <div class="scrollable" id="command-list"></div>
+  </div>
+</div>
+<div class="sheet-mask" id="sheet-whatsnew" hidden>
+  <div class="sheet">
+    <div class="sh"><b>本版更新</b><span id="whatsnew-sub"></span><button class="x2" data-close-sheet="sheet-whatsnew" aria-label="关闭">✕</button></div>
+    <div class="scrollable" id="whatsnew-list"></div>
+  </div>
+</div>
+<div class="sheet-mask" id="sheet-permission" hidden>
+  <div class="sheet">
+    <div class="sh"><b>权限</b><span>沙箱模式与审批策略</span><button class="x2" data-close-sheet="sheet-permission" aria-label="关闭">✕</button></div>
+    <div class="scrollable" id="permission-list"></div>
   </div>
 </div>
 <div class="sheet-mask" id="sheet-model" hidden>
@@ -449,7 +537,7 @@ html:not([data-theme]) .tabbar{background:rgba(255,255,255,.62);border-top-color
 <input type="file" id="file-camera" accept="image/*" capture="environment" hidden>
 <input type="file" id="file-gallery" accept="image/*" hidden>
 <input type="file" id="file-any" hidden>
-<script src="app.js?v=20261019b"></script>
+<script src="app.js?v=20261019s"></script>
 <script>
   // 仅用于骨架/断言联调：切换两个主页面
   window.__dshMobile = {
@@ -582,9 +670,10 @@ html:not([data-theme]) .tabbar{background:rgba(255,255,255,.62);border-top-color
     }
     var openers = [
       ['chip-attach', 'sheet-attach', null],
-      ['btn-plus', 'sheet-attach', null],
+      ['btn-plus', 'sheet-commands', function () { if (window.__dshRenderCommands) window.__dshRenderCommands(); }],
       ['chip-model', 'sheet-model', function () { if (window.__dshOpenModelSheet) window.__dshOpenModelSheet(); }],
       ['chip-effort', 'sheet-effort', function () { if (window.__dshOpenEffortSheet) window.__dshOpenEffortSheet(); }],
+      ['chip-permission', 'sheet-permission', function () { if (window.__dshRenderPermissions) window.__dshRenderPermissions(); }],
     ];
     openers.forEach(function (it) {
       var b = document.getElementById(it[0]);
@@ -603,6 +692,8 @@ html:not([data-theme]) .tabbar{background:rgba(255,255,255,.62);border-top-color
         if (window.__dshPick) window.__dshPick(it[1]);
       });
     });
+    var cmdFile = document.getElementById('cmd-file');
+    if (cmdFile) cmdFile.addEventListener('click', function () { open('sheet-attach'); });
     // ✕ / 点遮罩关闭
     Array.prototype.slice.call(document.querySelectorAll('[data-close-sheet]')).forEach(function (b) {
       b.addEventListener('click', closeAll);
@@ -611,6 +702,8 @@ html:not([data-theme]) .tabbar{background:rgba(255,255,255,.62);border-top-color
       m.addEventListener('click', function (e) { if (e.target === m) closeAll(); });
     });
     window.__dshCloseSheets = closeAll;
+    // 供数据层按 id 打开面板（例如"这个模型不支持图片"时自动弹出模型选择）
+    window.__dshOpenSheetById = open;
     // 大图查看：点任意位置关闭
     var viewer = document.getElementById('viewer');
     if (viewer) viewer.addEventListener('click', function () { viewer.hidden = true; });
@@ -630,11 +723,14 @@ html:not([data-theme]) .tabbar{background:rgba(255,255,255,.62);border-top-color
         send.disabled = false;
       }).catch(function () { send.disabled = false; });
     }
-    if (send) send.addEventListener('click', doSend);
+    window.__dshDoSend = doSend;   // app.js 的"停止/发送"二态按钮复用它
+    if (send) send.addEventListener('click', function () {
+      if (window.__dshSendAction) window.__dshSendAction();
+      else doSend();
+    });
     if (input) input.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSend(); }
     });
-    window.__dshDoSend = doSend;
   })();
 </script>
 </body>

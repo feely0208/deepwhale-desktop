@@ -166,6 +166,9 @@ async function startGatewayInternal(): Promise<Record<string, unknown>> {
     gatewaySessionToken = gateway.session.token;
     const gwPort = gateway.session.origin ? Number(new URL(gateway.session.origin).port) : 0;
     rememberGatewayPort(gwPort);
+    // 配对码也落盘（2026-10-19）：以前只在「已开着」分支/换码时写 —— 自动启动时文件里留的是上一轮的码，
+    // 而二维码/手机端用的是内存里这个新码 → 排障与自动化读文件拿到的码对不上（我这次真机验收就被挡了）。
+    rememberPairCode(gateway.session.pairCode);
     // 隧道：手机在外面用（连中继 → 回到本机网关）。密钥持久化，重启后隧道 ID 不变。
     try {
       const secret = lastTunnelSecret() ?? makeTunnelSecret();

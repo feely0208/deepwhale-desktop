@@ -1,4 +1,4 @@
-# 上游 DSH 版本监测 —— 官方一发布就自动开 Issue 通知。
+# 上游 DSH 版本监测 —— 官方一发布就提醒（2026-10-20 起写 Actions 摘要，不再开 Issue）。
 #
 # 为什么需要（2026-09-29，用户的原话）：
 #   「为什么每次官方升级都是我告诉你的呢，你为什么没有第一时间抓到这个信息来告诉我呢？」
@@ -15,6 +15,17 @@
 #       与 release.yml 里钉住的版本比对（比对逻辑在 scripts/check-upstream-dsh.py），
 #       不一致就开 Issue（已存在则追加评论，不刷屏）。
 #       数据源是公共 npm registry，不需要任何凭据。
+#
+# ── 2026-10-20 改版：不再开公开 Issue ──────────────────────────────
+# 用户提出两点：
+#   ① 仓库是 PUBLIC —— 「我们落后上游几个版本、升级要跑哪些检查」被写成公开页面；
+#   ② 每条 Issue 评论都会给 owner 发一封 GitHub 通知邮件，Cc 里还带
+#      `…@noreply.github.com` / `Subscribed` 这类伪地址，容易被误读成"有人被抄送"。
+# 现在的做法：**不建 Issue、不写评论**，结果写进 Actions Job Summary
+# （`$GITHUB_STEP_SUMMARY`，在 Actions 运行详情页可见），并用 ::warning 标一下。
+# 需要时手动跑：Actions → Watch upstream DSH → Run workflow。
+# ⚠️ 注意：公开仓库的 Actions 摘要**同样是公开可读的**。要完全不公开，
+#    只能把这类检查搬到本机（scripts/check-upstream-dsh.py 可单独跑）或私有仓库。
 name: Watch upstream DSH
 
 on:
@@ -25,7 +36,6 @@ on:
 
 permissions:
   contents: read
-  issues: write
 
 jobs:
   check:
@@ -40,10 +50,9 @@ jobs:
       # 正文放在 .github/upstream-issue-template.md 里，用占位符替换 ——
       # 不把多行 markdown 塞进 YAML 的 run 块：那样一有续行缩进不对就会
       # 把块标量截断，YAML 直接解析失败（本文件第一版就是这么挂的）。
-      - name: 有新版本就开 Issue（已存在则追加评论）
+      - name: 有新版本 → 写进 Actions 摘要（不再开公开 Issue）
         if: steps.cmp.outputs.changed == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PINNED: ${{ steps.cmp.outputs.pinned }}
           LATEST: ${{ steps.cmp.outputs.latest }}
           PUBLISHED: ${{ steps.cmp.outputs.published }}
@@ -55,15 +64,20 @@ jobs:
           tpl = open('.github/upstream-issue-template.md', encoding='utf-8').read()
           for key in ('LATEST', 'PINNED', 'PUBLISHED', 'RECENT'):
               tpl = tpl.replace('{{%s}}' % key, os.environ.get(key, '?'))
-          open('/tmp/upstream-issue.md', 'w', encoding='utf-8').write(tpl)
+          summary = os.environ.get('GITHUB_STEP_SUMMARY')
+          if summary:
+              with open(summary, 'a', encoding='utf-8') as f:
+                  f.write(tpl + '\n')
+          latest = os.environ.get('LATEST', '?')
+          pinned = os.environ.get('PINNED', '?')
+          print(f'::warning title=上游 DSH 有新版本::{latest}（我们随包 {pinned}）')
+          print(tpl)
           PY
-          TITLE="上游 DSH 有新版本：${LATEST}（我们随包 ${PINNED}）"
-          EXIST=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
-            --search "上游 DSH 有新版本 in:title" --json number --jq '.[0].number')
-          if [ -n "$EXIST" ] && [ "$EXIST" != "null" ]; then
-            gh issue comment "$EXIST" --repo "$GITHUB_REPOSITORY" --body-file /tmp/upstream-issue.md
-            echo "  已追加到既有 Issue #$EXIST"
-          else
-            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body-file /tmp/upstream-issue.md
-            echo "  已新建 Issue"
-          fi
+
+      - name: 无新版本 → 摘要留一行结论
+        if: steps.cmp.outputs.changed != 'true'
+        env:
+          PINNED: ${{ steps.cmp.outputs.pinned }}
+          LATEST: ${{ steps.cmp.outputs.latest }}
+        run: |
+          echo "✅ 上游无新版本：latest=${LATEST} == pinned=${PINNED}，无需动作" >> "$GITHUB_STEP_SUMMARY"

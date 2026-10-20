@@ -15,6 +15,19 @@
 
 ## [未发布] — 1.0.60 待办
 
+- [x] **修复 GUI「添加插件」装不上任何插件（`spawn pnpm ENOENT`）**（2026-10-20 用户现场，已修 + 回归测试）
+  - 根因：插件管理器在 **DSH 运行时进程**里执行 `pnpm view` / `pnpm add`，而桌面端从 Finder 启动时
+    PATH 只有 `/usr/bin:/bin:/usr/sbin:/sbin` —— 既没有 pnpm 也没有 node，
+    于是「添加插件」弹窗报 `无法获取插件信息：Command failed with ENOENT: pnpm view … spawn pnpm ENOENT`。
+    **所有插件都装不上**，不是某个插件的问题。
+  - 修法（`src/main/plugin-toolchain.ts` 新增）：①随包 `pnpm`（native，依赖 `pnpm@12.14.0`）物化到
+    `<DSH_HOME>/runtime-bin/bin/`（用户可写目录、带执行位；不能直接跑 asar 里的 0644 文件）；
+    ②生成 `node` 包装脚本（Electron 充当 Node）；③拉起 DSH 运行时前把 `runtime-bin` + 常见 bin 目录
+    （`~/.npm-global/bin`、`/opt/homebrew/bin`、`/usr/local/bin`、nvm/fnm/volta）注入 `env.PATH`。
+    `ServiceManager.spawn()` 已接入；`electron-builder.yml` 加 `asarUnpack: node_modules/pnpm/**`（+`@pnpm/**`）。
+  - **回归**：`npm run test:plugin-toolchain`（离线）——「Finder 极简 PATH」下真跑 `dsh plugin add`（`file:` 本地包）
+    断言依赖写入 profile；同一环境不注入 PATH 必须失败（反证）；并断言 ServiceManager 传下去的子进程 PATH 首项正确。
+
 - [ ] **用量面板浅色下文字发灰看不清**（2026-10-19 用户实测；源码已修，**待发版才生效**）
   - 根因：2026-10-18 把 `@media (prefers-color-scheme: dark)` 展开成 `body[data-ds-dark-theme]` 时，
     每组只给**第一个**选择器加了前缀，后面的（`.row .k = #9aa1ad`、`.row .v = #e6e8ec` 等 19 条）全漏了

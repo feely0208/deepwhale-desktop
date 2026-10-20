@@ -5,6 +5,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { EventEmitter } from 'events';
 import { applyProfileToCommandArgs, profileLaunchArgs } from './profile';
+import { augmentRuntimePath, ensurePluginToolchain } from './plugin-toolchain';
 
 /**
  * 杀进程树：优先用 tree-kill；**缺这个模块也必须能启动**（2026-10-05 事故）
@@ -82,6 +83,17 @@ export interface ServiceOptions {
    * 用户机器上无需安装 Node.js、无需 npx、无需联网下载。
    */
   bundledBin?: string;
+  /**
+   * 插件安装工具链（2026-10-20）：插件管理器在 DSH 运行时里执行 `pnpm view/add`，
+   * 而 Finder 启动的 App PATH 只有 `/usr/bin:/bin:/usr/sbin:/sbin`（无 pnpm 无 node）
+   * → 所有插件都报 `spawn pnpm ENOENT`。这里传入定位随包 pnpm 所需的信息。
+   */
+  toolchain?: {
+    appPath: string;
+    resourcesPath: string;
+    isPackaged: boolean;
+    electronPath: string;
+  };
 }
 
 /**
@@ -271,6 +283,27 @@ export class ServiceManager extends EventEmitter {
     const env: NodeJS.ProcessEnv = { ...process.env };
     // 壳注入的环境变量（如 DSH_HOME）优先于继承来的环境
     if (this.options.env) Object.assign(env, this.options.env);
+
+    // ── 插件安装工具链（2026-10-20）────────────────────────────────
+    // GUI 的「添加插件」是在 DSH 运行时里 spawn `pnpm` 的；Finder 启动的 App PATH
+    // 只有 /usr/bin:/bin:/usr/sbin:/sbin，pnpm/node 都不在里面 → `spawn pnpm ENOENT`，
+    // 表现为「任何插件都装不上」。这里先把随包 pnpm 物化到用户目录、再把它塞进 PATH。
+    if (this.options.toolchain) {
+      try {
+        const home = typeof env.DSH_HOME === 'string' && env.DSH_HOME.length > 0
+          ? env.DSH_HOME
+          : path.join(os.homedir(), '.dsh');
+        const toolchain = ensurePluginToolchain({ home, ...this.options.toolchain });
+        augmentRuntimePath(env, toolchain.pathDirs);
+        console.log(
+          `[service] 插件工具链：pnpm=${toolchain.pnpm}${toolchain.pnpmVersion ? ` v${toolchain.pnpmVersion}` : ''}` +
+            `（PATH 前 3 项：${toolchain.pathDirs.slice(0, 3).join(' : ')}）`,
+        );
+      } catch (e) {
+        // 工具链准备失败不能阻断 DSH 启动（插件能不用，界面得能开）
+        console.warn('[service] 插件工具链准备失败（不影响启动，但 GUI 装插件可能不可用）：', e);
+      }
+    }
 
     // 随包 DSH 运行时优先：用户机器上无需 Node.js / npx / 联网
     if (this.options.bundledBin) {

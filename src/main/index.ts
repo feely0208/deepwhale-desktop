@@ -1683,6 +1683,14 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
     service = new ServiceManager(store.get('command'), {
       port: store.get('port'),
       bundledBin,
+      // 插件安装工具链：插件管理器在运行时里 spawn pnpm，Finder 启动的 PATH 里没有它。
+      // 这些路径用于定位随包 pnpm 并注入 PATH（见 src/main/plugin-toolchain.ts）。
+      toolchain: {
+        appPath: app.getAppPath(),
+        resourcesPath: process.resourcesPath,
+        isPackaged: app.isPackaged,
+        electronPath: process.execPath,
+      },
       // 让壳拉起的 DSH 使用应用专属 home：会话与设置不落到用户自己的 ~/.dsh
       env: { DSH_HOME: legalHome },
       onLogLine: (line) => {

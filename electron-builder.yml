@@ -75,6 +75,12 @@ npmRebuild: false
 # *.node 稳，避免某些包还需要同目录的共享库/预编译产物）。
 # 平台无关写法：用 `-*` 覆盖各平台后缀包名，免得漏掉某一个平台。
 asarUnpack:
+  # 插件安装工具链（2026-10-20）：pnpm 是**原生可执行文件**，必须留在 asar 外 ——
+  # asar 里的文件 stat 一律 0644（无执行位），spawn 会 EACCES。
+  # 运行时由 src/main/plugin-toolchain.ts 物化到 <DSH_HOME>/runtime-bin/。
+  - node_modules/pnpm/**
+  # pnpm 的原生二进制也可能来自可选依赖（生命周期脚本被拦时）
+  - node_modules/@pnpm/**
   - dsh-runtime/node_modules/node-pty/**
   - dsh-runtime/node_modules/@img/**
   - dsh-runtime/node_modules/@koromix/**

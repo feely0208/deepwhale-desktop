@@ -58,11 +58,13 @@
     "check:updater-differential": "node scripts/check-updater-differential.js",
     "check:installer-close": "node scripts/check-installer-close-app.js",
     "check:whatsnew-entry": "node scripts/check-whatsnew-entry.js",
-    "smoke:isolated": "node scripts/smoke-isolated.js"
+    "smoke:isolated": "node scripts/smoke-isolated.js",
+    "test:plugin-toolchain": "npm run build && node scripts/test-plugin-toolchain.js"
   },
   "dependencies": {
     "electron-updater": "^6.8.9",
     "js-yaml": "^4.1.0",
+    "pnpm": "12.14.0",
     "qrcode-generator": "^2.0.4",
     "tree-kill": "^1.2.2"
   },

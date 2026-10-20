@@ -62,11 +62,14 @@ function forgeScript(): string {
 
 /** 《宠物怎么捏》说明文档路径（随包外置在 tools/petforge 下） */
 export function forgeDocPath(): string {
-  const packed = path.join(process.resourcesPath, 'tools', 'petforge', '宠物怎么捏.md');
-  if (fs.existsSync(packed)) return packed;
-  const dev = path.join(app.getAppPath(), '..', 'assets', 'tools', 'petforge', '宠物怎么捏.md');
-  if (fs.existsSync(dev)) return dev;
-  return path.join(app.getAppPath(), 'assets', 'tools', 'petforge', '宠物怎么捏.md');
+  // 优先打开图文版（用户看的是流程图，不是 markdown 源码）
+  for (const f of ['宠物怎么捏.png', '宠物怎么捏.md']) {
+    const packed = path.join(process.resourcesPath, 'tools', 'petforge', f);
+    if (fs.existsSync(packed)) return packed;
+    const dev = path.join(app.getAppPath(), '..', 'assets', 'tools', 'petforge', f);
+    if (fs.existsSync(dev)) return dev;
+  }
+  return path.join(app.getAppPath(), 'assets', 'tools', 'petforge', '宠物怎么捏.png');
 }
 
 /** 用 Python 生成一只宠物。返回生成出来的宠物名（安装到 pets 目录后可见）。 */

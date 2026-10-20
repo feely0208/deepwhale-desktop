@@ -75,7 +75,10 @@
         div.textContent = it.label;
         div.addEventListener('click', function () {
           window.dsh.petSelect(it.name);
-          refreshPets();
+          // 2026-10-20 修：petSelect 是 send（异步、不等待主进程），立刻 refreshPets
+          // 拿到的是**旧的 current**，列表高亮不动 → 用户看着像"点了没反应"。
+          // 延迟一拍等主进程写完 store 再刷新。设置页的宠物切换早先同款问题。
+          setTimeout(refreshPets, 160);
         });
         petsEl.appendChild(div);
       });

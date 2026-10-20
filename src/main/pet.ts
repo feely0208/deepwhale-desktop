@@ -13,6 +13,21 @@ import { Store } from './store';
  * - 右键菜单：IPC 通知主进程弹原生 Menu；
  * - 穿透点击：win.setIgnoreMouseEvents(true, { forward: true })。
  */
+/**
+ * 1.0.61 起下线的内置宠物。
+ *
+ * 1.0.60 曾一次性内置 12 生肖，但动作表现未达标准（用户现场：「原地左摇右摆、
+ * 忽大忽小哪里像个律师」），1.0.61 收敛为只保留「鼠书记员」，其余逐个打磨后再回归。
+ * 见 CHANGELOG 的 1.0.61 待办段。
+ */
+const RETIRED_BUILTIN_PETS = [
+  '牛法官', '虎法警', '兔律师', '龙检察官', '蛇法医', '马执法',
+  '羊公证员', '猴仲裁员', '鸡记者', '狗消防员', '猪厨师',
+];
+
+/** 当前宠物不可用时的兜底（品牌形象） */
+const FALLBACK_PET = '青色大肥鱼';
+
 export class PetWindow {
   private win: BrowserWindow | null = null;
   private dragOffset: { x: number; y: number } | null = null;
@@ -66,9 +81,58 @@ export class PetWindow {
         }
       }
       console.log(`[pet] 用户宠物目录已就位: ${dir}${copied ? `（本次更新了 ${String(copied)} 项内置宠物）` : ''}`);
+      this.pruneRetiredBuiltinPets();
+      this.validateCurrentPet();
     } catch (e) {
       console.error('[pet] 初始化宠物目录失败:', e);
     }
+  }
+
+  /**
+   * 清理已下线的内置宠物（2026-10-20 随 1.0.61 加）。
+   *
+   * 背景：1.0.60 内置了 12 生肖，1.0.61 收敛为只保留「鼠书记员」。但升级用户目录里
+   * 那 11 只**不会自己消失**（上面的同步只复制/更新，从不删除），于是会出现
+   * 「新用户 1 只、老用户 12 只」的分裂，而且老用户继续看到那批动作不达标的版本。
+   *
+   * 安全边界：只删白名单目录，并且要求 manifest 的 displayName 等于目录名
+   * （内置宠物的特征）——用户自己改名或自制的不会被误删。
+   */
+  private pruneRetiredBuiltinPets(): void {
+    const dir = this.userPetsDir();
+    let removed = 0;
+    for (const name of RETIRED_BUILTIN_PETS) {
+      const target = path.join(dir, name);
+      if (!fs.existsSync(target)) continue;
+      try {
+        const mf = path.join(target, 'manifest.json');
+        if (fs.existsSync(mf)) {
+          const m = JSON.parse(fs.readFileSync(mf, 'utf8')) as { displayName?: string };
+          if (m.displayName && m.displayName !== name) continue; // 用户改过名，保留
+        }
+        fs.rmSync(target, { recursive: true, force: true });
+        removed += 1;
+      } catch {
+        // 单个失败不影响其它
+      }
+    }
+    if (removed) console.log(`[pet] 已清理 ${removed} 个已下线的内置宠物`);
+  }
+
+  /**
+   * 校验当前选中的宠物是否还存在，不存在就回落到兜底宠物。
+   *
+   * 为什么必须有：清理下线宠物后，若用户升级前正用着「牛法官」，petGif 会指向一个
+   * 已删除的目录 → 宠物窗找不到素材静默失败（窗口一片空白）。这条校验兜住升级路径。
+   */
+  private validateCurrentPet(): void {
+    const cur = this.store.get('petGif');
+    const available = this.listPets();
+    if (cur && available.includes(cur)) return;
+    const fallback = available.includes(FALLBACK_PET) ? FALLBACK_PET : (available[0] ?? null);
+    if (!fallback) return;
+    this.store.set('petGif', fallback);
+    console.log(`[pet] 当前宠物「${String(cur)}」不可用，已回落到「${fallback}」`);
   }
 
   /** 在访达中打开用户宠物目录（不存在则先创建） */

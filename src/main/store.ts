@@ -79,7 +79,7 @@ export interface Settings {
   customCssEnabled: boolean;
   /** 桌面宠物是否显示 */
   petVisible: boolean;
-  /** 桌面宠物：当前宠物名（默认 AI小助理 帧动画宠物） */
+  /** 桌面宠物：当前宠物名（默认青色大肥鱼 —— 品牌形象） */
   petGif: string | null;
   /** 帧动画宠物播放速度（每帧毫秒） */
   petFrameMs: number;
@@ -136,7 +136,7 @@ const DEFAULTS: Settings = {
   skinOpacity: 0.55,
   customCssEnabled: false,
   petVisible: true,
-  petGif: 'AI小助理',
+  petGif: '青色大肥鱼',
   petFrameMs: 80,
   petScale: 1,
   clickThrough: false,

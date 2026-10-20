@@ -52,8 +52,22 @@
       '    <h3>宠物</h3>' +
       '    <div class="dsh-ext-row">当前宠物：<b id="dsh-ext-pet-current">—</b></div>' +
       '    <div class="dsh-ext-preview" id="dsh-ext-pet-preview"><span class="ph">—</span></div>' +
-      '    <div class="dsh-forge">' +
-      '      <div class="dsh-forge-title">AI 造宠物</div>' +
+      '    <div class="dsh-ext-list" id="dsh-ext-pet-list"></div>' +
+      '    <label class="dsh-ext-check"><input type="checkbox" id="dsh-ext-pet-visible" /> 显示宠物</label>' +
+      '    <label class="dsh-ext-check"><input type="checkbox" id="dsh-ext-pet-clickthrough" /> 穿透点击（可点到宠物后面的内容）</label>' +
+      '    <div class="dsh-ext-row">动画帧率：<b id="dsh-ext-pet-fps-val">130ms/帧</b></div>' +
+      '    <input type="range" class="dsh-ext-range" id="dsh-ext-pet-frame" min="40" max="300" step="5" />' +
+      '    <div class="dsh-ext-row">宠物大小：<b id="dsh-ext-pet-scale-val">100%</b></div>' +
+      '    <input type="range" class="dsh-ext-range" id="dsh-ext-pet-scale" min="0.6" max="2" step="0.1" />' +
+      '    <div class="dsh-ext-btns">' +
+      '      <button class="dsh-ext-btn" id="dsh-ext-pet-open">打开宠物目录…</button>' +
+      '      <button class="dsh-ext-btn" id="dsh-ext-pet-studio">宠物工坊…</button>' +
+      '    </div>' +
+      '    <div class="dsh-forge collapsed" id="dsh-forge">' +
+      '      <button class="dsh-forge-toggle" id="dsh-forge-toggle" type="button">' +
+      '        <span>AI 造宠物</span><span class="dsh-forge-caret" id="dsh-forge-caret">展开</span>' +
+      '      </button>' +
+      '      <div class="dsh-forge-body">' +
       '      <div class="dsh-forge-hint">用你已有的图像生成模型，一句话生成专属宠物。需自备 API Key（本软件不提供算力）。</div>' +
       '      <input class="dsh-forge-input" id="dsh-forge-desc" maxlength="200" placeholder="例：一只穿法袍戴眼镜的熊猫，抱着一摞卷宗" />' +
       '      <div class="dsh-forge-row">' +
@@ -75,17 +89,7 @@
       '        <button class="dsh-forge-btn dsh-forge-btn-ghost" id="dsh-forge-doc">宠物怎么捏</button>' +
       '        <span class="dsh-forge-msg" id="dsh-forge-msg"></span>' +
       '      </div>' +
-      '    </div>' +
-      '    <div class="dsh-ext-list" id="dsh-ext-pet-list"></div>' +
-      '    <label class="dsh-ext-check"><input type="checkbox" id="dsh-ext-pet-visible" /> 显示宠物</label>' +
-      '    <label class="dsh-ext-check"><input type="checkbox" id="dsh-ext-pet-clickthrough" /> 穿透点击（可点到宠物后面的内容）</label>' +
-      '    <div class="dsh-ext-row">动画帧率：<b id="dsh-ext-pet-fps-val">130ms/帧</b></div>' +
-      '    <input type="range" class="dsh-ext-range" id="dsh-ext-pet-frame" min="40" max="300" step="5" />' +
-      '    <div class="dsh-ext-row">宠物大小：<b id="dsh-ext-pet-scale-val">100%</b></div>' +
-      '    <input type="range" class="dsh-ext-range" id="dsh-ext-pet-scale" min="0.6" max="2" step="0.1" />' +
-      '    <div class="dsh-ext-btns">' +
-      '      <button class="dsh-ext-btn" id="dsh-ext-pet-open">打开宠物目录…</button>' +
-      '      <button class="dsh-ext-btn" id="dsh-ext-pet-studio">宠物工坊…</button>' +
+      '      </div>' +
       '    </div>' +
       '  </section>' +
       '  <section class="dsh-ext-section" id="' + SEC_PREFIX + 'usage">' +
@@ -235,6 +239,16 @@
     }
 
     // ---- AI 造宠物 ----
+    var forgeBoxEl = document.getElementById('dsh-forge');
+    var forgeToggleEl = document.getElementById('dsh-forge-toggle');
+    var forgeCaretEl = document.getElementById('dsh-forge-caret');
+    if (forgeToggleEl) {
+      forgeToggleEl.addEventListener('click', function () {
+        var collapsed = forgeBoxEl.classList.toggle('collapsed');
+        if (forgeCaretEl) forgeCaretEl.textContent = collapsed ? '展开' : '收起';
+      });
+    }
+
     var forgeDescEl = document.getElementById('dsh-forge-desc');
     var forgeStyleEl = document.getElementById('dsh-forge-style');
     var forgeProvEl = document.getElementById('dsh-forge-provider');

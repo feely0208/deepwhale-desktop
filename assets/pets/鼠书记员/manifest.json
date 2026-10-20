@@ -2,115 +2,115 @@
   "displayName": "鼠书记员",
   "cellWidth": 192,
   "cellHeight": 208,
-  "columns": 8,
+  "columns": 12,
   "rows": [
     {
       "state": "idle",
       "row": 0,
-      "frames": 6,
-      "speed": 0.95
+      "frames": 12,
+      "speed": 1.04
     },
     {
       "state": "waving",
       "row": 1,
       "frames": 5,
-      "speed": 1.0
+      "speed": 0.8
     },
     {
       "state": "jumping",
       "row": 2,
       "frames": 6,
-      "speed": 0.65
+      "speed": 0.55
     },
     {
       "state": "dash",
       "row": 3,
       "frames": 6,
-      "speed": 0.8
+      "speed": 0.75
     },
     {
       "state": "flip",
       "row": 4,
       "frames": 6,
-      "speed": 0.95
+      "speed": 0.75
     },
     {
       "state": "ball",
       "row": 5,
       "frames": 6,
-      "speed": 0.75
+      "speed": 0.6
     },
     {
       "state": "swimming",
       "row": 6,
       "frames": 6,
-      "speed": 0.8
+      "speed": 0.6
     },
     {
       "state": "diving",
       "row": 7,
       "frames": 6,
-      "speed": 0.95
+      "speed": 2.25
     },
     {
       "state": "standing",
       "row": 8,
       "frames": 4,
-      "speed": 1.1
+      "speed": 0.75
     },
     {
       "state": "look",
       "row": 9,
       "frames": 6,
-      "speed": 0.95
+      "speed": 1.39
     },
     {
       "state": "review",
       "row": 10,
-      "frames": 6,
-      "speed": 0.75
+      "frames": 8,
+      "speed": 4.17
     },
     {
       "state": "sleeping",
       "row": 11,
       "frames": 6,
-      "speed": 1.45
+      "speed": 0.75
     },
     {
       "state": "walking-left",
       "row": 12,
       "frames": 6,
-      "speed": 0.95
+      "speed": 0.75
     },
     {
       "state": "walking-right",
       "row": 13,
       "frames": 6,
-      "speed": 0.95
+      "speed": 0.75
     },
     {
       "state": "jogging-left",
       "row": 14,
       "frames": 6,
-      "speed": 0.8
+      "speed": 0.75
     },
     {
       "state": "jogging-right",
       "row": 15,
       "frames": 6,
-      "speed": 0.8
+      "speed": 0.75
     },
     {
       "state": "fast-running-left",
       "row": 16,
       "frames": 6,
-      "speed": 0.65
+      "speed": 0.75
     },
     {
       "state": "fast-running-right",
       "row": 17,
       "frames": 6,
-      "speed": 0.65
+      "speed": 0.75
     }
   ]
 }

@@ -13,6 +13,15 @@
 .dsh-ext-section {
   display: none;
 }
+/* 面板内容一多（预览 + AI 造宠物 + 长列表 + 开关组）会超出可视区，
+   开了的那个 section 自己滚，保证底部「显示宠物/点击穿透/帧率/缩放」永远够得着。
+   2026-10-20 修：之前只给列表加 max-height，导致底部控件被裁掉且不可达。 */
+.dsh-ext-section:not([style*="display: none"]) {
+  max-height: calc(100vh - 190px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+}
 
 .dsh-ext-section[style*="display: none"] {
   display: none;
@@ -63,7 +72,7 @@
   gap: 6px;
   margin: 8px 0 14px;
   /* 宠物多时列表必须自己滚，否则会把下面的开关/帧率控件挤出面板（2026-10-20 实测 54 个宠物撑爆） */
-  max-height: 300px;
+  max-height: 168px;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding-right: 4px;
@@ -255,12 +264,31 @@
 .dsh-forge {
   border: 1px solid var(--dsw-alias-border-l1);
   border-radius: 12px;
-  padding: 14px 16px;
-  margin: 4px 0 16px;
+  margin: 4px 0 12px;
   background: var(--dsw-alias-bg-l1, rgba(0, 0, 0, 0.02));
+}
+.dsh-forge-toggle {
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 40px;
+  padding: 0 14px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.dsh-forge-caret { font-size: 12px; font-weight: 400; opacity: 0.6; }
+.dsh-forge.collapsed .dsh-forge-body { display: none; }
+.dsh-forge-body {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  padding: 0 16px 14px;
 }
 .dsh-forge-title { font-weight: 600; font-size: 14px; }
 .dsh-forge-hint { font-size: 12px; opacity: 0.66; line-height: 1.6; }

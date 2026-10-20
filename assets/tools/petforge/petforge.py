@@ -278,7 +278,15 @@ def main():
 
     out_dir = a.out or os.path.join(work, name)
     print(f"[2/3] 生成动画（{a.style} 风格）")
-    nstate, nframe = build(src_path, out_dir, name, a.style)
+    # 用 v3 分层/大幅动画引擎（2026-10-20：v2 幅度太小，桌宠上看不出动作）
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from build_pet3 import build as build_v3
+        build_v3(src_path, out_dir, name, a.style)
+        nstate, nframe = 18, 105
+    except Exception as e:  # 回退到旧引擎
+        print(f"      v3 引擎不可用（{e}），回退旧引擎")
+        nstate, nframe = build(src_path, out_dir, name, a.style)
     print(f"      → {nstate} 状态 / {nframe} 帧")
 
     if a.out:

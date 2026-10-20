@@ -87,8 +87,41 @@ function parseShortcut(spec: string):
   };
 }
 
+/**
+ * 用户数据目录覆盖（验收/并行测试用）：
+ * 设 DSH_USER_DATA=/some/dir 时把 userData 指到该目录，
+ * 从而**不撞正在运行的正式实例**的单实例锁，可以在用户正常使用 App 的同时
+ * 起一个隔离实例做界面验证。
+ *
+ * 为什么不能用 HOME：macOS 的 NSHomeDirectory() 读真实家目录，不跟随 $HOME，
+ * 所以改 HOME 对 userData 无效（2026-10-20 实测踩到）。
+ * 普通用户不设此变量 → 行为完全不变。
+ */
+const USER_DATA_OVERRIDE = process.env.DSH_USER_DATA;
+if (USER_DATA_OVERRIDE) {
+  try {
+    fs.mkdirSync(USER_DATA_OVERRIDE, { recursive: true });
+    app.setPath('userData', USER_DATA_OVERRIDE);
+  } catch {
+    // ignore：覆盖失败就退回默认目录
+  }
+}
+
 /** 冒烟测试模式：自动启动、打印关键事件、8 秒后退出（供 CI/自动化验证） */
 const SMOKE = !!process.env.DSH_DESKTOP_SMOKE;
+
+/**
+ * 界面自测开关（仅开发/验收用）：
+ * 设 DSH_CDP_PORT=9333 启动时开放 Chrome DevTools 协议端口，
+ * 外部可用 CDP 拉 DOM / 截图，验证界面布局是否被改坏。
+ * 普通用户不设此环境变量 → 完全无感，不开放任何端口。
+ * 2026-10-20 加：此前改界面只能靠用户手动点，出了"面板被撑爆""按钮消失"这类问题
+ * 无法在发版前自己发现。
+ */
+if (process.env.DSH_CDP_PORT) {
+  app.commandLine.appendSwitch('remote-debugging-port', String(process.env.DSH_CDP_PORT));
+  app.commandLine.appendSwitch('remote-allow-origins', '*');
+}
 
 /**
  * 载荷/ profile 注入失败统一处置：既打 console，**也写进 fault.log**。

@@ -23,7 +23,10 @@
 # 日常检测已改到本机（零公开）：
 #     cd ~/dsh-desktop && python3 scripts/check-upstream-dsh.py
 #   建议挂成每天的本地定时任务。
-name: Watch upstream DSH
+# 显示名（2026-10-20）：原来是 `Watch upstream DSH`，一眼就能看出"这家在盯上游版本"。
+# 改成中性名后，**文件路径与 workflow id 都不变**（禁用状态、历史记录、脚本引用都不受影响）；
+# 要找回它：按文件路径 `.github/workflows/watch-upstream.yml`，或 Actions 列表里的 Maintenance。
+name: Maintenance
 
 on:
   # 故意只留手动触发：公开仓库的 Actions 运行记录与摘要是匿名可读的，

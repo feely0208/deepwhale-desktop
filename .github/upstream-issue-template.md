@@ -32,6 +32,6 @@
    - `verify-artifacts.py`（三平台拆包自检）
    - `smoke-local.sh`（冷启动冒烟 + 重载断言）
    - `check-legal-preset-roster.js`（法律模式必须在花名册里）
-4. 处理完：手动跑一次 workflow_dispatch 复核（Actions → Watch upstream DSH → Run workflow），或在本机跑 `python3 scripts/check-upstream-dsh.py`
+4. 处理完：手动跑一次 workflow_dispatch 复核（Actions → Maintenance（文件 `.github/workflows/watch-upstream.yml`）→ Run workflow），或在本机跑 `python3 scripts/check-upstream-dsh.py`
 
 > 自动生成，来自 `.github/workflows/watch-upstream.yml`；**只写进 Actions 摘要，不建 Issue、不发评论**（2026-10-20 起）

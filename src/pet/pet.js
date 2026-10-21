@@ -28,10 +28,10 @@
   var params = new URLSearchParams(window.location.search);
   var baseFrameMs = parseInt(params.get('frameMs') || '130', 10) || 130;
   // 调度节奏（自检脚本会传很小的值来快速验证）
-  var idleMinMs = parseInt(params.get('actionMs') || '5000', 10) || 5000;
-  var idleSpanMs = parseInt(params.get('actionSpanMs') || '4000', 10) || 4000;
+  var idleMinMs = parseInt(params.get('actionMs') || '3000', 10) || 3000;
+  var idleSpanMs = parseInt(params.get('actionSpanMs') || '2000', 10) || 2000;
   var hoverMs = parseInt(params.get('hoverMs') || '2800', 10) || 2800;
-  var holdMs = parseInt(params.get('holdMs') || '3600', 10) || 3600;          // 单个动作保持多久
+  var holdMs = parseInt(params.get('holdMs') || '5000', 10) || 5000;          // 单个动作保持多久
   var holdLongMs = parseInt(params.get('holdLongMs') || '5200', 10) || 5200;  // 站立/顶球这种"表演"多停一会
 
   /* ================= 帧动画宠物（spritesheet） ================= */

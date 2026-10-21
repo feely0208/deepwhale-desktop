@@ -233,20 +233,18 @@ API Key 相关处理见 [SECURITY.md](SECURITY.md)。
 
 ## 特别感谢
 
-- [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 与 DeepSeek AI 团队：DSH 本身
+- [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 与 DeepSeek AI 团队：DSH 本身（本项目的基础）
 
-## 生态与收录
+## 相关链接
 
-我们所在的 DSH 生态与收录渠道：
+深鲸自己的东西：
 
 | 项目 | 简介 | 链接 |
 | --- | --- | --- |
-| DeepSeek Harness | DeepSeek 官方智能体框架（本项目的基础）。 | [GitHub](https://github.com/deepseek-ai/deepseek-harness) |
-| DeepSeek Harness 橙皮书 | DSH 社区实测手册。 | [GitHub](https://github.com/alchaincyf/deepseek-harness-orange-book) |
-| Awesome DSH Plugin | DSH 社区插件精选列表（我们已提交收录）。 | [GitHub](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin) |
-| Awesome DeepSeek Harness | DSH 插件、工具与基础设施精选列表。 | [GitHub](https://github.com/0xsline/awesome-deepseek-harness) |
-| 深鲸 DSH 插件市场 | 深鲸出品的 DSH 插件（51 个，免费开源）。 | [官网](https://deepwhale.org.cn/plugins.html) |
-| 深鲸插件 MCP | 用 MCP 让任意 AI 助手发现/检索我们的插件。 | [官网](https://deepwhale.org.cn/mcp.html) |
+| 深鲸桌面 | 跨平台桌面端（本项目）· 下载与更新 | [Releases](https://github.com/feely0208/deepwhale-desktop/releases) |
+| 深鲸 DSH 插件市场 | 51 个深鲸 DSH 插件，免费开源 | [官网](https://deepwhale.org.cn/plugins.html) |
+| 深鲸插件 MCP | 用 MCP 让任意 AI 助手发现/检索我们的插件 | [官网](https://deepwhale.org.cn/mcp.html) |
+| 深鲸官网 | 产品、下载、文档与支持 | [deepwhale.org.cn](https://deepwhale.org.cn) |
 
 ## License
 

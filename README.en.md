@@ -203,20 +203,18 @@ See [SECURITY.md](SECURITY.md) for API key handling.
 
 ## Special Thanks
 
-- [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) and the DeepSeek AI team: DSH itself.
+- [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) and the DeepSeek AI team: DSH itself, the foundation of this project.
 
-## Ecosystem & Listings
+## Links
 
-Where we sit in the DSH ecosystem:
+Our own:
 
 | Project | What it is | Link |
 | --- | --- | --- |
-| DeepSeek Harness | The official DeepSeek agent framework this project builds on. | [GitHub](https://github.com/deepseek-ai/deepseek-harness) |
-| DeepSeek Harness Orange Book | Community field-tested guide for DSH. | [GitHub](https://github.com/alchaincyf/deepseek-harness-orange-book) |
-| Awesome DSH Plugin | Curated DSH plugin list (we have submitted entries). | [GitHub](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin) |
-| Awesome DeepSeek Harness | Curated DSH plugins, tools and infrastructure. | [GitHub](https://github.com/0xsline/awesome-deepseek-harness) |
-| DeepWhale DSH plugins | 51 free, open-source DSH plugins by DeepWhale. | [Site](https://deepwhale.org.cn/plugins.html) |
-| DeepWhale plugin MCP | Let any AI assistant discover and search our plugins. | [Site](https://deepwhale.org.cn/mcp.html) |
+| DeepWhale Desktop | This cross-platform desktop shell: downloads and updates | [Releases](https://github.com/feely0208/deepwhale-desktop/releases) |
+| DeepWhale DSH plugins | 51 free, open-source DSH plugins by DeepWhale | [Site](https://deepwhale.org.cn/plugins.html) |
+| DeepWhale plugin MCP | Let any AI assistant discover and search our plugins | [Site](https://deepwhale.org.cn/mcp.html) |
+| DeepWhale site | Products, downloads, docs and support | [deepwhale.org.cn](https://deepwhale.org.cn) |
 
 ## License
 

@@ -203,21 +203,20 @@ See [SECURITY.md](SECURITY.md) for API key handling.
 
 ## Special Thanks
 
-- [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) and the DeepSeek AI team — DSH itself
+- [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) and the DeepSeek AI team: DSH itself.
 
-## Related Projects
+## Ecosystem & Listings
 
-The DeepSeek Harness ecosystem:
+Where we sit in the DSH ecosystem:
 
-| Project | Description | Link |
+| Project | What it is | Link |
 | --- | --- | --- |
-| DeepSeek Harness | DeepSeek's official agent framework (the foundation of this project). | [GitHub](https://github.com/deepseek-ai/deepseek-harness) |
-| DeepSeek Harness 橙皮书 | Community field-testing handbook for DSH. | [GitHub](https://github.com/alchaincyf/deepseek-harness-orange-book) |
-| Awesome DSH Plugin | Curated list of DSH community plugins. | [GitHub](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin) |
-| dsh-web-ui | DSH web UI plugins and skins. | [GitHub](https://github.com/zhu1090093659/dsh-web-ui) |
-| dsh-TUI | Full-screen interactive terminal UI for DSH. | [GitHub](https://github.com/ccch1mneyyy/dsh-TUI) |
-| DSH-better-sidebar | DSH sidebar workbench (files/terminal/git/subagents). | [GitHub](https://github.com/omdsh-dev/DSH-better-sidebar) |
+| DeepSeek Harness | The official DeepSeek agent framework this project builds on. | [GitHub](https://github.com/deepseek-ai/deepseek-harness) |
+| DeepSeek Harness Orange Book | Community field-tested guide for DSH. | [GitHub](https://github.com/alchaincyf/deepseek-harness-orange-book) |
+| Awesome DSH Plugin | Curated DSH plugin list (we have submitted entries). | [GitHub](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin) |
 | Awesome DeepSeek Harness | Curated DSH plugins, tools and infrastructure. | [GitHub](https://github.com/0xsline/awesome-deepseek-harness) |
+| DeepWhale DSH plugins | 51 free, open-source DSH plugins by DeepWhale. | [Site](https://deepwhale.org.cn/plugins.html) |
+| DeepWhale plugin MCP | Let any AI assistant discover and search our plugins. | [Site](https://deepwhale.org.cn/mcp.html) |
 
 ## License
 

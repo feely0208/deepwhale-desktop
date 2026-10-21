@@ -13,20 +13,20 @@
     {
       "state": "waving",
       "row": 1,
-      "frames": 5,
+      "frames": 6,
       "speed": 1.8
     },
     {
       "state": "jumping",
       "row": 2,
-      "frames": 6,
-      "speed": 1.6
+      "frames": 3,
+      "speed": 1.4
     },
     {
       "state": "flip",
       "row": 3,
       "frames": 6,
-      "speed": 1.8
+      "speed": 1.5
     },
     {
       "state": "ball",
@@ -38,37 +38,37 @@
       "state": "swimming",
       "row": 5,
       "frames": 6,
-      "speed": 2.0
+      "speed": 1.6
     },
     {
       "state": "diving",
       "row": 6,
-      "frames": 6,
+      "frames": 5,
       "speed": 2.2
     },
     {
       "state": "standing",
       "row": 7,
-      "frames": 4,
-      "speed": 1.8
+      "frames": 1,
+      "speed": 1.0
     },
     {
       "state": "look",
       "row": 8,
-      "frames": 6,
+      "frames": 8,
       "speed": 2.0
     },
     {
       "state": "review",
       "row": 9,
-      "frames": 6,
-      "speed": 2.2
+      "frames": 8,
+      "speed": 2.0
     },
     {
       "state": "sleeping",
       "row": 10,
       "frames": 6,
-      "speed": 1.8
+      "speed": 2.4
     }
   ]
 }

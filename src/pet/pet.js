@@ -142,6 +142,7 @@
       fadeFrom = { row: curRow, idx: frameIdx, t0: performance.now() };
     }
     var stateChanged = (spriteState !== state);
+    if (stateChanged) console.log('[pet] state: ' + spriteState + ' -> ' + state);
     spriteState = state;
     curRow = row;
     speedMul = mul;

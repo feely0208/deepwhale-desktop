@@ -443,7 +443,10 @@
       lastMoveTs = now;
       var v = Math.abs(dx) / dt;                 // px per ms
       var dir = dx >= 0 ? '-right' : '-left';
-      if (v < 0.05) {
+      // 2026-10-21：只有**确实有横移动画**的宠物（如侧视大肥鱼）才按速度切横移，
+      // 否则一律用 jumping（"被提起来"的感觉）——正面站姿的宠物横着走很怪。
+      var canMove = findByState('walking' + dir);
+      if (!canMove || v < 0.05) {
         setSpriteState('jumping');
       } else if (v < 0.22) {
         setSpriteState('walking' + dir, { speed: 1.15 });
@@ -466,7 +469,11 @@
     // 没怎么动 = 当成"点一下"：**默认第一个动作就是冲刺划水**（用户指定），
     // 点它就直接窜半个屏幕，最容易发现。
     if (!moved && Date.now() - downAt < 450) {
-      playDash();
+      // 2026-10-21 改：点一下不再"横窜半个屏幕"（那是大肥鱼/侧视宠物的划水动作，
+      // 鼠这类正面站姿的宠物横移起来像鬼）。改成播放一个展示动作。
+      var show = ['waving', 'look', 'jumping', 'ball', 'flip'].filter(function (a) { return findByState(a); });
+      if (show.length) setSpriteState(show[Math.floor(Math.random() * show.length)]);
+      else playDash();
     } else if (hovered) {
       startHoverCycle();
     }

@@ -459,6 +459,7 @@
     downX = e.screenX;
     downAt = Date.now();
     moved = false;
+    dragMovedFlag = false;
     lastMoveTs = performance.now();
     stopHoverCycle();
     try {
@@ -474,7 +475,7 @@
     if (!dragging) return;
     var dx = e.screenX - lastX;
     lastX = e.screenX;
-    if (Math.abs(e.screenX - downX) > 3) moved = true;
+    if (Math.abs(e.screenX - downX) > 10) { moved = true; dragMovedFlag = true; }   // 10px：避免手指轻微抖动被当成拖动
     if (isSprite) {
       // 按**平滑速度**分级：位置在跟着光标走，逐帧位移不可靠；
       // 用 px/ms（并按帧间隔归一）判断快慢，再用倍率拉开差别。
@@ -508,7 +509,7 @@
     updateFacing();
     // 没怎么动 = 当成"点一下"：**默认第一个动作就是冲刺划水**（用户指定），
     // 点它就直接窜半个屏幕，最容易发现。
-    if (!moved && Date.now() - downAt < 450) {
+    if (!moved && !dragMovedFlag && Date.now() - downAt < 900) {   // 900ms：放宽，避免点慢一点就得点两下
       // 2026-10-21：单击 = 问它一句（打开提问框），同时做个视觉反馈。
       // 有 dash 能力的宠物（大肥鱼）仍保留划水冲刺 —— "乘风破浪"是它的特色。
       if (findByState('dash')) {

@@ -142,7 +142,12 @@ export class PetWindow {
 
   /** 读氛围音 data URI：white=白噪音 / pink=粉红噪音 / brown=棕噪音 */
   ambientDataUri(kind: string): string | null {
-    const map: Record<string, string> = { white: 'white.mp3', pink: 'pink.mp3', brown: 'brown.mp3' };
+    // 2026-10-21 改：白噪音换成轻音乐（用户反馈"氛围音不是噪音，应该是轻音乐"）
+    const map: Record<string, string> = {
+      musicbox: 'musicbox.mp3',   // 音乐盒
+      harp: 'harp.mp3',           // 竖琴慢板
+      peaceful: 'peaceful.mp3',   // 平和
+    };
     const file = map[kind];
     if (!file) return null;
     try {
@@ -640,9 +645,9 @@ export class PetWindow {
         submenu: [
           ambientItem('关闭', 'off'),
           { type: 'separator' },
-          ambientItem('白噪音（提神）', 'white'),
-          ambientItem('粉红噪音（柔和）', 'pink'),
-          ambientItem('棕噪音（低沉）', 'brown'),
+          ambientItem('音乐盒（清脆）', 'musicbox'),
+          ambientItem('竖琴慢板（舒缓）', 'harp'),
+          ambientItem('平和（安静）', 'peaceful'),
         ],
       },
       { type: 'separator' },

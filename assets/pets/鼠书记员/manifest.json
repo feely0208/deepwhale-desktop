@@ -13,7 +13,7 @@
     {
       "state": "waving",
       "row": 1,
-      "frames": 16,
+      "frames": 12,
       "speed": 2.2
     },
     {
@@ -31,7 +31,7 @@
     {
       "state": "ball",
       "row": 4,
-      "frames": 16,
+      "frames": 12,
       "speed": 2.6
     },
     {
@@ -55,13 +55,13 @@
     {
       "state": "look",
       "row": 8,
-      "frames": 16,
+      "frames": 12,
       "speed": 2.4
     },
     {
       "state": "review",
       "row": 9,
-      "frames": 16,
+      "frames": 12,
       "speed": 2.4
     },
     {

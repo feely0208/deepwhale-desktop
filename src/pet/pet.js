@@ -469,11 +469,16 @@
     // 没怎么动 = 当成"点一下"：**默认第一个动作就是冲刺划水**（用户指定），
     // 点它就直接窜半个屏幕，最容易发现。
     if (!moved && Date.now() - downAt < 450) {
-      // 2026-10-21 改：点一下不再"横窜半个屏幕"（那是大肥鱼/侧视宠物的划水动作，
-      // 鼠这类正面站姿的宠物横移起来像鬼）。改成播放一个展示动作。
-      var show = ['waving', 'look', 'jumping', 'ball', 'flip'].filter(function (a) { return findByState(a); });
-      if (show.length) setSpriteState(show[Math.floor(Math.random() * show.length)]);
-      else playDash();
+      // 2026-10-21：**只对没有 dash 能力的宠物**替换点击动作。
+      // 大肥鱼这类有 dash 的宠物保留划水冲刺（"乘风破浪"是它的特色，别动）。
+      if (findByState('dash')) {
+        playDash();
+      } else {
+        var show = ['waving', 'look', 'jumping', 'ball', 'flip'].filter(function (a) {
+          return findByState(a);
+        });
+        if (show.length) setSpriteState(show[Math.floor(Math.random() * show.length)]);
+      }
     } else if (hovered) {
       startHoverCycle();
     }

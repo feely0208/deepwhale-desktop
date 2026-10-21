@@ -13,8 +13,8 @@
     {
       "state": "waving",
       "row": 1,
-      "frames": 6,
-      "speed": 1.8
+      "frames": 16,
+      "speed": 2.2
     },
     {
       "state": "jumping",
@@ -31,8 +31,8 @@
     {
       "state": "ball",
       "row": 4,
-      "frames": 6,
-      "speed": 2.0
+      "frames": 16,
+      "speed": 2.6
     },
     {
       "state": "swimming",
@@ -55,14 +55,14 @@
     {
       "state": "look",
       "row": 8,
-      "frames": 8,
-      "speed": 2.0
+      "frames": 16,
+      "speed": 2.4
     },
     {
       "state": "review",
       "row": 9,
-      "frames": 8,
-      "speed": 2.0
+      "frames": 16,
+      "speed": 2.4
     },
     {
       "state": "sleeping",

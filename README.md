@@ -257,3 +257,7 @@ DeepSeek Harness 生态与周边项目：
 
 > 本项目是基于 DeepSeek Harness 构建的社区桌面版本，并非 DeepSeek 官方产品，也不代表 DeepSeek 官方立场。
 > 本项目完全开源免费。如果有人向您以任何形式出售此软件，请拒绝交易。
+
+---
+
+<p align="right"><a href="https://deepwhale.org.cn"><img src="https://www.deepwhale.org.cn/images/badge/deepwhale-badge.png" alt="powered by dwh" height="20"></a></p>

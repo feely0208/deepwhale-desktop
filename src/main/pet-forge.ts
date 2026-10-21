@@ -27,6 +27,12 @@ export interface ForgeOptions {
   apiKey?: string;
   model?: string;
   baseUrl?: string;
+  /** 动作生成方式：procedural=程序化变换（快）；video=AI 视频真动作（用用户自己的视频模型） */
+  motion?: 'procedural' | 'video';
+  /** 视频模型名（motion=video 时用） */
+  videoModel?: string;
+  /** 视频时长秒数 4~12 */
+  videoSeconds?: string;
 }
 
 export interface ForgeResult {
@@ -79,6 +85,9 @@ export function forgePet(opts: ForgeOptions, petsDir: string): Promise<ForgeResu
     if (!desc) return resolve({ ok: false, error: '请先描述你想要的宠物' });
     if (desc.length > 200) return resolve({ ok: false, error: '描述太长（最多 200 字）' });
 
+    // 视频模式耗时可能十几分钟（用户自己的模型排队），超时放宽；程序化 3 分钟足够
+    let timeoutMs = opts.motion === 'video' ? 40 * 60 * 1000 : 180_000;
+
     const style = (opts.style ?? 'generic') as ForgeStyle;
     const name = (opts.name && opts.name.trim()) || desc.slice(0, 8);
 
@@ -93,6 +102,11 @@ export function forgePet(opts: ForgeOptions, petsDir: string): Promise<ForgeResu
     if (opts.apiKey) args.push('--api-key', opts.apiKey);
     if (opts.model) args.push('--model', opts.model);
     if (opts.baseUrl) args.push('--base-url', opts.baseUrl);
+    if (opts.motion === 'video') {
+      args.push('--motion', 'video');
+      if (opts.videoModel) args.push('--video-model', opts.videoModel);
+      if (opts.videoSeconds) args.push('--video-seconds', String(opts.videoSeconds));
+    }
 
     const env = {
       ...process.env,
@@ -113,8 +127,8 @@ export function forgePet(opts: ForgeOptions, petsDir: string): Promise<ForgeResu
 
     const timer = setTimeout(() => {
       try { child.kill('SIGKILL'); } catch { /* ignore */ }
-      resolve({ ok: false, error: '生成超时（超过 3 分钟），请稍后重试', log: out.slice(-800) });
-    }, 180_000);
+      resolve({ ok: false, error: `生成超时（超过 ${Math.round(timeoutMs/60000)} 分钟），请稍后重试`, log: out.slice(-800) });
+    }, timeoutMs);
 
     child.stdout?.on('data', (b: Buffer) => { out += b.toString('utf8'); });
     child.stderr?.on('data', (b: Buffer) => { out += b.toString('utf8'); });

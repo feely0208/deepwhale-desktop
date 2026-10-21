@@ -93,6 +93,7 @@
   var forgeDesc = document.getElementById('studio-forge-desc');
   var forgeStyle = document.getElementById('studio-forge-style');
   var forgeProv = document.getElementById('studio-forge-provider');
+  var forgeMotion = document.getElementById('studio-forge-motion');
   var forgeKey = document.getElementById('studio-forge-key');
   var forgeRun = document.getElementById('studio-forge-run');
   var forgeDocBtn = document.getElementById('studio-forge-doc');
@@ -138,12 +139,16 @@
       saveCfg();
       forgeRun.disabled = true;
       forgeRun.textContent = '生成中…';
-      forgeSay('正在生成，约需 30~60 秒，请稍候…');
+      var useVideo = forgeMotion && forgeMotion.value === 'video';
+      forgeSay(useVideo
+        ? '正在生成：先出图再交给你的视频模型生成真动作，可能要十几分钟（取决于你的模型队列）'
+        : '正在生成，约需 30~60 秒，请稍候…');
       window.dsh.petForge({
         description: desc,
         style: forgeStyle.value,
         provider: forgeProv.value,
-        apiKey: key
+        apiKey: key,
+        motion: useVideo ? 'video' : 'procedural'
       }).then(function (r) {
         forgeRun.disabled = false;
         forgeRun.textContent = '生成';

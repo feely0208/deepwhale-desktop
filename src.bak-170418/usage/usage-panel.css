@@ -1,0 +1,228 @@
+/* 注入式用量面板样式（浅色，与 DSH 白色界面划一） */
+#dsh-usage-panel {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2147483646;
+  width: 248px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #24292f;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid #d0d7de;
+  border-radius: 10px;
+  box-shadow: 0 6px 24px rgba(31, 35, 40, 0.14);
+  overflow: hidden;
+}
+
+#dsh-usage-panel .uph {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+#dsh-usage-panel .uph .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #9aa0a6;
+  flex: none;
+}
+
+#dsh-usage-panel .uph .dot.ok {
+  background: #1a7f37;
+}
+
+#dsh-usage-panel .uph .dot.low {
+  background: #9a6700;
+}
+
+#dsh-usage-panel .uph .dot.err {
+  background: #d1242f;
+}
+
+#dsh-usage-panel .uph .title {
+  flex: 1;
+  font-weight: 600;
+}
+
+#dsh-usage-panel .uph .arrow {
+  color: #1a7f37;
+  font-weight: 700;
+  font-size: 14px;
+  transition: transform 0.2s;
+}
+
+#dsh-usage-panel .uph:hover .arrow {
+  color: #0f6b2c;
+}
+
+#dsh-usage-panel.collapsed .uph .arrow {
+  transform: rotate(-90deg);
+}
+
+/* 2026-10-18：注入 DSH 页面，跟应用主题，不跟系统主题 */
+
+  body[data-ds-dark-theme] #dsh-usage-panel .uph .arrow {
+    color: #3fb950;
+  }
+  body[data-ds-dark-theme] #dsh-usage-panel .uph:hover .arrow {
+    color: #6bd47a;
+  }
+
+
+#dsh-usage-panel .upb {
+  padding: 2px 12px 10px;
+  display: grid;
+  gap: 4px;
+}
+
+#dsh-usage-panel.collapsed .upb {
+  display: none;
+}
+
+/* 收起后：小药丸，不挡内容；按住仍可拖动 */
+#dsh-usage-panel.collapsed {
+  width: auto;
+  min-width: 86px;
+  max-width: 160px;
+}
+#dsh-usage-panel.collapsed .uph {
+  padding: 5px 10px;
+  cursor: grab;
+}
+#dsh-usage-panel.collapsed .uph:active {
+  cursor: grabbing;
+}
+#dsh-usage-panel.collapsed .title {
+  font-size: 12px;
+}
+#dsh-usage-panel.collapsed .dot {
+  width: 7px;
+  height: 7px;
+}
+#dsh-usage-panel .uph {
+  cursor: grab;
+  user-select: none;
+}
+#dsh-usage-panel .uph:active {
+  cursor: grabbing;
+}
+
+#dsh-usage-panel .row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+#dsh-usage-panel .row .k {
+  color: #57606a;
+}
+
+#dsh-usage-panel .row .v {
+  color: #24292f;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+#dsh-usage-panel .err-line {
+  color: #d1242f;
+  word-break: break-all;
+}
+
+#dsh-usage-panel .refresh-btn {
+  margin-top: 4px;
+  padding: 4px;
+  text-align: center;
+  border-radius: 6px;
+  color: #4d7cfe;
+  cursor: pointer;
+}
+
+#dsh-usage-panel .refresh-btn:hover {
+  background: rgba(77, 124, 254, 0.12);
+}
+
+/* 深色主题跟随（nativeTheme 主题切换时自动生效） */
+/* 2026-10-18：注入 DSH 页面，跟应用主题，不跟系统主题 */
+
+  body[data-ds-dark-theme] #dsh-usage-panel {
+    background: rgba(16, 18, 22, 0.94);
+    color: #e6e8ec;
+    border-color: #2a2f3a;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+  }
+  body[data-ds-dark-theme] #dsh-usage-panel .uph .dot { background: #6b7280; }
+  body[data-ds-dark-theme] #dsh-usage-panel .uph .dot.ok { background: #3fb950; }
+  body[data-ds-dark-theme] #dsh-usage-panel .uph .dot.low { background: #d29922; }
+  body[data-ds-dark-theme] #dsh-usage-panel .uph .dot.err { background: #f85149; }
+  body[data-ds-dark-theme] #dsh-usage-panel .row .k { color: #9aa1ad; }
+  body[data-ds-dark-theme] #dsh-usage-panel .row .v { color: #e6e8ec; }
+  body[data-ds-dark-theme] #dsh-usage-panel .err-line { color: #f85149; }
+  body[data-ds-dark-theme] #dsh-usage-panel .refresh-btn { color: #7aa2ff; }
+  body[data-ds-dark-theme] #dsh-usage-panel .refresh-btn:hover { background: rgba(122, 162, 255, 0.15); }
+
+
+/* 用量绿色进度条 */
+#dsh-usage-panel .bars {
+  margin: 8px 12px 2px;
+}
+
+#dsh-usage-panel .bar-caption {
+  font-size: 11px;
+  color: #57606a;
+  margin: 6px 0 3px;
+}
+
+#dsh-usage-panel .bar {
+  height: 6px;
+  border-radius: 4px;
+  background: #eef0f4;
+  overflow: hidden;
+  display: flex;
+}
+
+#dsh-usage-panel .bar-fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: #1a7f37;
+  transition: width 0.4s ease;
+}
+
+#dsh-usage-panel .bar-fill.warn {
+  background: #9a6700;
+}
+
+#dsh-usage-panel .bar-fill.err {
+  background: #d1242f;
+}
+
+#dsh-usage-panel .bar.seg i {
+  display: block;
+  height: 100%;
+}
+
+#dsh-usage-panel .bar.seg .seg-granted {
+  background: #7acb8a;
+}
+
+#dsh-usage-panel .bar.seg .seg-topped {
+  background: #1a7f37;
+}
+
+/* 2026-10-18：注入 DSH 页面，跟应用主题，不跟系统主题 */
+
+  body[data-ds-dark-theme] #dsh-usage-panel .bar-caption { color: #9aa1ad; }
+  body[data-ds-dark-theme] #dsh-usage-panel .bar { background: #23262e; }
+  body[data-ds-dark-theme] #dsh-usage-panel .bar-fill { background: #3fb950; }
+  body[data-ds-dark-theme] #dsh-usage-panel .bar-fill.warn { background: #d29922; }
+  body[data-ds-dark-theme] #dsh-usage-panel .bar-fill.err { background: #f85149; }
+  body[data-ds-dark-theme] #dsh-usage-panel .bar.seg .seg-granted { background: #6ec27c; }
+  body[data-ds-dark-theme] #dsh-usage-panel .bar.seg .seg-topped { background: #3fb950; }
+
+

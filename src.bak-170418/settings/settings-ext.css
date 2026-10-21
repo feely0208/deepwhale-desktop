@@ -1,0 +1,358 @@
+/* 设置页扩展样式：全部跟随 DSH 的 --dsw-alias-* 主题变量，与界面划一 */
+.dsh-ext-panel {
+  padding: 8px 10px 28px;
+  max-width: 560px;
+}
+
+.dsh-ext-panel h3 {
+  margin: 0 0 14px;
+  font-size: 15px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.dsh-ext-section {
+  display: none;
+}
+/* 面板内容一多（预览 + AI 造宠物 + 长列表 + 开关组）会超出可视区，
+   开了的那个 section 自己滚，保证底部「显示宠物/点击穿透/帧率/缩放」永远够得着。
+   2026-10-20 修：之前只给列表加 max-height，导致底部控件被裁掉且不可达。 */
+.dsh-ext-section:not([style*="display: none"]) {
+  max-height: calc(100vh - 190px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+}
+
+.dsh-ext-section[style*="display: none"] {
+  display: none;
+}
+
+.dsh-ext-row {
+  margin: 10px 0 8px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+}
+
+.dsh-ext-preview {
+  margin: 6px 0 12px;
+  width: 96px;
+  height: 96px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px dashed var(--dsw-alias-border-l1);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.dsh-ext-preview-bg {
+  width: 220px;
+  height: 130px;
+}
+
+.dsh-ext-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.dsh-ext-preview-bg img {
+  object-fit: cover;
+}
+
+.dsh-ext-preview .ph {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+.dsh-ext-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0 14px;
+  /* 宠物多时列表必须自己滚，否则会把下面的开关/帧率控件挤出面板（2026-10-20 实测 54 个宠物撑爆） */
+  max-height: 168px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+}
+
+.dsh-ext-item {
+  display: flex;
+  align-items: center;
+  padding: 7px 12px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.dsh-ext-item:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.dsh-ext-item.active {
+  border-color: var(--dsw-alias-brand-primary);
+}
+
+.dsh-ext-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.dsh-ext-btn {
+  margin-top: 10px;
+  padding: 7px 16px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.dsh-ext-btn:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.dsh-ext-btns {
+  display: flex;
+  gap: 8px;
+}
+
+.dsh-ext-btns .dsh-ext-btn {
+  margin-top: 0;
+}
+
+.dsh-ext-range {
+  width: 100%;
+  max-width: 420px;
+  accent-color: var(--dsw-alias-brand-primary);
+  margin: 4px 0 8px;
+}
+
+.dsh-ext-grid {
+  display: grid;
+  gap: 8px;
+  max-width: 420px;
+}
+
+.dsh-ext-grid .row {
+  display: flex;
+  justify-content: space-between;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+}
+
+.dsh-ext-grid .row .k {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.dsh-ext-err {
+  margin-top: 8px;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 12px;
+  word-break: break-all;
+}
+
+/* 用量绿色进度条 */
+.dsh-ext-bars {
+  margin: 12px 0 4px;
+  max-width: 420px;
+}
+
+.dsh-ext-bar-caption {
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary);
+  margin: 8px 0 4px;
+}
+
+.dsh-ext-bar {
+  height: 8px;
+  border-radius: 5px;
+  background: var(--dsw-alias-bg-layer-2);
+  overflow: hidden;
+  display: flex;
+}
+
+.dsh-ext-bar-fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--dsw-alias-state-success-primary);
+  transition: width 0.4s ease;
+}
+
+.dsh-ext-bar-fill.warn {
+  background: var(--dsw-alias-state-warn-primary);
+}
+
+.dsh-ext-bar-fill.err {
+  background: var(--dsw-alias-state-error-primary);
+}
+
+.dsh-ext-bar-seg i {
+  display: block;
+  height: 100%;
+}
+
+.dsh-ext-bar-seg .seg-granted {
+  background: #7acb8a;
+}
+
+.dsh-ext-bar-seg .seg-topped {
+  background: var(--dsw-alias-state-success-primary);
+}
+
+/* 导航选中态：仅当前选中项显示高亮 */
+.dsh-ext-nav-on {
+  background: var(--dsw-alias-interactive-bg-hover) !important;
+}
+
+.dsh-ext-key-input {
+  width: 100%;
+  max-width: 420px;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+/* ---------- 版本行右侧：检查更新 / 彻底退出后台 / 下载进度（2026-10-03） ----------
+ * 起因：Windows 用户托盘图标不可见 → 「检查更新」「退出」当时只在托盘菜单里
+ * → 关窗最小化后无路可走（退不出后台、新安装包也装不上）。
+ * 把这两个动作放到设置页版本号那一行右侧，任何情况下都够得着。
+ * ⚠️ 别动 #dsh-ext-shell-version 本身：src/main/index.ts 的冒烟断言要读它。 */
+[data-slot="settings.general.item"] > div:has(> #dsh-ext-shell-version) {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+#dsh-ext-shell-actions { margin-left: auto; padding-left: 16px; }
+#dsh-ext-shell-actions button {
+  font: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid var(--dsw-alias-border-l4, rgba(0, 0, 0, 0.14));
+  background: transparent;
+  color: var(--dsw-alias-label-primary, inherit);
+  white-space: nowrap;
+}
+#dsh-ext-shell-actions button:hover {
+  background: var(--dsw-alias-interactive-bg-hover, rgba(0, 0, 0, 0.05));
+}
+
+/* ── AI 造宠物（2026-10-20）──────────────────────────────────────── */
+.dsh-forge {
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 12px;
+  margin: 4px 0 12px;
+  background: var(--dsw-alias-bg-l1, rgba(0, 0, 0, 0.02));
+}
+.dsh-forge-toggle {
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 40px;
+  padding: 0 14px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.dsh-forge-caret { font-size: 12px; font-weight: 400; opacity: 0.6; }
+.dsh-forge.collapsed .dsh-forge-body { display: none; }
+.dsh-forge-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 16px 14px;
+}
+.dsh-forge-title { font-weight: 600; font-size: 14px; }
+.dsh-forge-hint { font-size: 12px; opacity: 0.66; line-height: 1.6; }
+.dsh-forge-input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 8px;
+  font-size: 13px;
+  background: transparent;
+  color: inherit;
+}
+.dsh-forge-row { display: flex; flex-wrap: wrap; gap: 12px; }
+.dsh-forge-field { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.dsh-forge-field select {
+  min-height: 32px;
+  padding: 4px 8px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font-size: 13px;
+}
+.dsh-forge-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.dsh-forge-btn {
+  min-height: 34px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 8px;
+  background: var(--dsw-alias-accent, #4b7bec);
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
+.dsh-forge-btn:disabled { opacity: 0.6; cursor: default; }
+.dsh-forge-msg { font-size: 12px; line-height: 1.5; word-break: break-all; }
+.dsh-forge-msg.ok { color: #12a150; }
+.dsh-forge-msg.err { color: #d64545; }
+.dsh-forge-msg.warn { color: #c47f17; }
+.dsh-forge-msg.busy { opacity: 0.7; }
+.dsh-forge-btn-ghost {
+  background: transparent;
+  color: inherit;
+  border: 1px solid var(--dsw-alias-border-l1);
+}
+
+/* 宠物下拉菜单（2026-10-21：原来是一长条 div 列表，占空间还被挤出可视区） */
+.dsh-ext-select {
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 32px 6px 10px;
+  margin: 4px 0 10px;
+  border: 1px solid var(--line, #2a3550);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' stroke='%23888' stroke-width='1.6' fill='none' stroke-linecap='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+.dsh-ext-select:focus { outline: 2px solid #4b7bec; outline-offset: 1px; }

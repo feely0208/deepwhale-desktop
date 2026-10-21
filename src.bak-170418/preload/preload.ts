@@ -1,0 +1,123 @@
+import { contextBridge, ipcRenderer } from 'electron';
+
+/**
+ * 最小 IPC 桥：宠物页、注入的用量面板、API Key 设置窗、设置页扩展共用。
+ * contextIsolation 开启时，页面只能访问这里显式暴露的 API，不暴露 ipcRenderer 本体。
+ */
+contextBridge.exposeInMainWorld('dsh', {
+  // ---- 桌面宠物（宠物页拖拽/右键） ----
+  petDragStart: () => ipcRenderer.send('pet:drag-start'),
+  petDragMove: () => ipcRenderer.send('pet:drag-move'),
+  petDragEnd: () => ipcRenderer.send('pet:drag-end'),
+  petContextMenu: () => ipcRenderer.send('pet:context-menu'),
+  petSpriteInfo: (name: string) => ipcRenderer.invoke('pet:sprite-info', name),
+  petSoundInfo: (state: string) => ipcRenderer.invoke('pet:sound-info', state),
+  petSoundGet: () => ipcRenderer.invoke('pet:sound:get'),
+  petSoundSet: (enabled: boolean) => ipcRenderer.send('pet:sound:set', enabled),
+  petAsk: (text: string) => ipcRenderer.invoke('pet:ask', text),
+  petAskOpen: () => ipcRenderer.send('pet:ask-open'),
+  petAskClose: () => ipcRenderer.send('pet:ask-close'),
+  petAmbientInfo: (kind: string) => ipcRenderer.invoke('pet:ambient-info', kind),
+  petAmbientGet: () => ipcRenderer.invoke('pet:ambient:get'),
+  petAmbientSet: (kind: string) => ipcRenderer.send('pet:ambient:set', kind),
+  onPetAmbientChanged: (cb: (kind: string) => void) => { ipcRenderer.on('pet:ambient-changed', (_e, k) => cb(k)); },
+  onPetSoundChanged: (cb: () => void) => { ipcRenderer.on('pet:sound-changed', () => cb()); },
+  /** 冲刺划水：让宠物窗口按方向滑出去半个屏幕（主进程做缓动 + 边界限制） */
+  petDash: (direction: number) => ipcRenderer.send('pet:dash', direction),
+  petHover: (hovering: boolean) => ipcRenderer.send('pet:hover', hovering),
+  // 「本机内文件」：列目录 / 用系统默认程序打开 / 在访达中显示（宿主半边见 src/main/localfiles.ts）
+  /** 某版本的更新说明（设置页「本版更新」卡片用） */
+  whatsNew: (version: string) => ipcRenderer.invoke('shell:whatsnew', version),
+  localFilesRoots: () => ipcRenderer.invoke('localfiles:roots'),
+  localFilesList: (dir: string) => ipcRenderer.invoke('localfiles:list', dir),
+  localFilesOpen: (target: string) => ipcRenderer.invoke('localfiles:open', target),
+  localFilesReveal: (target: string) => ipcRenderer.invoke('localfiles:reveal', target),
+  /** 面板内预览：主进程读文件 → 图片/PDF 走 data URI、文本直出、Office 转 PDF（见 localfiles.ts） */
+  localFilesPreview: (target: string) => ipcRenderer.invoke('localfiles:preview', target),
+
+  // ---- 用量面板 ----
+  usageRefresh: () => ipcRenderer.send('usage:refresh'),
+  onUsageUpdate: (callback: (data: unknown) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, data: unknown) => callback(data);
+    ipcRenderer.on('usage:update', listener);
+    // 返回取消订阅函数
+    return () => ipcRenderer.removeListener('usage:update', listener);
+  },
+
+  // ---- API Key 设置窗 ----
+  setApiKey: (key: string) => ipcRenderer.send('usage:set-key', key),
+  closeWindow: () => ipcRenderer.send('apikey:close'),
+
+  // ---- 首次启动引导窗 ----
+  // 引导只在全新安装的第一次出现（判断在主进程），完成后写入标记永不再显示
+  welcomeFinish: () => ipcRenderer.send('welcome:finish'),
+  welcomeOpenApiKey: () => ipcRenderer.send('welcome:open-api-key'),
+
+  // ---- 通用设置读写（设置页扩展用） ----
+  getSetting: (key: string) => ipcRenderer.invoke('settings:get', key),
+  setSetting: (key: string, value: unknown) => ipcRenderer.send('settings:set', { key, value }),
+
+  // ---- 主题 / 背景皮肤（设置页扩展） ----
+  themeState: () => ipcRenderer.invoke('theme:state'),
+  skinPickImage: () => ipcRenderer.send('skin:pick-image'),
+  skinClearImage: () => ipcRenderer.send('skin:clear-image'),
+  skinSetOpacity: (value: number) => ipcRenderer.send('skin:set-opacity', value),
+  skinSetPreset: (preset: string) => ipcRenderer.send('skin:set-preset', preset),
+  skinOpenCss: () => ipcRenderer.send('skin:open-css'),
+  skinToggleCustomCss: (enabled: boolean) => ipcRenderer.send('skin:toggle-custom-css', enabled),
+
+  // ---- 宠物（设置页扩展） ----
+  petList: () => ipcRenderer.invoke('pet:list'),
+  petState: () => ipcRenderer.invoke('pet:state'),
+  petSelect: (name: string | null) => ipcRenderer.send('pet:select-pet', name),
+  petSetVisible: (visible: boolean) => ipcRenderer.send('pet:set-visible', visible),
+  petSetClickThrough: (enabled: boolean) => ipcRenderer.send('pet:set-click-through', enabled),
+  petSetConfig: (frameMs: number, scale: number) => ipcRenderer.send('pet:set-config', { frameMs, scale }),
+  // 宠物一键生成（用户自备图像模型 Key）
+  petForge: (opts: { description: string; name?: string; style?: string; provider?: string; apiKey?: string }) =>
+    ipcRenderer.invoke('pet:forge', opts),
+  petForgeOpenDoc: () => ipcRenderer.invoke('pet:open-forge-doc'),
+  petForgeConfig: () => ipcRenderer.invoke('pet:forge-config:get'),
+  petForgeSetConfig: (cfg: { provider?: string; apiKey?: string }) =>
+    ipcRenderer.invoke('pet:forge-config:set', cfg),
+  petOpenFolder: () => ipcRenderer.send('pet:open-folder'),
+
+  // ---- 宠物工坊 ----
+  petStudioOpen: () => ipcRenderer.send('petstudio:open'),
+  petStudioSave: (name: string, svg: string) => ipcRenderer.send('petstudio:save', { name, svg }),
+  petStudioImport: () => ipcRenderer.invoke('petstudio:import-image'),
+
+  // ---- 会话右键菜单的「在访达中打开 / 打开所在文件夹 / 复制文件路径 / 复制会话 ID」----
+  // 由随包客户端插件 @deepwhale-cn/dsh-shell-session-actions 调用；主进程按会话 ID
+  // 自己找回话文件（不信任前端传路径），返回 { ok, message? }。
+  sessionAction: (payload: { kind: string; sessionId: string; title?: string }) =>
+    ipcRenderer.invoke('session:action', payload),
+
+  // ---- 右栏「网页预览」的兜底（随包插件 @deepwhale-cn/dsh-shell-web-preview）----
+  // 站点禁止内嵌时（X-Frame-Options / CSP frame-ancestors），iframe 会静默失败成
+  // 一片空白。客户端读不到跨域响应头，所以由主进程探测并把结论回传。
+  probeFrameable: (url: string) => ipcRenderer.invoke('webframe:probe', url),
+  /** 用系统默认浏览器打开链接（兜底提示里的「用浏览器打开」） */
+  openExternal: (url: string) => ipcRenderer.invoke('shell:open-external', url),
+
+  // ---- 文档预览的「打印」（PDF / 图片走主进程打印**文件本身**）----
+  // 由随包客户端插件 @deepwhale-cn/dsh-shell-document-print 调用。
+  // 渲染层只转交预览面板给出的路径，主进程自己校验它确实是本机一个可打印文件
+  // （并纠正 /mac/... 这类省掉 /Users 前缀的显示形态），不做任何回读。
+  printDocument: (payload: { path: string }) => ipcRenderer.invoke('document:print', payload),
+
+  // ---- 设置页「检查更新 / 彻底退出后台 / 更新进度」（2026-10-03）----
+  // 起因：Windows 用户托盘图标不可见时，「检查更新」「退出」只放在托盘菜单里 → 无路可走。
+  checkUpdate: () => ipcRenderer.invoke('shell:check-update'),
+  quitApp: () => ipcRenderer.invoke('shell:quit'),
+  // ---- 设置页「本版更新内容」（2026-10-15）----
+  // 起因：Windows/Linux 的应用菜单被 autoHideMenuBar 藏着，托盘右键是唯一入口，
+  // 用户实测「win 版找不到本版更新内容」。按用户方案：设置页「检查更新」旁加一个按钮，
+  // **只在非 macOS 注入**（mac 顶部菜单栏一眼就有，不需要）。
+  showWhatsNew: () => ipcRenderer.invoke('shell:show-whatsnew'),
+  onUpdateState: (cb: (state: unknown) => void) => {
+    const listener = (_e: unknown, state: unknown): void => cb(state);
+    ipcRenderer.on('shell:update-state', listener);
+    return () => ipcRenderer.removeListener('shell:update-state', listener);
+  },
+});

@@ -1,0 +1,953 @@
+/* DSH 设置页扩展：在左侧导航（通用设置/模型/插件/Agent 预设）下方顺延注入
+ * "宠物 / 用量 / 皮肤"三个设置栏。
+ * - 注入到页面主世界；通过 window.dsh（preload 桥）与主进程通信；
+ * - 用 MutationObserver 监听设置页挂载，挂载一次注入一次；
+ * - 全部样式跟随 DSH 的 --dsw-alias-* 主题变量，与界面划一。 */
+(function () {
+  if (window.__dshSettingsExtInstalled) return;
+  if (!window.dsh || !window.dsh.themeState || !window.dsh.petState) return;
+  window.__dshSettingsExtInstalled = true;
+
+  var PANEL_ID = 'dsh-ext-panel';
+  var NAV_PREFIX = 'dsh-ext-nav-';
+  var SEC_PREFIX = 'dsh-ext-sec-';
+
+  /* ---------- DOM 定位（按类名前缀，容忍哈希变化） ---------- */
+  function hasClassPrefix(el, prefix) {
+    return typeof el.className === 'string' && el.className.split(/\s+/).some(function (c) { return c.indexOf(prefix) === 0; });
+  }
+
+  function findNavList() {
+    var all = document.querySelectorAll('nav, div');
+    for (var i = 0; i < all.length; i++) {
+      var el = all[i];
+      if (hasClassPrefix(el, 'navList') || (typeof el.className === 'string' && el.className.indexOf('navList') !== -1)) {
+        if (el.querySelectorAll('[class*="navLabel"]').length >= 3) return el;
+      }
+    }
+    return null;
+  }
+
+  function findPanel(navList) {
+    var el = navList;
+    while (el && !(typeof el.className === 'string' && el.className.indexOf('panel') !== -1)) {
+      el = el.parentElement;
+    }
+    return el;
+  }
+
+  function findContent(panel) {
+    var divs = panel.querySelectorAll('div');
+    for (var i = 0; i < divs.length; i++) {
+      if (typeof divs[i].className === 'string' && divs[i].className.indexOf('content') !== -1) return divs[i];
+    }
+    return null;
+  }
+
+  /* ---------- 面板构建 ---------- */
+  function buildPanelHtml() {
+    return (
+      '<div id="' + PANEL_ID + '" class="dsh-ext-panel" style="display:none">' +
+      '  <section class="dsh-ext-section" id="' + SEC_PREFIX + 'pet">' +
+      '    <h3>宠物</h3>' +
+      '    <div class="dsh-ext-row">当前宠物：<b id="dsh-ext-pet-current">—</b></div>' +
+      '    <div class="dsh-ext-row">动画帧率：<b id="dsh-ext-pet-fps-val">130ms/帧</b></div>' +
+      '    <input type="range" class="dsh-ext-range" id="dsh-ext-pet-frame" min="40" max="300" step="5" />' +
+      '    <div class="dsh-ext-row">宠物大小：<b id="dsh-ext-pet-scale-val">100%</b></div>' +
+      '    <input type="range" class="dsh-ext-range" id="dsh-ext-pet-scale" min="0.6" max="2" step="0.1" />' +
+      '    <div class="dsh-ext-preview" id="dsh-ext-pet-preview"><span class="ph">—</span></div>' +
+      '    <select class="dsh-ext-select" id="dsh-ext-pet-list"></select>' +
+      '    <label class="dsh-ext-check"><input type="checkbox" id="dsh-ext-pet-visible" /> 显示宠物</label>' +
+      '    <label class="dsh-ext-check"><input type="checkbox" id="dsh-ext-pet-clickthrough" /> 穿透点击（可点到宠物后面的内容）</label>' +
+      '    <label class="dsh-ext-check"><input type="checkbox" id="dsh-ext-pet-sound" /> 播放宠物音效（翻书/写字等，默认关闭）</label>' +
+      '    <div class="dsh-ext-btns">' +
+      '      <button class="dsh-ext-btn" id="dsh-ext-pet-open">打开宠物目录…</button>' +
+      '      <button class="dsh-ext-btn" id="dsh-ext-pet-studio">宠物工坊…</button>' +
+      '    </div>' +
+      '    <div class="dsh-forge collapsed" id="dsh-forge">' +
+      '      <button class="dsh-forge-toggle" id="dsh-forge-toggle" type="button">' +
+      '        <span>AI 造宠物</span><span class="dsh-forge-caret" id="dsh-forge-caret">展开</span>' +
+      '      </button>' +
+      '      <div class="dsh-forge-body">' +
+      '      <div class="dsh-forge-hint">用你已有的图像生成模型，一句话生成专属宠物。需自备 API Key（本软件不提供算力）。</div>' +
+      '      <input class="dsh-forge-input" id="dsh-forge-desc" maxlength="200" placeholder="例：一只穿法袍戴眼镜的熊猫，抱着一摞卷宗" />' +
+      '      <div class="dsh-forge-row">' +
+      '        <label class="dsh-forge-field"><span>动作风格</span><select id="dsh-forge-style">' +
+      '          <option value="generic">通用</option><option value="lawyer">律师</option>' +
+      '          <option value="judge">法官</option><option value="prosecutor">检察官</option>' +
+      '          <option value="bailiff">法警</option><option value="forensic">法医</option>' +
+      '          <option value="clerk">书记员</option><option value="chef">厨师</option>' +
+      '        </select></label>' +
+      '        <label class="dsh-forge-field"><span>生图接口</span><select id="dsh-forge-provider">' +
+      '          <option value="agnes">Agnes</option><option value="dashscope">通义万相</option>' +
+      '          <option value="doubao">豆包</option><option value="zhipu">智谱</option>' +
+      '          <option value="siliconflow">硅基流动</option><option value="openai">OpenAI</option>' +
+      '        </select></label>' +
+      '      </div>' +
+      '      <input class="dsh-forge-input" id="dsh-forge-key" type="password" placeholder="API Key（只保存在本机）" />' +
+      '      <div class="dsh-forge-actions">' +
+      '        <button class="dsh-forge-btn" id="dsh-forge-run">生成宠物</button>' +
+      '        <button class="dsh-forge-btn dsh-forge-btn-ghost" id="dsh-forge-doc">宠物怎么捏</button>' +
+      '        <span class="dsh-forge-msg" id="dsh-forge-msg"></span>' +
+      '      </div>' +
+      '      </div>' +
+      '    </div>' +
+      '  </section>' +
+      '  <section class="dsh-ext-section" id="' + SEC_PREFIX + 'usage">' +
+      '    <h3>用量与额度</h3>' +
+      '    <div class="dsh-ext-grid">' +
+      '      <div class="row"><span class="k">状态</span><span id="dsh-ext-u-status">…</span></div>' +
+      '      <div class="row"><span class="k">API Key</span><span id="dsh-ext-u-key">—</span></div>' +
+      '      <div class="dsh-ext-row">余额与充值请到设置里的「账号与余额」看（官方页面，数字同源）。这里只留官方没有的：今日请求、累计 tokens、可视化。</div>' +
+      '      <div class="row"><span class="k">今日请求</span><span id="dsh-ext-u-req">0</span></div>' +
+      '      <div class="row"><span class="k">累计 tokens（估）</span><span id="dsh-ext-u-tok">0</span></div>' +
+      '    </div>' +
+      '    <div class="dsh-ext-bars">' +
+      '      <div class="dsh-ext-bar-caption">余额充足度</div>' +
+      '      <div class="dsh-ext-bar"><i class="dsh-ext-bar-fill" id="dsh-ext-u-bar"></i></div>' +
+      '      <div class="dsh-ext-bar-caption">额度构成（赠送 / 充值）</div>' +
+      '      <div class="dsh-ext-bar dsh-ext-bar-seg" id="dsh-ext-u-seg"></div>' +
+      '    </div>' +
+      '    <div class="dsh-ext-err" id="dsh-ext-u-err" hidden></div>' +
+      '    <button class="dsh-ext-btn" id="dsh-ext-u-refresh">立即刷新</button>' +
+      '    <label class="dsh-ext-check"><input type="checkbox" id="dsh-ext-u-keepdsh" /> 退出时保留 DSH 服务（下次启动秒开）</label>' +
+      '    <details class="dsh-ext-adv"><summary>高级：手动配置 API Key（一般不需要，登录后自动读取）</summary>' +
+      '      <input type="password" class="dsh-ext-key-input" id="dsh-ext-u-key-input" placeholder="sk-..." spellcheck="false" autocomplete="off" />' +
+      '      <div class="dsh-ext-btns">' +
+      '        <button class="dsh-ext-btn" id="dsh-ext-u-key-save">保存 Key</button>' +
+      '        <button class="dsh-ext-btn" id="dsh-ext-u-key-clear">清除</button>' +
+      '      </div>' +
+      '    </details>' +
+      '  </section>' +
+      '  <section class="dsh-ext-section" id="' + SEC_PREFIX + 'skin">' +
+      '    <h3>皮肤（背景）</h3>' +
+      '    <div class="dsh-ext-row">内置背景（默认，纯 CSS 绘制；照官方 harness 官网那套深蓝辉光做的）</div>' +
+      '    <div class="dsh-ext-btns">' +
+      '      <button class="dsh-ext-btn" id="dsh-ext-skin-preset-blue">深蓝辉光</button>' +
+      '      <button class="dsh-ext-btn" id="dsh-ext-skin-preset-none">纯色</button>' +
+      '    </div>' +
+      '    <div class="dsh-ext-row">自定义背景图片（选了图就盖过内置背景；主题外观请在 DSH 通用设置里调整）</div>' +
+      '    <div class="dsh-ext-preview dsh-ext-preview-bg" id="dsh-ext-skin-preview"><span class="ph">未设置</span></div>' +
+      '    <div class="dsh-ext-btns">' +
+      '      <button class="dsh-ext-btn" id="dsh-ext-skin-pick">选择图片…</button>' +
+      '      <button class="dsh-ext-btn" id="dsh-ext-skin-clear">移除背景</button>' +
+      '    </div>' +
+      '    <div class="dsh-ext-row">背景可见度：<b id="dsh-ext-skin-opacity-val">85%</b></div>' +
+      '    <input type="range" class="dsh-ext-range" id="dsh-ext-skin-opacity" min="0.3" max="1" step="0.05" />' +
+      '  </section>' +
+      '</div>'
+    );
+  }
+
+  /* ---------- 导航注入 ---------- */
+  function inject(navList) {
+    var cells = navList.children;
+    if (!cells.length) return;
+    var template = cells[0];
+
+    var defs = [
+      { id: 'pet', label: '宠物' },
+      { id: 'usage', label: '用量' },
+      { id: 'skin', label: '皮肤' },
+    ];
+    defs.forEach(function (def) {
+      var cell = template.cloneNode(true);
+      cell.id = NAV_PREFIX + def.id;
+      cell.className = (cell.className || '').replace(/active/gi, '').replace(/\s+/g, ' ').trim();
+      // 清掉克隆自"选中态"的残留子元素（高亮色块等）
+      cell.querySelectorAll('[class*="active"]').forEach(function (el) { el.remove(); });
+      var label = cell.querySelector('[class*="navLabel"]');
+      if (label) label.textContent = def.label;
+      else cell.textContent = def.label;
+      navList.appendChild(cell);
+    });
+
+    // 面板挂到内容区
+    var panel = findPanel(navList);
+    var content = panel ? findContent(panel) : null;
+    if (content) {
+      var wrap = document.createElement('div');
+      wrap.innerHTML = buildPanelHtml();
+      var panelEl = wrap.firstChild;
+      content.appendChild(panelEl);
+      bindPanel(panelEl);
+    }
+
+    // 导航点击：我们的项激活对应面板；DSH 项则恢复原内容
+    if (!navList.__dshExtBound) {
+      navList.__dshExtBound = true;
+      navList.addEventListener('click', function (e) {
+        var cell = e.target && e.target.closest ? e.target.closest('button') : null;
+        if (!cell) return;
+        if (cell.id && cell.id.indexOf(NAV_PREFIX) === 0) {
+          activate(cell.id.slice(NAV_PREFIX.length));
+        } else {
+          deactivate();
+        }
+      });
+    }
+  }
+
+  /* ---------- 面板逻辑 ---------- */
+  function bindPanel(panelEl) {
+    // 宠物
+    var petListEl = document.getElementById('dsh-ext-pet-list');
+    var petCurrentEl = document.getElementById('dsh-ext-pet-current');
+    var petPreviewEl = document.getElementById('dsh-ext-pet-preview');
+    var petVisibleEl = document.getElementById('dsh-ext-pet-visible');
+    var petClickEl = document.getElementById('dsh-ext-pet-clickthrough');
+    var frameEl = document.getElementById('dsh-ext-pet-frame');
+    var frameValEl = document.getElementById('dsh-ext-pet-fps-val');
+    var scaleEl = document.getElementById('dsh-ext-pet-scale');
+    var scaleValEl = document.getElementById('dsh-ext-pet-scale-val');
+    var petSoundEl = document.getElementById('dsh-ext-pet-sound');
+
+    function renderPets(state) {
+      var current = state.current;
+      petListEl.innerHTML = '';
+      // 2026-10-21：宠物列表改成下拉菜单（原来是一长条 div 列表，占空间、还被挤到滚动区外）
+      (state.list || []).forEach(function (n) {
+        var opt = document.createElement('option');
+        opt.value = n;
+        opt.textContent = n;
+        if (n === current) opt.selected = true;
+        petListEl.appendChild(opt);
+      });
+      petListEl.onchange = function () {
+        var n = petListEl.value;
+        window.dsh.petSelect(n);
+        petCurrentEl.textContent = n;
+        // 切完立刻刷新预览图，否则会一直显示上一只（2026-10-20 实测）
+        setTimeout(function () {
+          window.dsh.petState().then(function (s2) {
+            if (s2 && s2.previewDataUri) petPreviewEl.innerHTML = '<img src="' + s2.previewDataUri + '" alt="pet" />';
+            else petPreviewEl.innerHTML = '<span class="ph">' + n + '</span>';
+          });
+        }, 120);
+      };
+      petCurrentEl.textContent = current || '—';
+      petVisibleEl.checked = !!state.visible;
+      petClickEl.checked = !!state.clickThrough;
+      if (petSoundEl && window.dsh.petSoundGet) window.dsh.petSoundGet().then(function (r) { petSoundEl.checked = !!(r && r.enabled); });
+      var fm = state.frameMs || 130;
+      frameEl.value = String(fm);
+      frameValEl.textContent = fm + 'ms/帧';
+      var sc = state.scale || 1;
+      scaleEl.value = String(sc);
+      scaleValEl.textContent = Math.round(sc * 100) + '%';
+      if (state.previewDataUri) {
+        petPreviewEl.innerHTML = '<img src="' + state.previewDataUri + '" alt="pet" />';
+      } else {
+        petPreviewEl.innerHTML = '<span class="ph">' + (current || '—') + '</span>';
+      }
+    }
+
+    // ---- AI 造宠物 ----
+    var forgeBoxEl = document.getElementById('dsh-forge');
+    var forgeToggleEl = document.getElementById('dsh-forge-toggle');
+    var forgeCaretEl = document.getElementById('dsh-forge-caret');
+    if (forgeToggleEl) {
+      forgeToggleEl.addEventListener('click', function () {
+        var collapsed = forgeBoxEl.classList.toggle('collapsed');
+        if (forgeCaretEl) forgeCaretEl.textContent = collapsed ? '展开' : '收起';
+      });
+    }
+
+    var forgeDescEl = document.getElementById('dsh-forge-desc');
+    var forgeStyleEl = document.getElementById('dsh-forge-style');
+    var forgeProvEl = document.getElementById('dsh-forge-provider');
+    var forgeKeyEl = document.getElementById('dsh-forge-key');
+    var forgeRunEl = document.getElementById('dsh-forge-run');
+    var forgeMsgEl = document.getElementById('dsh-forge-msg');
+    var forged = false;
+
+    function forgeSay(text, kind) {
+      forgeMsgEl.textContent = text || '';
+      forgeMsgEl.className = 'dsh-forge-msg' + (kind ? ' ' + kind : '');
+    }
+
+    if (window.dsh && window.dsh.petForgeConfig) {
+      window.dsh.petForgeConfig().then(function (cfg) {
+        if (!cfg) return;
+        if (cfg.provider) forgeProvEl.value = cfg.provider;
+        if (cfg.apiKey) forgeKeyEl.value = cfg.apiKey;
+      });
+    }
+
+    function saveForgeCfg() {
+      if (!window.dsh.petForgeSetConfig) return;
+      window.dsh.petForgeSetConfig({ provider: forgeProvEl.value, apiKey: forgeKeyEl.value });
+    }
+    forgeProvEl.addEventListener('change', saveForgeCfg);
+    forgeKeyEl.addEventListener('blur', saveForgeCfg);
+
+    var forgeDocEl = document.getElementById('dsh-forge-doc');
+    if (forgeDocEl) {
+      forgeDocEl.addEventListener('click', function () {
+        if (window.dsh && window.dsh.petForgeOpenDoc) {
+          window.dsh.petForgeOpenDoc().then(function (r) {
+            if (r && r.ok === false) forgeSay('打开说明失败：' + (r.error || r.path || ''), 'err');
+          });
+        }
+      });
+    }
+
+    forgeRunEl.addEventListener('click', function () {
+      var desc = (forgeDescEl.value || '').trim();
+      if (!desc) { forgeSay('先描述一下你想要的宠物', 'warn'); forgeDescEl.focus(); return; }
+      var key = (forgeKeyEl.value || '').trim();
+      if (!key) { forgeSay('请填 API Key（需支持图像生成，DeepSeek 模型不生图）', 'warn'); forgeKeyEl.focus(); return; }
+      saveForgeCfg();
+      forgeRunEl.disabled = true;
+      forgeRunEl.textContent = '生成中…';
+      forgeSay('正在生成，约需 30~60 秒，请稍候…', 'busy');
+      window.dsh.petForge({
+        description: desc,
+        style: forgeStyleEl.value,
+        provider: forgeProvEl.value,
+        apiKey: key
+      }).then(function (r) {
+        forgeRunEl.disabled = false;
+        forgeRunEl.textContent = '生成宠物';
+        if (r && r.ok) {
+          forged = true;
+          forgeSay('已生成「' + (r.name || '新宠物') + '」，已加入列表', 'ok');
+          forgeDescEl.value = '';
+          window.dsh.petState().then(renderPets);
+        } else {
+          forgeSay((r && r.error) || '生成失败', 'err');
+        }
+      }).catch(function (e) {
+        forgeRunEl.disabled = false;
+        forgeRunEl.textContent = '生成宠物';
+        forgeSay('生成失败：' + (e && e.message ? e.message : String(e)), 'err');
+      });
+    });
+
+    window.dsh.petState().then(renderPets);
+    petVisibleEl.addEventListener('change', function () { window.dsh.petSetVisible(petVisibleEl.checked); });
+    if (petSoundEl) petSoundEl.addEventListener('change', function () { window.dsh.petSoundSet(petSoundEl.checked); });
+    petClickEl.addEventListener('change', function () { window.dsh.petSetClickThrough(petClickEl.checked); });
+    frameEl.addEventListener('input', function () { frameValEl.textContent = frameEl.value + 'ms/帧'; });
+    frameEl.addEventListener('change', function () {
+      window.dsh.petSetConfig(parseInt(frameEl.value, 10), parseFloat(scaleEl.value));
+    });
+    scaleEl.addEventListener('input', function () { scaleValEl.textContent = Math.round(parseFloat(scaleEl.value) * 100) + '%'; });
+    scaleEl.addEventListener('change', function () {
+      window.dsh.petSetConfig(parseInt(frameEl.value, 10), parseFloat(scaleEl.value));
+    });
+    document.getElementById('dsh-ext-pet-open').addEventListener('click', function () { window.dsh.petOpenFolder(); });
+    document.getElementById('dsh-ext-pet-studio').addEventListener('click', function () { window.dsh.petStudioOpen(); });
+
+    // 用量
+    var uStatus = document.getElementById('dsh-ext-u-status');
+    var uKey = document.getElementById('dsh-ext-u-key');
+    var uTotal = document.getElementById('dsh-ext-u-total');
+    var uSplit = document.getElementById('dsh-ext-u-split');
+    var uReq = document.getElementById('dsh-ext-u-req');
+    var uTok = document.getElementById('dsh-ext-u-tok');
+    var uErr = document.getElementById('dsh-ext-u-err');
+    var uKeyInput = document.getElementById('dsh-ext-u-key-input');
+    document.getElementById('dsh-ext-u-key-save').addEventListener('click', function () {
+      var k = uKeyInput.value.trim();
+      if (k) { window.dsh.setApiKey(k); uKeyInput.value = ''; window.dsh.usageRefresh(); }
+    });
+    document.getElementById('dsh-ext-u-key-clear').addEventListener('click', function () {
+      window.dsh.setApiKey('');
+      window.dsh.usageRefresh();
+    });
+    var keepDshEl = document.getElementById('dsh-ext-u-keepdsh');
+    if (keepDshEl && window.dsh.getSetting) {
+      window.dsh.getSetting('keepDshRunning').then(function (v) {
+        keepDshEl.checked = v !== false;
+      }).catch(function () { /* ignore */ });
+      keepDshEl.addEventListener('change', function () {
+        window.dsh.setSetting('keepDshRunning', keepDshEl.checked);
+      });
+    }
+    var uBar = document.getElementById('dsh-ext-u-bar');
+    var uSeg = document.getElementById('dsh-ext-u-seg');
+
+    function fmtTokens(n) {
+      if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+      if (n >= 1e3) return (n / 1e3).toFixed(1) + 'k';
+      return String(n);
+    }
+    function renderBars(data) {
+      var first = data.balanceInfos && data.balanceInfos[0];
+      if (!first) return;
+      var total = parseFloat(first.totalBalance) || 0;
+      var granted = parseFloat(first.grantedBalance) || 0;
+      var topped = parseFloat(first.toppedUpBalance) || 0;
+      // 余额充足度：以 ¥10 为满格参考
+      var pct = Math.min(100, Math.max(0, (total / 10) * 100));
+      uBar.style.width = pct.toFixed(0) + '%';
+      uBar.className = 'dsh-ext-bar-fill' + (pct >= 50 ? ' ok' : pct >= 25 ? ' warn' : ' err');
+      // 额度构成：赠送 / 充值 两段
+      if (total > 0) {
+        var g = Math.min(100, (granted / total) * 100).toFixed(1);
+        var t = Math.min(100, (topped / total) * 100).toFixed(1);
+        uSeg.innerHTML = '<i class="seg-granted" style="width:' + g + '%"></i><i class="seg-topped" style="width:' + t + '%"></i>';
+      } else {
+        uSeg.innerHTML = '';
+      }
+    }
+    function renderUsage(data) {
+      if (!data) return;
+      uKey.textContent = data.apiKeyConfigured ? '已配置 ✓' : '未配置';
+      uKey.style.color = data.apiKeyConfigured ? 'var(--dsw-alias-state-success-primary)' : 'var(--dsw-alias-state-warn-primary)';
+      if (data.error) {
+        uErr.textContent = data.error;
+        uErr.hidden = false;
+        uStatus.textContent = '未连接';
+        uBar.style.width = '0%';
+        uSeg.innerHTML = '';
+        return;
+      }
+      uErr.hidden = true;
+      var low = !!data.lowBalance;
+      var unavailable = data.available === false;
+      uStatus.textContent = unavailable ? '不可用' : low ? '余额偏低' : '正常';
+      // 2026-10-18 瘦身：余额那两行已删（官方「账号与余额」页已有且数字同源），
+      // 数据仍保留给「余额充足度 / 额度构成」两条可视化；元素不在就跳过（不能抛）。
+      var first = data.balanceInfos && data.balanceInfos[0];
+      if (first) {
+        if (uTotal) uTotal.textContent = first.totalBalance + ' ' + first.currency;
+        if (uSplit) uSplit.textContent = '赠 ' + first.grantedBalance + ' / 充 ' + first.toppedUpBalance;
+      }
+      uReq.textContent = String(data.todayRequests || 0);
+      uTok.textContent = fmtTokens((data.totalInputTokens || 0) + (data.totalOutputTokens || 0));
+      renderBars(data);
+    }
+    window.dsh.onUsageUpdate(renderUsage);
+    document.getElementById('dsh-ext-u-refresh').addEventListener('click', function () { window.dsh.usageRefresh(); });
+
+    // 皮肤（背景图片 + 透明度；主题外观交给 DSH 通用设置）
+    var skinPreviewEl = document.getElementById('dsh-ext-skin-preview');
+    var opacityEl = document.getElementById('dsh-ext-skin-opacity');
+    var opacityValEl = document.getElementById('dsh-ext-skin-opacity-val');
+    window.dsh.themeState().then(function (state) {
+      opacityEl.value = String(state.skinOpacity);
+      opacityValEl.textContent = Math.round(state.skinOpacity * 100) + '%';
+      if (state.previewDataUri) {
+        skinPreviewEl.innerHTML = '<img src="' + state.previewDataUri + '" alt="bg" />';
+      } else {
+        skinPreviewEl.innerHTML = '<span class="ph">未设置</span>';
+      }
+    });
+    document.getElementById('dsh-ext-skin-pick').addEventListener('click', function () { window.dsh.skinPickImage(); });
+    document.getElementById('dsh-ext-skin-clear').addEventListener('click', function () { window.dsh.skinClearImage(); });
+    document.getElementById('dsh-ext-skin-preset-blue').addEventListener('click', function () { window.dsh.skinSetPreset('deepseek-blue'); });
+    document.getElementById('dsh-ext-skin-preset-none').addEventListener('click', function () { window.dsh.skinSetPreset('none'); });
+    opacityEl.addEventListener('input', function () {
+      var v = parseFloat(opacityEl.value);
+      opacityValEl.textContent = Math.round(v * 100) + '%';
+      window.dsh.skinSetOpacity(v);
+    });
+  }
+
+  /* ---------- 激活/恢复 ---------- */
+  function getPanelEl() { return document.getElementById(PANEL_ID); }
+  function getContent() {
+    var navList = findNavList();
+    var panel = navList ? findPanel(navList) : null;
+    return panel ? findContent(panel) : null;
+  }
+
+  function activate(id) {
+    var content = getContent();
+    var panelEl = getPanelEl();
+    if (!content || !panelEl) return;
+    // 隐藏 DSH 原内容
+    Array.prototype.forEach.call(content.children, function (c) {
+      if (c !== panelEl) c.style.display = 'none';
+    });
+    // 显示对应分栏（必须用 block，空字符串会被 CSS 类 .dsh-ext-section{display:none} 兜底隐藏）
+    panelEl.style.display = 'block';
+    Array.prototype.forEach.call(panelEl.querySelectorAll('.dsh-ext-section'), function (s) {
+      s.style.display = s.id === SEC_PREFIX + id ? 'block' : 'none';
+    });
+    // 选中态：仅当前选中项显示高亮色块，其余全部清除（含 DSH 自己的 active 残留）
+    var navList = findNavList();
+    if (navList) {
+      Array.prototype.forEach.call(navList.querySelectorAll('button'), function (b) {
+        b.classList.remove('dsh-ext-nav-on');
+        b.className = String(b.className || '').replace(/active/gi, '').replace(/\s+/g, ' ').trim();
+      });
+      var cell = document.getElementById(NAV_PREFIX + id);
+      if (cell) cell.classList.add('dsh-ext-nav-on');
+    }
+    // 首次打开用量栏时主动刷新一次
+    if (id === 'usage') window.dsh.usageRefresh();
+  }
+
+  function deactivate() {
+    var content = getContent();
+    var panelEl = getPanelEl();
+    if (!content || !panelEl) return;
+    panelEl.style.display = 'none';
+    Array.prototype.forEach.call(content.children, function (c) {
+      if (c !== panelEl) c.style.display = '';
+    });
+    var navList = findNavList();
+    if (navList) {
+      Array.prototype.forEach.call(navList.querySelectorAll('button'), function (b) {
+        if (b.id && b.id.indexOf(NAV_PREFIX) === 0) b.classList.remove('dsh-ext-nav-active');
+      });
+    }
+  }
+
+  /* ---------- 在「当前版本」旁边补上 DeepWhale Desktop 的版本号 ----------
+   * 通用设置里原本只显示 DSH 运行时的版本（如 0.1.7-rc.2），
+   * 用户想确认壳是哪个版本得翻安装包或关于窗口，很别扭。
+   * 版本号由主进程注入为 window.__dshShellVersion（settings-inject.ts）。
+   * 按文本前缀找节点：DSH 的类名带哈希，靠结构定位不可靠。
+   * 只认**叶子节点**，否则会匹配到包住整页的外层容器，把版本号贴到离谱的位置。 */
+  function maybeInjectShellVersion() {
+    var v = window.__dshShellVersion;
+    if (!v) return;
+    if (document.getElementById('dsh-ext-shell-version')) return; // 已贴过
+    var els = document.querySelectorAll('div, span, p, li, td');
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i];
+      if (el.children.length > 0) continue;
+      var t = (el.textContent || '').trim();
+      if (t.indexOf('当前版本') !== 0) continue;
+      var host = el.parentElement;
+      if (!host) return;
+      // ⚠️ 2026-10-15（用户方案）：把"版本号一行 + 按钮另起一行"改成**一行**：
+      //    左边两行文本块（运行时版本 / 壳版本），右边三个按钮，两边都 32px 高、垂直居中。
+      //    ⚠️ 血的教训（同一天踩的）：**绝不能给祖先容器设 display:flex** —— 我第一版把
+      //    `host.style.cssText` 改成 flex，结果设置页整页被压成竖列（截图可见）。
+      //    现在只做两件事：① 新建**我们自己的**行节点；② 把官方那一行**隐藏**掉（文本我们重画）。
+      var row = document.createElement('div');
+      row.id = 'dsh-ext-version-row';
+      row.style.cssText =
+        'display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:32px;width:100%;flex-wrap:nowrap;';
+      var left = document.createElement('div');
+      left.id = 'dsh-ext-version-col';
+      left.style.cssText =
+        'display:flex;flex-direction:column;justify-content:center;line-height:16px;font-size:12px;min-width:0;';
+      var line1 = document.createElement('div');
+      line1.textContent = (el.textContent || '').trim();
+      line1.style.cssText = 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+      var line2 = document.createElement('div');
+      line2.id = 'dsh-ext-shell-version';
+      line2.textContent = 'DeepWhale Desktop ' + v;
+      line2.style.cssText = 'opacity:.75;white-space:nowrap;';
+      left.appendChild(line1);
+      left.appendChild(line2);
+      row.appendChild(left);
+      host.insertBefore(row, el);
+      el.style.display = 'none'; // 官方那一行不再显示（内容已由 line1 重画）
+      appendShellActions(row); // 见下方：检查更新 / 本版更新内容 / 彻底退出后台 / 下载进度
+      // 自检：注入后若行宽过窄或高度异常（说明外层结构不是预期的行容器），回滚成
+      // "官方原样 + 按钮跟在后面"的保守形态 —— 宁可回到两行，也不能把设置页布局搞坏。
+      setTimeout(function () {{
+        try {{
+          var r = row.getBoundingClientRect();
+          if (r.width < 200 || r.height > 60) {{
+            el.style.display = '';
+            row.remove();
+            appendShellActions(el.parentElement || host);
+            console.warn('[settings-ext] 版本行一行布局自检未通过，已回滚（w=' + Math.round(r.width) + ',h=' + Math.round(r.height) + '）');
+          }}
+        }} catch (e) {{ /* 自检失败不影响设置页 */ }}
+      }}, 300);
+      return;
+      return;
+    }
+  }
+
+  /* ---------- 版本号右侧：检查更新 + 彻底退出后台 + 下载进度 ----------
+   * 2026-10-03 新增。起因：一位 Windows 用户的托盘图标不可见（图标为空，
+   * 或被 Windows 折叠进「^」溢出区）—— 而「检查更新」「退出」当时**只**放在
+   * 托盘菜单里，于是关窗最小化后彻底无路可走：退不出后台，新安装包也装不上。
+   * 用户建议把这两个动作放在设置里版本号旁边（他一眼就能找到的地方）。
+   *
+   * 顺带补下载进度：mac 上是"静默下载 dmg"，285MB 一路上没有任何动静，
+   * 用户会以为卡死。进度条 + 百分比，心里踏实。
+   *
+   * 与主进程的通道：window.dshShell.*（由 src/preload/preload.ts 暴露）。 */
+  function appendShellActions(host) {
+    if (!host || host.querySelector('#dsh-ext-shell-actions')) return;
+    var box = document.createElement('span');
+    box.id = 'dsh-ext-shell-actions';
+    // 高度与左侧两行文本块一致（16px × 2 = 32px），保证一行内严格对齐；
+    // 靠父级的 space-between 推到最右，不再用 margin-left:auto（那会在窄容器里换行）
+    box.style.cssText = 'display:inline-flex;align-items:center;gap:8px;height:32px;';
+
+    // 下载进度（默认隐藏；download-progress 事件到达才显示）
+    var bar = document.createElement('span');
+    bar.id = 'dsh-ext-update-progress';
+    bar.style.cssText = 'display:none;align-items:center;gap:6px;font-size:12px;opacity:.85;';
+    var track = document.createElement('span');
+    track.style.cssText = 'display:inline-block;width:96px;height:6px;border-radius:3px;background:rgba(128,128,128,.25);overflow:hidden;';
+    var fill = document.createElement('span');
+    fill.id = 'dsh-ext-update-progress-fill';
+    fill.style.cssText = 'display:block;width:0%;height:100%;border-radius:3px;background:#05648B;transition:width .2s;';
+    track.appendChild(fill);
+    var label = document.createElement('span');
+    label.id = 'dsh-ext-update-progress-label';
+    label.textContent = '正在下载…';
+    bar.appendChild(track);
+    bar.appendChild(label);
+
+    function mkBtn(text, id, action) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.id = id;
+      b.textContent = text;
+      b.style.cssText = 'font:inherit;font-size:12px;height:32px;padding:0 12px;border-radius:6px;cursor:pointer;border:1px solid rgba(128,128,128,.35);background:transparent;color:inherit;white-space:nowrap;display:inline-flex;align-items:center;';
+      b.addEventListener('click', function () {
+        try { action(); } catch (e) { /* 不让按钮异常影响设置页 */ }
+      });
+      return b;
+    }
+    box.appendChild(mkBtn('检查更新', 'dsh-ext-check-update', function () {
+      if (window.dsh && window.dsh.checkUpdate) window.dsh.checkUpdate();
+    }));
+    // 「本版更新内容」：**只在非 macOS** 注入（2026-10-15 用户口径）。
+    // 起因：Windows/Linux 的应用菜单被 autoHideMenuBar 藏着（要按 Alt 才出），
+    // 托盘右键是当时唯一入口 —— 用户实测「win 版找不到本版更新内容」。
+    // mac 顶部系统菜单栏一眼就有，不必重复放一个。
+    if (window.__dshShellPlatform && window.__dshShellPlatform !== 'darwin') {
+      box.appendChild(mkBtn('本版更新内容', 'dsh-ext-whatsnew', function () {
+        if (window.dsh && window.dsh.showWhatsNew) window.dsh.showWhatsNew();
+      }));
+    }
+    box.appendChild(mkBtn('彻底退出后台', 'dsh-ext-quit-app', function () {
+      if (window.dsh && window.dsh.quitApp) window.dsh.quitApp();
+    }));
+    box.appendChild(bar);
+    host.appendChild(box);
+
+    try {
+      if (window.dsh && window.dsh.onUpdateState) {
+        window.dsh.onUpdateState(function (st) {
+          var downloading = !!(st && (st.phase === 'downloading' || st.phase === 'downloaded'));
+          bar.style.display = downloading ? 'inline-flex' : 'none';
+          if (!downloading) return;
+          if (st.phase === 'downloaded') {
+            fill.style.width = '100%';
+            label.textContent = '已下载好，去安装';
+          } else {
+            var p = typeof st.percent === 'number' ? st.percent : 0;
+            fill.style.width = p + '%';
+            label.textContent = '正在下载 ' + p + '%';
+          }
+        });
+      }
+    } catch (e) { /* 订阅失败不影响按钮 */ }
+  }
+
+  /* ---------- 侧栏「设置」右侧：下载进度（常驻可见，带百分比）----------
+   * 2026-10-03 加。用户要求「下载过程可视化，放在设置按钮右方空白处」。
+   *
+   * ★ 1.0.46 加固。起因：1.0.45 上线后用户反馈「你看更新，只是图标有进度条，
+   *   设置旁边并没有显示……图标栏那么小一般他们不会关注到的」。
+   *   实测（冒烟探针）确认：条**插上了、也能跟着进度走**，但只有 6px 高、没有文字、
+   *   且只在下载那几秒出现 —— 用户根本注意不到。所以本轮改三件事：
+   *   ① 带百分比文字（"下载中 67%"）—— 一根细条给不了"确定感"；
+   *   ② 条加高加亮（8px / 青蓝 #14A5B8）；
+   *   ③ 定位收紧：只认**可点**的那个「设置」（设置面板自己的标题也是叶子节点、
+   *      文字同样是「设置」，靠"第一个匹配"会插错地方），且只认可见的候选；
+   *      找不到就记一条日志、什么都不插（绝不乱插到别的标题上）。
+   *
+   * 与设置页版本行那条的分工：那条只在设置页开着时可见，谁也不会开着设置页等下载；
+   * 侧栏这条才是"任何时候都看得见"的那个。Dock 徽标继续作为兜底。 */
+  var SIDE_BAR_MIN_ROW = 150; // 行宽小于此值视为侧栏折叠 → 藏掉文字，只留条让它铺满
+  // 2026-10-03 用户实机验收后的视觉要求（1.0.47）：
+  //   「进度条要在设置后面铺满到便捷框（留适当空隙即可）而且进度条要适当宽大些」
+  //   → 条不再固定 64px，而是吃满「设置」右侧到便捷框之间的剩余宽度；高度 8 → 12px。
+  var SIDE_BAR_TRACK_H = 12;  // 条高（原 8px，太细看不见）
+  var SIDE_BAR_GAP_PX = 9;    // 与「设置」文字、与右侧便捷框之间的空隙
+
+  function rectVisible(el) {
+    var r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  }
+
+  /** 找侧栏那个「设置」按钮（可点 + 可见），排除设置面板自己的同名标题。 */
+  function findSidebarSettingsAnchor() {
+    var all = document.querySelectorAll('button, [role="button"], a, span, div');
+    for (var i = 0; i < all.length; i++) {
+      var el = all[i];
+      if (el.children.length > 0) continue;
+      if ((el.textContent || '').trim() !== '设置') continue;
+      var btn = el.closest ? el.closest('button,[role="button"],a') : null;
+      if (!btn) continue; // 设置面板的标题不是可点元素 → 排除
+      // 窗口隐藏（最小化到托盘）时布局尺寸不可信，此时不做可见性判断
+      if (document.visibilityState === 'visible' && (!rectVisible(btn) || !rectVisible(el))) continue;
+      return { label: el, btn: btn };
+    }
+    return null;
+  }
+
+  /**
+   * 进度条动画（2026-10-04 用户：「给进度条做个动效，别那么傻傻的跑」）。
+   *
+   * 纯 CSS，不引 rAF、不在侧栏跑常驻 JS 动画（侧栏是常驻 DOM，动效必须便宜）：
+   *   · 填充：宽度缓动推进（.45s 缓出）+ 一条青色流光从左往右扫过（1.4s 一轮）
+   *   · 百分比未知：切成"不定态"——一段 36% 宽的填充在轨道里来回游走
+   *   · 已下载好：满条 + 一次闪光，然后静止
+   *   · 尊重 prefers-reduced-motion：只留宽度过渡，关掉流光与游走
+   */
+  function ensureProgressAnimCss() {
+    if (document.getElementById('dsh-ext-anim')) return;
+    var st = document.createElement('style');
+    st.id = 'dsh-ext-anim';
+    st.textContent = [
+      '@keyframes dsh-dl-sweep{0%{transform:translateX(-130%)}100%{transform:translateX(560%)}}',
+      '@keyframes dsh-dl-run{0%{transform:translateX(-130%)}100%{transform:translateX(300%)}}',
+      '@keyframes dsh-dl-flash{0%{opacity:.05}45%{opacity:.55}100%{opacity:0}}',
+      '#dsh-ext-dl-fill:after{content:"";position:absolute;top:0;bottom:0;width:60%;',
+      'background:linear-gradient(90deg,rgba(190,244,255,0),rgba(210,250,255,.85),rgba(190,244,255,0));',
+      'animation:dsh-dl-sweep 1.15s linear infinite}',
+      '#dsh-ext-dl-runner{display:none}',
+      '#dsh-ext-dl.indet #dsh-ext-dl-fill{display:none}',
+      '#dsh-ext-dl.indet #dsh-ext-dl-runner{display:block;animation:dsh-dl-run 1.25s cubic-bezier(.45,.05,.55,.95) infinite}',
+      '#dsh-ext-dl-flash{opacity:0}',
+      '#dsh-ext-dl.done #dsh-ext-dl-flash{animation:dsh-dl-flash .7s ease-out 1}',
+      '#dsh-ext-update-progress-fill{transition:width .45s cubic-bezier(.22,.61,.36,1) !important}',
+      '@media (prefers-reduced-motion: reduce){',
+      '#dsh-ext-dl-fill:after{animation:none;opacity:0}',
+      '#dsh-ext-dl.indet #dsh-ext-dl-runner{animation:none;transform:none;opacity:.55}',
+      '#dsh-ext-dl.done #dsh-ext-dl-flash{animation:none}}',
+    ].join('');
+    (document.head || document.documentElement).appendChild(st);
+  }
+
+  /**
+   * 设置页「本版更新内容」卡片（2026-10-04 用户提议）：
+   *   「升级了什么用户根本不知道，体验感不好」→ 版本行下面直接列出这一版改了什么。
+   * 数据来自壳主进程（shell:whatsnew → 先 CDN 后随包兜底，见 src/main/whatsnew.ts）。
+   */
+  /** 版本区域的锚点：优先设置页那条更新进度行，其次找含「当前版本」的那一行容器 */
+  /**
+   * B3（2026-10-04 用户要的）：设置页一句隐私说明。
+   * 我们确实把官方遥测/埋点关掉了（见 bundled-plugins/dsh-shell-web-preview 的 profile 红线），
+   * 但用户不知道 —— 说出来才是差异化。
+   */
+  function renderPrivacyNote() {
+    if (document.getElementById('dsh-ext-privacy')) return;
+    // ⚠️ 2026-10-04 修 bug：原实现锚定 `#dsh-ext-version`，但这个 id 在整个代码里**不存在**
+    //    （壳版本是拼进官方「当前版本」那行文字里的）→ 于是这条说明永远渲染不出来，
+    //    用户在设置页找不到它（用户实测："遥测在哪里，没看到啊"）。
+    //    现在改为：找到官方「当前版本」那一行（文本叶子节点），把说明插在它所在容器之后。
+    // 官方那行文字里含子元素（版本号是拼进去的），所以不能只找"纯文本叶子"，
+    // 要取"包含该文本、且后代里不再有包含它的元素"的那一层（最深命中）
+    var leaf = null;
+    var all = document.querySelectorAll('div, span, p, section, li');
+    for (var i = 0; i < all.length; i++) {
+      var n = all[i];
+      if ((n.textContent || '').indexOf('当前版本') < 0) continue;
+      var deeper = false;
+      for (var c = 0; c < n.children.length; c++) {
+        if ((n.children[c].textContent || '').indexOf('当前版本') >= 0) {
+          deeper = true;
+          break;
+        }
+      }
+      if (!deeper) {
+        leaf = n;
+        break;
+      }
+    }
+    if (!leaf) return;
+    var host = leaf;
+    for (var k = 0; k < 3 && host.parentElement; k++) {
+      host = host.parentElement;
+      try {
+        if (host.getBoundingClientRect().width > 200) break;
+      } catch (e) {
+        break;
+      }
+    }
+    if (!host.parentElement) return;
+    var note = document.createElement('div');
+    note.id = 'dsh-ext-privacy';
+    note.style.cssText =
+      'margin-top:7px;font-size:12px;line-height:1.7;opacity:.68;';
+    note.textContent = '本机运行 · 不上传你的文件 · 遥测与埋点默认关闭';
+    host.parentElement.insertBefore(note, host.nextSibling);
+  }
+
+  function maybeInjectSidebarProgress() {
+    renderPrivacyNote();
+    if (document.getElementById('dsh-ext-dl')) return;
+    // ⚠️ 2026-10-17 事故后重写（原实现是「打开账号菜单就塌侧栏」的元凶）：
+    //    旧逻辑从「设置」按钮往上找父级、把进度条 append 进去，
+    //    还**直接改 React 管理的行内样式**（row.style.display='flex' / alignItems）。
+    //    结果：打开账号菜单 → React 重渲染那一行 → 我们的节点被 reconcile 掉、
+    //    但写进去的内联样式留着 → 行布局崩 → **侧栏从 280px 塌成 56px**。
+    //    实测证据：before 280px / afterOpenMenu 56px / afterClickSettings 56px。
+    //
+    //    现在只用 DSH 的**官方挂载点** `[data-slot="sidebar.footer.action"]`：
+    //    那是运行时专门留给外部内容的容器，React 不会去 reconcile 它的子节点。
+    //    找不到就**直接不注入** —— 宁可没有进度条，也不碰 React 的树。
+    //    **绝不修改任何非本插件节点的 style** —— 这是这次的根教训。
+    var slot =
+      document.querySelector('[data-slot="sidebar.footer.action"]') ||
+      document.querySelector('[data-slot="sidebar.settings"]');
+    // ⚠️ 关键（2026-10-18 冒烟实测）：slot 本身在 `.footerActions` 里，而那是
+    //    **flex-direction:row + width:100%** 的横排行。直接往里塞一个 width:100% 的节点
+    //    会把同行的「设置」按钮挤成 0 宽（实测 hostW:0、settingsRowVisible:false → 点不动）。
+    //    所以往上找到**列容器**（`.footArea` 是 flex-direction:column）再挂，
+    //    条自己占一行，按钮位置一点不动。
+    var host = slot;
+    for (var up = 0; up < 4 && host.parentElement; up++) {
+      var pe = host.parentElement;
+      var dir = '';
+      try { dir = getComputedStyle(pe).flexDirection; } catch (e) { dir = ''; }
+      host = pe;
+      if (dir === 'column') break;
+    }
+    if (!slot) {
+      if (!window.__dshExtSidebarWarned) {
+        window.__dshExtSidebarWarned = true;
+        console.warn('[dsh-ext] 没有官方 slot（sidebar.footer.action），下载进度不注入侧栏（不影响其它功能）');
+      }
+      return;
+    }
+
+    var wrap = document.createElement('span');
+    wrap.id = 'dsh-ext-dl';
+    // 在官方 slot 里占满整行；**只设自己这个节点的样式**，不碰任何别人的节点
+    wrap.style.cssText =
+      'display:none;align-items:center;gap:7px;width:100%;box-sizing:border-box;' +
+      'padding:0 ' + SIDE_BAR_GAP_PX + 'px;min-width:0;font-size:12px;line-height:1;';
+    var track = document.createElement('span');
+    // 条吃满 wrap 的全部宽度（百分比数字改成叠在条上，不再挤占空间）
+    track.style.cssText =
+      'position:relative;display:block;flex:1 1 auto;min-width:60px;height:' + SIDE_BAR_TRACK_H + 'px;' +
+      'border-radius:' + Math.round(SIDE_BAR_TRACK_H / 2) + 'px;background:rgba(128,128,128,.28);overflow:hidden;';
+    var fill = document.createElement('span');
+    fill.id = 'dsh-ext-dl-fill';
+    // position:relative + overflow:hidden → 让 ::after 的流光被裁在填充范围内
+    fill.style.cssText =
+      'position:relative;display:block;width:0%;height:100%;overflow:hidden;border-radius:' +
+      Math.round(SIDE_BAR_TRACK_H / 2) + 'px;background:#14A5B8;' +
+      'transition:width .45s cubic-bezier(.22,.61,.36,1);';
+    track.appendChild(fill);
+    // 用户 2026-10-04 实机反馈：「上面加的更新进度的白字也不好看，其实字可以不加的」
+    // → 侧栏条上不再放任何文字（需要文字时看设置页那一行）。id 保留但不渲染，
+    //   以免别处（如自检脚本）用 getElementById 拿不到而误判。
+    var txt = document.createElement('span');
+    txt.id = 'dsh-ext-dl-text';
+    txt.style.display = 'none';
+    var runner = document.createElement('span');
+    runner.id = 'dsh-ext-dl-runner';
+    runner.style.cssText =
+      'position:absolute;top:0;bottom:0;left:0;width:36%;border-radius:' +
+      Math.round(SIDE_BAR_TRACK_H / 2) + 'px;background:#14A5B8;';
+    track.appendChild(runner);
+    var flash = document.createElement('span');
+    flash.id = 'dsh-ext-dl-flash';
+    flash.style.cssText =
+      'position:absolute;inset:0;border-radius:' + Math.round(SIDE_BAR_TRACK_H / 2) +
+      'px;background:#7FE3F0;pointer-events:none;';
+    track.appendChild(flash);
+    wrap.appendChild(track);
+    host.appendChild(wrap);
+
+    // ⛔ 这里原来是 row.style.display='flex' / alignItems='center' —— **已删除**。
+    //    那是直接改 React 管理节点的内联样式：React 重渲染后样式残留，会把侧栏布局搞崩
+    //    （280px → 56px）。**绝不修改非本插件节点的样式** 是这次的根教训。
+    // 条上不再有文字，无需"折叠时藏文字"的分支（保留条本身铺满即可）
+  }
+
+  /* ---------- 更新状态订阅：同时驱动「设置页版本行」与「侧栏」两条进度条 ---------- */
+  function renderUpdateProgress(st) {
+    var downloading = !!(st && (st.phase === 'downloading' || st.phase === 'downloaded'));
+    var downloaded = !!(st && st.phase === 'downloaded');
+    // 百分比未知（真实下载刚起步 / 预览的不定态阶段）→ 走"游走"，别钉在 0% 干等
+    var indet = downloading && !downloaded && !(st && typeof st.percent === 'number');
+    var pct = st && typeof st.percent === 'number' ? st.percent : (downloaded ? 100 : 0);
+
+    ensureProgressAnimCss();
+
+    // 侧栏条：条 + 百分比文字
+    var side = document.getElementById('dsh-ext-dl');
+    if (side) {
+      side.style.display = downloading ? 'inline-flex' : 'none';
+      side.className = (indet ? 'indet ' : '') + (downloaded ? 'done' : '');
+      var sf = document.getElementById('dsh-ext-dl-fill');
+      if (sf) sf.style.width = pct + '%';
+      // 条上不放文字（见上）；状态文字统一由设置页那一行承担
+    }
+    // 设置页版本行那条：带文字
+    var box = document.getElementById('dsh-ext-update-progress');
+    if (box) {
+      box.style.display = downloading ? 'inline-flex' : 'none';
+      var bf = document.getElementById('dsh-ext-update-progress-fill');
+      if (bf) bf.style.width = pct + '%';
+      var bl = document.getElementById('dsh-ext-update-progress-label');
+      if (bl) bl.textContent = downloaded ? '已下载好，去安装' : '正在下载 ' + pct + '%';
+    }
+  }
+
+  function startUpdateProgressWatch() {
+    if (window.__dshExtUpdateWatch) return;
+    window.__dshExtUpdateWatch = true;
+    try {
+      if (window.dsh && window.dsh.onUpdateState) {
+        window.dsh.onUpdateState(function (st) {
+          // 兜底：万一注入时机没赶上（或侧栏后来才渲染出来），下载一开始就把条补上
+          maybeInjectSidebarProgress();
+          renderUpdateProgress(st);
+        });
+      }
+    } catch (e) { /* 订阅失败不影响其它功能 */ }
+  }
+
+  /* ---------- 观察设置页挂载 ---------- */
+  function maybeInject() {
+    maybeInjectShellVersion();
+    maybeInjectSidebarProgress();
+    startUpdateProgressWatch();
+    if (document.getElementById(NAV_PREFIX + 'pet')) return; // 本挂载周期已注入
+    var navList = findNavList();
+    if (navList) inject(navList);
+  }
+
+  // ⚠️ 2026-10-17：观察器回调必须 ①整体 try/catch（单次注入失败不能连累其它功能）
+  //    ②去抖（React 一次重渲染会产生几十条 mutation，逐条跑全量 querySelectorAll 又慢、
+  //    又更容易和 React 的 reconcile 抢时序 —— 账号菜单塌侧事故就发生在这一层）。
+  var injectTimer = null;
+  function safeMaybeInject() {
+    try {
+      maybeInject();
+    } catch (e) {
+      console.warn('[dsh-ext] 注入失败（已忽略，不影响其它功能）:', e && e.message);
+    }
+  }
+  var observer = new MutationObserver(function () {
+    if (injectTimer) return;
+    injectTimer = setTimeout(function () {
+      injectTimer = null;
+      safeMaybeInject();
+    }, 120);
+  });
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+  safeMaybeInject();
+
+  /* ---------- 外部 Key 联动 ----------
+   * DSH 模型区等任意位置填入 sk- 开头的 Key（失焦/回车）时，自动同步到用量面板，
+   * 让用量/余额查询也能用上（不依赖具体控件结构，按 sk- 前缀识别）。 */
+  if (!window.__dshExtKeySyncInstalled) {
+    window.__dshExtKeySyncInstalled = true;
+    var lastSyncedKey = null;
+    function trySyncExternalKey(target) {
+      if (!target || !window.dsh || typeof window.dsh.setApiKey !== 'function') return;
+      if (target.id === 'dsh-ext-u-key-input') return; // 自己的输入框由保存按钮处理
+      var v = String(target.value || '').trim();
+      if (/^sk-[A-Za-z0-9]{8,}/.test(v) && v !== lastSyncedKey) {
+        lastSyncedKey = v;
+        window.dsh.setApiKey(v);
+        if (typeof window.dsh.usageRefresh === 'function') window.dsh.usageRefresh();
+      }
+    }
+    document.addEventListener('change', function (e) { trySyncExternalKey(e.target); }, true);
+  }
+})();

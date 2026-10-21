@@ -119,46 +119,6 @@
     }).catch(function () {});
   }
 
-  // ── 氛围音（2026-10-21 加）：白噪音/粉红噪音/棕噪音，循环播放
-  var ambientAudio = null;
-  var ambientKind = 'off';
-  var ambientCache = {};
-
-  function stopAmbient() {
-    if (ambientAudio) { try { ambientAudio.pause(); } catch (e) {} ambientAudio = null; }
-  }
-
-  function playAmbient(kind) {
-    stopAmbient();
-    if (!kind || kind === 'off') return;
-    ambientKind = kind;
-    var start = function (uri) {
-      if (!uri || ambientKind !== kind) return;
-      try {
-        var a = new Audio(uri);
-        a.loop = true;
-        a.volume = 0.28;
-        a.play().catch(function () {});
-        ambientAudio = a;
-      } catch (e) {}
-    };
-    if (ambientCache[kind]) { start(ambientCache[kind]); return; }
-    window.dsh.petAmbientInfo(kind).then(function (uri) {
-      if (!uri) return;
-      ambientCache[kind] = uri;
-      start(uri);
-    }).catch(function () {});
-  }
-
-  function refreshAmbient() {
-    window.dsh.petAmbientGet().then(function (r) {
-      var k = (r && r.kind) || 'off';
-      if (k !== ambientKind || (k !== 'off' && !ambientAudio)) playAmbient(k);
-    }).catch(function () {});
-  }
-  refreshAmbient();
-  window.dsh.onPetAmbientChanged && window.dsh.onPetAmbientChanged(function (k) { playAmbient(k); });
-
   function refreshSoundEnabled() {
     window.dsh.petSoundGet().then(function (r) {
       soundEnabled = !!(r && r.enabled);
@@ -519,10 +479,6 @@
           return findByState(a);
         });
         if (show.length) setSpriteState(show[Math.floor(Math.random() * show.length)]);
-      }
-      // 除了纯装饰动作，单击也打开提问框（用户明确要"点鼠提问"）
-      if (window.dsh && window.dsh.petAskOpen) {
-        try { window.dsh.petAskOpen(); } catch (e) {}
       }
     } else if (hovered) {
       startHoverCycle();

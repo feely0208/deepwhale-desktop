@@ -135,35 +135,11 @@ export class PetWindow {
     console.log(`[pet] 当前宠物「${String(cur)}」不可用，已回落到「${fallback}」`);
   }
 
-  /** 氛围音文件目录（打包后在内置 assets/ambient；开发时同路径） */
-  private ambientDir(): string {
-    return path.join(__dirname, '../assets/ambient');
-  }
 
-  /** 读氛围音 data URI：white=白噪音 / pink=粉红噪音 / brown=棕噪音 */
-  ambientDataUri(kind: string): string | null {
-    // 2026-10-21 改：白噪音换成轻音乐（用户反馈"氛围音不是噪音，应该是轻音乐"）
-    const map: Record<string, string> = {
-      musicbox: 'musicbox.mp3',   // 音乐盒
-      harp: 'harp.mp3',           // 竖琴慢板
-      peaceful: 'peaceful.mp3',   // 平和
-    };
-    const file = map[kind];
-    if (!file) return null;
-    try {
-      const abs = path.join(this.ambientDir(), file);
-      if (!fs.existsSync(abs)) return null;
-      return 'data:audio/mpeg;base64,' + fs.readFileSync(abs).toString('base64');
-    } catch { return null; }
-  }
 
-  /** 氛围音变化时通知宠物窗口 */
-  pushAmbientSetting(): void {
-    const w = this.window;
-    if (w && !w.isDestroyed()) {
-      w.webContents.send('pet:ambient-changed', String(this.store.get('petAmbient') ?? 'off'));
-    }
-  }
+
+
+
 
   /** 音效开关变化时通知宠物窗口 */
   pushSoundSetting(): void {
@@ -555,64 +531,6 @@ export class PetWindow {
     return 'file://' + path.join(this.userPetsDir(), name).replace(/ /g, '%20');
   }
 
-  /** 「问它一句」小窗口（2026-10-21） */
-  private askWin: BrowserWindow | null = null;
-
-  openAskWindow(): void {
-    if (this.askWin && !this.askWin.isDestroyed()) {
-      this.askWin.show();
-      this.askWin.focus();
-      return;
-    }
-    // 贴着宠物弹出（不是在屏幕中间蹦一个白框）
-    const W = 440, H = 220, GAP = 10;
-    const pb = this.window?.getBounds();
-    let x: number | undefined, y: number | undefined;
-    if (pb) {
-      const disp = screen.getDisplayMatching(pb);
-      const wa = disp.workArea;
-      // 2026-10-21 改：放宠物**右侧**，且右侧放不下就放左侧 ——
-      // 之前放正下方，虽然算下来不重叠，但用户仍反馈"点了就隐身"，
-      // 改成明确不重叠的侧边布局，并保证整窗可见。
-      y = Math.round(pb.y + pb.height / 2 - H / 2);
-      x = pb.x + pb.width + GAP;
-      if (x + W > wa.x + wa.width) x = pb.x - W - GAP;          // 右侧放不下 → 左侧
-      x = Math.max(wa.x + 8, Math.min(x, wa.x + wa.width - W - 8));
-      y = Math.max(wa.y + 8, Math.min(y, wa.y + wa.height - H - 8));
-    }
-
-    console.log(`[ask] 宠物窗口 ${pb ? `${pb.x},${pb.y} ${pb.width}x${pb.height}` : '未知'} → 输入框 ${x},${y} ${W}x${H}`);
-    this.askWin = new BrowserWindow({
-      width: W,
-      height: H,
-      x,
-      y,
-      resizable: false,
-      minimizable: false,
-      maximizable: false,
-      fullscreenable: false,
-      frame: false,
-      transparent: true,
-      hasShadow: true,
-      roundedCorners: true,
-      alwaysOnTop: false,   // 不置顶：之前 true 会抢层级压住宠物（用户反馈"点了就隐身"）
-      skipTaskbar: true,
-      webPreferences: {
-        preload: path.join(__dirname, '../preload/preload.js'),
-        // 必须 true：preload 用 contextBridge.exposeInMainWorld 暴露 API，
-        // false 会让 contextBridge 失效 → window.dsh undefined（2026-10-21 踩过）
-        contextIsolation: true,
-        nodeIntegration: false,
-      },
-    });
-    void this.askWin.loadFile(path.join(__dirname, '../ask/ask.html'));
-    this.askWin.on('closed', () => { this.askWin = null; });
-  }
-
-  closeAskWindow(): void {
-    if (this.askWin && !this.askWin.isDestroyed()) this.askWin.close();
-  }
-
   private showContextMenu(): void {
     const pets = this.listPets();
     const current = this.store.get('petGif');
@@ -629,24 +547,8 @@ export class PetWindow {
       })
     );
 
-    // 氛围音（2026-10-21）：白噪音/粉红噪音/棕噪音，循环播放，帮用户专注
-    const ambient = String(this.store.get('petAmbient') ?? 'off');
-    const ambientItem = (label: string, kind: string): MenuItemConstructorOptions => ({
-      label,
-      type: 'radio',
-      checked: ambient === kind,
-      click: () => {
-        this.store.set('petAmbient', kind);
-        this.pushAmbientSetting();
-      },
-    });
-
     const template: MenuItemConstructorOptions[] = [
-      { label: '问它一句…', click: () => this.openAskWindow() },
       { label: '宠物皮肤', submenu: petItems },
-      // 2026-10-21 临时下线：用户反馈合成的音乐"像噪音"。
-      // 功能代码保留（petAmbientSet / playAmbient），等拿到合适的轻音乐素材再开。
-      { label: '停止氛围音', click: () => { this.store.set('petAmbient', 'off'); this.pushAmbientSetting(); }, visible: !!String(this.store.get('petAmbient') ?? 'off').match(/^(white|pink|brown|musicbox|harp|peaceful)$/) },
       { type: 'separator' },
       {
         label: '穿透点击',

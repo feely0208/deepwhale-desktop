@@ -1,0 +1,266 @@
+import { app, Menu, MenuItemConstructorOptions, Tray, nativeImage } from 'electron';
+import * as path from 'path';
+
+export interface TrayMenuActions {
+  showMainWindow: () => void;
+  onQuit: () => void;
+  onOpenCustomCss: () => void;
+  onSetApiKey: () => void;
+  onToggleUsagePanel: (visible: boolean) => void;
+  onRefreshUsage: () => void;
+  /** 打开设置（Cmd+,）：聚焦主窗口并打开 DSH 设置页 */
+  onOpenSettings?: () => void;
+  /**
+   * 重新加载主窗口的界面（视图菜单，⇧⌘R）。
+   *
+   * 为什么是**显式回调**而不是 `role: 'reload'`：role 会带上它自己的默认快捷键 ⌘R，
+   * 而 **⌘R 已经被官方占了** —— `@deepseek-ai/dsh-client-ui-sidebar-right` 的
+   * 「刷新当前页面」(`page.refresh`) 在 desktop 上绑的就是 `KeyR + primary`。
+   * 菜单快捷键会**吞掉按键、不再传给页面**，用 ⌘R 就等于把右侧栏的刷新功能抢掉。
+   * 显式写 accelerator（⇧⌘R）不留这个隐患，行为也一眼看得懂。
+   */
+  reloadMainWindow?: () => void;
+  /** 打开宠物目录 */
+  onOpenPetsFolder?: () => void;
+  /** 手动检查更新（有结果会如实告知，含"已是最新"与失败原因） */
+  onCheckUpdate?: () => void;
+  /**
+   * 预览侧栏下载进度条（假数据，不下载不安装）——**开发/测试用**。
+   * 用户实测反馈：「这个怎么能体现在帮助菜单呢，这是我们测试时的东西」→
+   * 默认不进用户菜单，仅当 `DSH_DEV_MENU=1`（开发态自动为真）时才加。
+   */
+  onPreviewUpdateProgress?: () => void;
+  /** 打开「本版更新内容」窗口（用户要求：放帮助菜单里，别塞设置页） */
+  onShowWhatsNew?: () => void;
+  /** 打开「本机内文件」（任何会话都能用；与 ⌘⇧O 同一动作） */
+  onOpenLocalFiles?: () => void;
+  /** 诊断与关于：版本/更新状态/日志路径，一键复制或打开日志（用户反馈问题时能直接给全信息） */
+  onShowDiagnostics?: () => void;
+  /** 「本机内文件」快捷键的当前值（用于菜单单选态） */
+  localFilesShortcut?: string;
+  /** 是否显示开发/测试用菜单项（默认否；DSH_DEV_MENU=1 或开发态为真） */
+  showDevMenu?: boolean;
+  /** 改「本机内文件」快捷键（用户实测 Cmd+Shift+O 与系统冲突） */
+  onPickLocalFilesShortcut?: (spec: string) => void;
+  /** 手机连接：显示「用手机打开」的地址（地址里已带 token，用户不用手打） */
+  onMobileConnect?: () => void;
+  /** 皮肤子菜单（主题/背景图片，由调用方构建） */
+  skinSubmenu: MenuItemConstructorOptions[];
+  /** 宠物子菜单（含显示/隐藏） */
+  petSubmenu: MenuItemConstructorOptions[];
+  /** 用量面板当前可见状态 */
+  usagePanelVisible: boolean;
+}
+
+/**
+ * 托盘右键菜单（紧凑形态）。
+ */
+export function buildMenuTemplate(a: TrayMenuActions): MenuItemConstructorOptions[] {
+  return [
+    { label: '显示主窗口', click: () => a.showMainWindow() },
+    { type: 'separator' },
+    { label: '皮肤', submenu: a.skinSubmenu },
+    { label: '宠物', submenu: a.petSubmenu },
+    { type: 'separator' },
+    {
+      label: '用量面板',
+      type: 'checkbox',
+      checked: a.usagePanelVisible,
+      click: (item) => a.onToggleUsagePanel(item.checked),
+    },
+    { label: '立即刷新余额', click: () => a.onRefreshUsage() },
+    { label: '设置 API Key…', click: () => a.onSetApiKey() },
+    { label: '自定义 CSS…', click: () => a.onOpenCustomCss() },
+    { label: '本机内文件…', click: () => a.onOpenLocalFiles?.() },
+    { label: '诊断与关于…', click: () => a.onShowDiagnostics?.() },
+    { label: '手机连接…', click: () => a.onMobileConnect?.() },
+    { type: 'separator' },
+    // ⚠️ 2026-10-15（用户实测）：**托盘菜单过去没有这一项**。Windows/Linux 的应用菜单被
+    //    `autoHideMenuBar: true` 藏着（要按 Alt 才出），托盘右键是用户唯一够得着的地方 ——
+    //    缺了它，win 版用户"找不到本版更新内容"。放在「检查更新」旁边，语义相邻。
+    { label: '本版更新内容…', click: () => a.onShowWhatsNew?.() },
+    { label: '检查更新…', click: () => a.onCheckUpdate?.() },
+    // 进度条只在"正在下载更新"时出现 —— 升到最新版后用户根本没机会看它长什么样。
+    // 这一项让用户随时能预览（走同一条 shell:update-state 通路，纯假数据）。
+    ...(a.showDevMenu ? [{ label: '预览更新进度条（测试）', click: () => a.onPreviewUpdateProgress?.() }] : []),
+    { type: 'separator' },
+    { label: '退出', click: () => a.onQuit() },
+  ];
+}
+
+/**
+ * 应用菜单（macOS 顶栏 / Windows·Linux 窗口菜单栏）：
+ * 遵循 macOS 菜单惯例——应用菜单（关于/设置… Cmd+,/服务/隐藏/退出）、
+ * 文件、编辑（复制粘贴）、窗口（最小化/前置）、帮助，再并上本应用功能菜单。
+ */
+export function buildAppMenuTemplate(a: TrayMenuActions): MenuItemConstructorOptions[] {
+  const isMac = process.platform === 'darwin';
+  return [
+    // macOS 应用菜单（以应用名为标题，含关于/设置…/服务/隐藏/退出）
+    ...(isMac
+      ? ([
+          {
+            label: app.name,
+            // ⚠️ role 只给行为与快捷键，**标签要自己写** ——
+            // 只写 role 不写 label，Electron 显示它内置的英文标签
+            // （About / Services / Hide / Quit…），于是出现「顶级是中文、
+            // 子项是英文」的割裂。每个 role 都配上中文 label。
+            submenu: [
+              { role: 'about' as const, label: '关于 ' + app.name },
+              { type: 'separator' as const },
+              { label: '设置…', accelerator: 'CmdOrCtrl+,', click: () => a.onOpenSettings?.() },
+              { type: 'separator' as const },
+              { role: 'services' as const, label: '服务' },
+              { type: 'separator' as const },
+              { role: 'hide' as const, label: '隐藏 ' + app.name },
+              { role: 'hideOthers' as const, label: '隐藏其他' },
+              { role: 'unhide' as const, label: '全部显示' },
+              { type: 'separator' as const },
+              { role: 'quit' as const, label: '退出 ' + app.name },
+            ],
+          },
+        ] as MenuItemConstructorOptions[])
+      : []),
+    {
+      label: '文件',
+      submenu: [
+        { label: '显示主窗口', click: () => a.showMainWindow() },
+        { type: 'separator' },
+        ...(isMac
+          ? ([{ role: 'close' as const, label: '关闭窗口' }] as MenuItemConstructorOptions[])
+          : [{ role: 'quit' as const, label: '退出' }]),
+      ],
+    },
+    {
+      label: '编辑',
+      submenu: [
+        { role: 'undo' as const, label: '撤销' },
+        { role: 'redo' as const, label: '重做' },
+        { type: 'separator' as const },
+        { role: 'cut' as const, label: '剪切' },
+        { role: 'copy' as const, label: '复制' },
+        { role: 'paste' as const, label: '粘贴' },
+        { role: 'selectAll' as const, label: '全选' },
+      ],
+    },
+    // 「视图」菜单（2026-10-07 加）：**这个菜单以前不存在，于是 Cmd+R 是被吞掉的**。
+    //
+    // 踩到的场景：改了 DSH 插件（深鲸画布面板），让用户"刷新一下看看" —— 用户按了
+    // Cmd+R，界面纹丝不动，于是变成"我改了、你刷新了、界面没变"的扯皮。
+    // 原因很简单：macOS 的快捷键来自应用菜单，而我们的菜单里从来没有 reload 角色，
+    // 浏览器窗口的默认重载也就没绑上。
+    //
+    // ⚠️ **故意用 ⇧⌘R 而不是 ⌘R**：⌘R 已经被官方占了 —— 官方右侧栏的
+    // 「刷新当前页面」(`page.refresh`，见 `@deepseek-ai/dsh-client-ui-sidebar-right`)
+    // 在 desktop 上绑的就是 `KeyR + primary`。菜单快捷键会吞掉按键、不再传给页面，
+    // 用 ⌘R 就等于把这个既有功能抢掉。⇧⌘R 全库无占用（已逐包核对），
+    // 而且它本来就是浏览器里"重新加载"的通用手势。
+    //
+    // 只放"重新加载"这一件事，而且只有一项：`role: 'forceReload'` 的默认快捷键
+    // 也是 ⇧⌘R，会跟上面这条撞，所以不提供。
+    // 开发者工具故意不放（普通用户不需要，误开还会吓一跳）。
+    {
+      label: '视图',
+      submenu: [
+        {
+          label: '重新加载界面',
+          accelerator: 'Shift+CmdOrCtrl+R',
+          click: () => a.reloadMainWindow?.(),
+        },
+      ],
+    },
+    { label: '皮肤', submenu: a.skinSubmenu },
+    { label: '宠物', submenu: a.petSubmenu },
+    {
+      label: '用量',
+      submenu: [
+        {
+          label: '用量面板',
+          type: 'checkbox',
+          checked: a.usagePanelVisible,
+          click: (item) => a.onToggleUsagePanel(item.checked),
+        },
+        { label: '立即刷新余额', click: () => a.onRefreshUsage() },
+        { label: '设置 API Key…', click: () => a.onSetApiKey() },
+      ],
+    },
+    {
+      label: '窗口',
+      submenu: [
+        { role: 'minimize' as const, label: '最小化' },
+        { role: 'zoom' as const, label: '缩放' },
+        { type: 'separator' as const },
+        { role: 'front' as const, label: '前置全部窗口' },
+      ],
+    },
+    {
+      label: '帮助',
+      submenu: [
+        // 用户要求（2026-10-04）：「更新内容在设置页面就不要显示了，增加一个选项按钮在帮助里面」
+        { label: '本版更新内容…', click: () => a.onShowWhatsNew?.() },
+        { label: '本机内文件…', click: () => a.onOpenLocalFiles?.() },
+        { label: '诊断与关于…', click: () => a.onShowDiagnostics?.() },
+        {
+          label: '本机内文件快捷键',
+          submenu: [
+            { label: '⌥⌘O（默认，推荐）', type: 'radio' as const, checked: (a.localFilesShortcut || 'Alt+Cmd+O') === 'Alt+Cmd+O', click: () => a.onPickLocalFilesShortcut?.('Alt+Cmd+O') },
+            { label: '⌥F（备选）', type: 'radio' as const, checked: a.localFilesShortcut === 'Alt+F', click: () => a.onPickLocalFilesShortcut?.('Alt+F') },
+            { label: '⌃⌥O（备选）', type: 'radio' as const, checked: a.localFilesShortcut === 'Ctrl+Alt+O', click: () => a.onPickLocalFilesShortcut?.('Ctrl+Alt+O') },
+            { type: 'separator' as const },
+            { label: '关闭快捷键', type: 'radio' as const, checked: a.localFilesShortcut === 'off', click: () => a.onPickLocalFilesShortcut?.('off') },
+          ],
+        },
+        { type: 'separator' as const },
+        { label: '打开宠物目录…', click: () => a.onOpenPetsFolder?.() },
+        { label: '打开自定义 CSS…', click: () => a.onOpenCustomCss() },
+        { type: 'separator' as const },
+        { label: '手机连接…', click: () => a.onMobileConnect?.() },
+        { label: '检查更新…', click: () => a.onCheckUpdate?.() },
+        ...(a.showDevMenu ? [{ label: '预览更新进度条（测试）', click: () => a.onPreviewUpdateProgress?.() }] : []),
+      ],
+    },
+  ];
+}
+
+/** 创建托盘 */
+export function createTray(actions: TrayMenuActions): Tray {
+  // 2026-10-03 修：托盘图标**绝不允许为空**。
+  //
+  // 旧写法是 `new Tray(icon.isEmpty() ? nativeImage.createEmpty() : icon)` ——
+  // 图片一旦加载失败就退化成空图，而空图在 Windows 上表现为
+  // 「托盘里看不见、但进程确实在」：用户既点不到「检查更新…」也点不到「退出」，
+  // 关窗口又是最小化到托盘，于是彻底无路可走（有 Windows 用户实测反馈，
+  // 还导致新安装包装不进去 —— 因为旧进程退不出来）。
+  //
+  // 现在按优先级回退，只要有一张能看见的图就绝不空着。
+  const candidates = [
+    path.join(__dirname, '../assets/icons/tray.png'),
+    path.join(__dirname, '../assets/icons/icon.png'),
+    path.join(__dirname, '../assets/icons/icon.ico'),
+    path.join(process.resourcesPath || '', 'icon.ico'),
+  ];
+  let icon = nativeImage.createEmpty();
+  for (const candidate of candidates) {
+    try {
+      const img = nativeImage.createFromPath(candidate);
+      if (!img.isEmpty()) {
+        icon = img;
+        break;
+      }
+    } catch {
+      /* 试下一个 */
+    }
+  }
+  // 模板图只对 macOS 有意义（让图标自适应菜单栏浅/深色）；Windows 上是无操作。
+  if (process.platform === 'darwin') icon.setTemplateImage(true);
+  const tray = new Tray(icon);
+  tray.setToolTip('DeepWhale Desktop');
+  applyMenu(tray, actions);
+  tray.on('double-click', () => actions.showMainWindow());
+  return tray;
+}
+
+/** 重建托盘菜单（皮肤/宠物/用量状态变化后调用） */
+export function applyMenu(tray: Tray, actions: TrayMenuActions): void {
+  tray.setContextMenu(Menu.buildFromTemplate(buildMenuTemplate(actions)));
+}

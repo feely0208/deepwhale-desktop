@@ -1,0 +1,685 @@
+import * as fs from 'fs';
+import { profileDirOf } from './profile';
+import * as path from 'path';
+import { DEV_REPO_ROOT } from './dsh-runtime';
+
+/** 插件包名（行 id 与此不同，行 id 是 `ui-legal-mode`）。 */
+const PLUGIN_NAME = '@deepseek-ai/dsh-client-ui-legal-mode';
+/** loader 行 id：注入到 profile patch 里的条目 id。 */
+const PLUGIN_ROW_ID = 'ui-legal-mode';
+/** 预设 id：DSH 侧 `agentPresets` 用它判定"是否法律模式"，必须与插件约定一致。 */
+const PRESET_ID = 'legal-mode';
+
+/** 注入结果。 */
+export interface LegalModeSetupResult {
+  /** 本次是否写盘（首次启动或载荷更新时为 true）。 */
+  changed: boolean;
+  /**
+   * profile 目录尚未由 DSH 创建（首次启动）：本轮注入只能落下插件与预设，
+   * 调用方需在 DSH 就绪后再跑一次，并让窗口重载以拿到新的客户端入口图。
+   */
+  profilePending: boolean;
+}
+
+/** 本应用专属的 DSH home（与用户自己的 ~/.dsh 隔离，互不影响）。 */
+export function legalModeHome(userDataDir: string): string {
+  return path.join(userDataDir, 'dsh-home');
+}
+
+/** 随包载荷目录：打包后在 `Resources/legal-mode`，开发态在仓库根 `legal-mode`。 */
+export function legalModePayloadDir(isPackaged: boolean, appPath: string, resourcesPath: string): string {
+  if (isPackaged) return path.join(resourcesPath, 'legal-mode');
+  // 开发态：app.getAppPath() 在 `electron dist/main/index.js` 下是入口脚本所在目录，
+  // 不是仓库根（见 dsh-runtime.ts 的 DEV_REPO_ROOT 说明），所以按存在性依次探测。
+  for (const root of [appPath, DEV_REPO_ROOT, process.cwd()]) {
+    const candidate = path.join(root, 'legal-mode');
+    try {
+      if (fs.existsSync(candidate)) return candidate;
+    } catch {
+      // 目录不可读：继续下一个候选
+    }
+  }
+  return path.join(appPath, 'legal-mode');
+}
+
+/** 迁移标记文件：存在即表示已迁移过，避免重复搬运。 */
+const MIGRATION_MARKER = '.migrated-from-legacy-home';
+/** 迁移时要从旧 home 带过来的条目（不含 profiles：它由 DSH 按当前版本重建）。 */
+const MIGRATED_ENTRIES = [
+  'sessions',
+  'storages',
+  'attachments',
+  'llm-deepseek',
+  '.agent-presets',
+  'settings.yaml',
+  '.credentials.yaml',
+  '.anonymous-user-id',
+];
+
+/** 会话目录里是否有真实会话（递归一层，DSH 按 workspace 分目录存放）。 */
+function hasSessions(home: string): boolean {
+  const sessions = path.join(home, 'sessions');
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(sessions, { withFileTypes: true });
+  } catch {
+    return false;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    try {
+      if (fs.readdirSync(path.join(sessions, entry.name)).length > 0) return true;
+    } catch {
+      // 子目录不可读：跳过，继续看下一个
+    }
+  }
+  return false;
+}
+
+/** 判断一个 home 是否已有用户数据（以会话为准）。 */
+function homeHasUserData(home: string): boolean {
+  return hasSessions(home);
+}
+
+/**
+ * 把旧 home 的会话目录合并进目标 home。
+ *
+ * 不能像其他条目那样"目标已存在就跳过"：DSH 首次启动会先把 `sessions/` 建出来（空目录），
+ * 若按目录粒度跳过，历史会话会全部漏掉。这里按 workspace 子目录合并：
+ * 目标已有同名 workspace 就保留目标自己的，只补目标缺的。
+ *
+ * @param from - 旧 home 的 sessions 目录。
+ * @param to - 目标 home 的 sessions 目录。
+ * @returns 是否写入了任何内容。
+ */
+function mergeSessionsDir(from: string, to: string): boolean {
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(from, { withFileTypes: true });
+  } catch {
+    return false;
+  }
+  let merged = false;
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const src = path.join(from, entry.name);
+    const dest = path.join(to, entry.name);
+    try {
+      // 目标已有同名 workspace：保留目标自己的，不合并内部文件（避免半覆盖出乱状态）
+      if (fs.existsSync(dest)) continue;
+      fs.mkdirSync(to, { recursive: true });
+      fs.cpSync(src, dest, { recursive: true });
+      merged = true;
+    } catch (error) {
+      console.error(`[legal-mode] 迁移会话 ${entry.name} 失败（跳过）:`, error);
+    }
+  }
+  return merged;
+}
+
+/**
+ * 一次性把旧的外部 DSH home 搬进本应用的 userData home。
+ *
+ * 背景：早期版本的壳把 DSH_HOME 指向 `~/.deepwhale-legal/dsh-home`（由
+ * settings.json 的 command 脚本自己设置）；v1.0.13 起改用随包运行时后，壳一律用
+ * `<userData>/dsh-home`。如果不迁移，老用户升级后会看到**全新空白 workspace**，
+ * 会话全部"消失"（数据其实还在旧目录里）。
+ *
+ * 判据只看**会话**：目标 home 里没有任何会话、且旧 home 确实有会话时，才搬一次并落标记。
+ * 之所以不以"整个 home 为空"为判据，是因为 DSH 首次启动可能已经在目标 home 里写了
+ * 凭据/设置，那样会导致明明有历史会话却不迁移。
+ *
+ * 已存在的条目一律不覆盖（尤其凭据：目标已有就保留目标自己的）。
+ * 搬运是复制而非移动，旧目录原样保留，出错也不至于丢数据。
+ *
+ * @param home - 目标 home（本应用 userData 下的 dsh-home）。
+ * @param legacyHomes - 候选旧 home，按优先级排列。
+ * @returns 是否执行了迁移。
+ */
+/**
+ * 递归合并目录：**只补目标里没有的文件，不覆盖已有的**。
+ *
+ * ── 为什么需要（2026-09-30 的事故）────────────────────────────
+ * 原来的逻辑是"目标已存在就整个目录跳过"：
+ *     if (!fs.existsSync(from) || fs.existsSync(to)) continue;
+ * 而 `attachments` 明明在迁移清单里，新 home **第一次启动时就建了空的 attachments/**，
+ * 于是整目录被跳过 —— 旧 home 里 44 个图片对象一个都没搬过去。
+ * 后果：会话里引用这些图片时文件找不到，解析失败，DSH 把这类异常统一包成
+ *       `TRANSPORT`（"DeepSeek Messages transport failed"）——
+ *       看起来像网络问题，其实是**附件没搬过来**。
+ *
+ * 目录粒度"存在就跳过"在**增量**场景下永远是错的（DSH 会自己先建空目录）。
+ * 所以这里逐文件判断：缺哪个补哪个。
+ */
+function mergeDirTree(from: string, to: string): boolean {
+  let merged = false;
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(from, { withFileTypes: true });
+  } catch {
+    return false;
+  }
+  for (const entry of entries) {
+    const src = path.join(from, entry.name);
+    const dst = path.join(to, entry.name);
+    if (entry.isDirectory()) {
+      if (mergeDirTree(src, dst)) merged = true;
+      continue;
+    }
+    if (entry.isSymbolicLink()) continue;
+    try {
+      if (fs.existsSync(dst)) continue;   // 已有的不动（避免半覆盖出乱状态）
+      fs.mkdirSync(to, { recursive: true });
+      fs.copyFileSync(src, dst);
+      merged = true;
+    } catch {
+      // 单个文件失败不影响整体
+    }
+  }
+  return merged;
+}
+
+export function migrateLegacyHomeOnce(home: string, legacyHomes: string[]): boolean {
+  // 2026-10-05：宣传/演示截图用的临时实例**不要迁移旧 home** ——
+  // 迁移会把真实会话与工作区复制进来（截图里就会出现真实会话名，属隐私事故）。
+  if (process.env.DSH_PROMO_SHOTS === '1') return false;
+  if (fs.existsSync(path.join(home, MIGRATION_MARKER))) return false;
+  if (hasSessions(home)) return false;
+  const source = legacyHomes.find((dir) => dir !== home && hasSessions(dir));
+  if (!source) return false;
+
+  fs.mkdirSync(home, { recursive: true });
+  let copied = 0;
+  // 会话单独走合并逻辑（见 mergeSessionsDir）：DSH 会先把 sessions/ 建成空目录，
+  // 按目录粒度"已存在就跳过"会把历史会话全漏掉。
+  if (mergeSessionsDir(path.join(source, 'sessions'), path.join(home, 'sessions'))) {
+    copied += 1;
+  }
+  for (const name of MIGRATED_ENTRIES) {
+    if (name === 'sessions') continue;
+    const from = path.join(source, name);
+    const to = path.join(home, name);
+    try {
+      if (!fs.existsSync(from)) continue;
+      const stat = fs.statSync(from);
+      if (stat.isDirectory()) {
+        // ⚠️ 目录**不能**"目标存在就跳过" —— DSH 启动时会先建空目录，
+        //    一跳过就永远补不进来（attachments 就是这么丢了 44 个对象的）。
+        if (mergeDirTree(from, to)) copied += 1;
+      } else {
+        if (fs.existsSync(to)) continue;   // 文件：目标已有就保留目标的（尤其凭据）
+        fs.mkdirSync(path.dirname(to), { recursive: true });
+        fs.copyFileSync(from, to);
+        copied += 1;
+      }
+    } catch (error) {
+      console.error(`[legal-mode] 迁移 ${name} 失败（跳过该项）:`, error);
+    }
+  }
+  try {
+    fs.writeFileSync(path.join(home, MIGRATION_MARKER), `migrated from ${source}\n`);
+  } catch (error) {
+    console.error('[legal-mode] 写迁移标记失败:', error);
+  }
+  console.log(`[legal-mode] 已从旧 home 迁移 ${copied} 项数据: ${source} -> ${home}`);
+  return true;
+}
+
+function readText(file: string): string | null {
+  try {
+    return fs.readFileSync(file, 'utf8');
+  } catch {
+    return null;
+  }
+}
+
+function sameFile(left: string, right: string): boolean {
+  try {
+    return fs.readFileSync(left).equals(fs.readFileSync(right));
+  } catch {
+    return false;
+  }
+}
+
+/** 需要时复制文件/目录，内容一致则不动（幂等，避免每次启动都写盘）。 */
+function copyIfChanged(src: string, dest: string): boolean {
+  if (fs.existsSync(dest) && sameFile(src, dest)) return false;
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  fs.copyFileSync(src, dest);
+  return true;
+}
+
+/** 递归复制目录（载荷很小，直接整目录比对）。 */
+function copyTreeIfChanged(srcDir: string, destDir: string): boolean {
+  if (!fs.existsSync(srcDir)) return false;
+  let changed = false;
+  for (const entry of fs.readdirSync(srcDir, { withFileTypes: true })) {    const src = path.join(srcDir, entry.name);
+    const dest = path.join(destDir, entry.name);
+    if (entry.isDirectory()) changed = copyTreeIfChanged(src, dest) || changed;
+    else if (entry.isFile()) changed = copyIfChanged(src, dest) || changed;
+  }
+  return changed;
+}
+
+/**
+ * 让 profile 的 patch 层包含本插件的 loader 行。
+ *
+ * 文件是 `$DSH_HOME/profiles/web/cordis.patch.yml`：DSH 生成的是注释 + `[]`，
+ * 用户也可能自己写过条目。只做两件事：已含本行则原样返回；否则在保留原有内容
+ * （含注释）的前提下追加一个 `- insert:` 块。
+ */
+/**
+ * 把「我们自己插的」insert 块从 patch 文件里删掉。
+ *
+ * ── 为什么要有这个删除 ──────────────────────────────────────────────
+ * 这些行原来在 **home 级**和 **profile 级**各写一份，注释里当时的说法是
+ * "重复是安全的（实测只挂载一次）"。但那是旧 DSH 上的实测，而且忽略了一件事：
+ * **profile 级那个 patch 是 DSH 自己的地盘** —— 用户在界面里改主题/聊天显示等
+ * 设置时 DSH 会重写它（文件底部那些 `- id: ui-theme` / `ui-chat` 就是 DSH 写的），
+ * 并且会把我们插的块**重新排版**（office 块里的长字符串被折成多行就是证据）。
+ * 同一个 id 在两层各声明一次，等于让 DSH 的配置装载去合并两份重复输入 ——
+ * 而 home 级那一份才是真正生效的那份（见上方说明）。
+ *
+ * 只删我们自己插的块：按顶层 `- ` 划块，块内既有 `- insert:`、id 又命中才删。
+ * DSH 自己写的条目（`- id: ui-theme` 这种）不会被误伤。
+ * 紧邻在上面的注释（我们自己写的段标题）一并清掉；但**文件开头的说明注释不动**
+ * —— 那是 DSH 写的头部，判断办法是"它前面没有非注释内容"。
+ *
+ * @returns 是否真的改动了文件
+ */
+export function removeOurInsertBlocks(file: string, ids: string[]): boolean {
+  const current = readText(file);
+  if (current === null || current.trim() === '') return false;
+  const lines = current.split('\n');
+  const kept: string[] = [];
+  let removed = false;
+  let i = 0;
+  while (i < lines.length) {
+    if (/^- /.test(lines[i])) {
+      const block: string[] = [];
+      while (i < lines.length && (block.length === 0 || !/^- /.test(lines[i]))) {
+        block.push(lines[i]);
+        i += 1;
+      }
+      const text = block.join('\n');
+      const hit =
+        text.includes('- insert:') &&
+        ids.some((id) => new RegExp(`^\\s+- id:\\s*${id}\\s*$`, 'm').test(text));
+      if (hit) {
+        removed = true;
+        // 顺带清掉紧邻在上面的注释行（我们自己的段标题）。
+        // 仅当 already-kept 里存在非注释内容时才清 —— 否则会把 DSH 的文件头注释删掉。
+        const hasBody = (): boolean =>
+          kept.some((l) => l.trim() !== '' && !l.trim().startsWith('#'));
+        while (
+          hasBody() &&
+          kept.length > 0 &&
+          kept[kept.length - 1].trim().startsWith('#')
+        ) {
+          kept.pop();
+        }
+        // 压掉因此产生的重复空行
+        while (
+          kept.length >= 2 &&
+          kept[kept.length - 1].trim() === '' &&
+          kept[kept.length - 2].trim() === ''
+        ) {
+          kept.pop();
+        }
+      } else {
+        kept.push(...block);
+      }
+    } else {
+      kept.push(lines[i]);
+      i += 1;
+    }
+  }
+  if (!removed) return false;
+  writeFileAtomic(file, kept.join('\n'));   // 原子写：见 writeFileAtomic 的说明
+  return true;
+}
+
+/**
+ * 原子写：先写临时文件，再 rename 覆盖。
+ *
+ * 直接 `writeFileSync` 是「先截断、再写」——中途被打断（进程被杀 / 断电 /
+ * **Windows 杀软过滤驱动**）就会留下半截或带空洞（NUL 字节）的文件。
+ * 而这些 patch 文件一旦坏，DSH 启动时就解析不了、**整个应用打不开**（见下面的实测）。
+ */
+export function writeFileAtomic(file: string, text: string): void {
+  const tmp = `${file}.tmp-${process.pid}`;
+  fs.writeFileSync(tmp, text);
+  fs.renameSync(tmp, file); // 同盘 rename = 原子替换（Windows 上覆盖已存在文件也 OK）
+}
+
+/**
+ * 去掉 BOM、注释行、空行后，第一个有效字符必须是 `-`（块序列）或 `[`（流序列）。
+ * DSH 的 parsePatchList 要求这些 patch 的**顶层是 YAML 数组**，不是就报错。
+ */
+function patchLooksLikeArray(text: string): boolean {
+  for (const raw of text.replace(/^\uFEFF/, '').split('\n')) {
+    const line = raw.trim();
+    if (line === '' || line.startsWith('#')) continue;
+    if (line === '---') continue;
+    return line.startsWith('-') || line.startsWith('[');
+  }
+  return false; // 全是注释/空行 → DSH 会报 "must be a top-level YAML array"，同样算坏
+}
+
+/**
+ * patch 文件体检 + 自愈（2026-10-02）。
+ *
+ * ── 为什么必须有这段 ──────────────────────────────────────────────
+ * 一个真实用户（Windows）的实测：更新到 1.0.37 后，第二天早上打不开，
+ * 界面只有「重试/查看日志/打开设置/退出」，报错是
+ *
+ *   dsh: failed to parse overlay
+ *     C:\Users\...\AppData\Roaming\DeepWhale Desktop\dsh-home\profiles\deepwhale\cordis.patch.yml:
+ *   YAMLException: null byte is not allowed in input (1:1)
+ *
+ * 也就是那个文件**开头多了一个 NUL 字节** —— 文件被写坏了。
+ * 而这个文件是**两个进程都在写**的（壳写 home 级、DSH 写 profile 级），
+ * 叠加 Windows 上的杀软过滤驱动，写坏在现实里是会发生的事。
+ * 后果极重：**应用从此再也起不来**，而用户是小白，完全无从下手。
+ *
+ * 所以壳必须在**拉起 DSH 之前**先体检这些文件，坏了就修好 ——
+ * 宁可丢掉一个本来就无法解析的文件，也不能让应用打不开。
+ *
+ * 修法：先把坏文件**改名备份**成 `.bad-<时间戳>`（万一里头还有用户配置，
+ * 人工还能找回），再写一个合法的空数组 `[]`，DSH 会在它基础上重建自己的内容。
+ *
+ * @returns 是否真的修了（用于判断"本轮有改动、需要重载窗口"）
+ */
+export function repairPatchFileIfBroken(file: string): boolean {
+  let buf: Buffer;
+  try {
+    buf = fs.readFileSync(file);
+  } catch {
+    return false; // 不存在 / 读不到：不是这里要处理的情形（DSH 会自己创建）
+  }
+  const text = buf.toString('utf8');
+  // 含 NUL 字节、出现替换字符（非法 UTF-8）、或去掉注释空行后不是数组 → 一律判坏
+  const broken = buf.includes(0) || text.includes('\uFFFD') || !patchLooksLikeArray(text);
+  if (!broken) return false;
+
+  const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 15);
+  try {
+    fs.renameSync(file, `${file}.bad-${stamp}`);
+  } catch {
+    /* 备份失败也要继续修 —— 让应用能起来优先 */
+  }
+  writeFileAtomic(file, '[]\n');
+  return true;
+}
+
+function ensurePatchRow(file: string): boolean {
+  // 文件不存在时**按空文件处理并创建**。
+  //
+  // 原来这里是 `if (current === null) return false;` —— 对 profile 级够用（那个文件
+  // 由 DSH 创建），但 home 级 patch 是**壳自己创建**的，不存在是常态。
+  // 首次启动必须能在这里落盘，否则 home 级注入永远无效。
+  const current = readText(file) ?? '';
+  if (current.includes(PLUGIN_ROW_ID)) return false;
+
+  const block = [
+    '- insert:',
+    `    - id: ${PLUGIN_ROW_ID}`,
+    `      name: '${PLUGIN_NAME}'`,
+    '',
+  ].join('\n');
+
+  // 只看有效内容（去掉注释与空行）判断是否为"空数组"。
+  const effective = current
+    .split('\n')
+    .filter((line) => line.trim() !== '' && !line.trim().startsWith('#'))
+    .join('\n')
+    .trim();
+  const comments = current
+    .split('\n')
+    .filter((line) => line.trim().startsWith('#'))
+    .join('\n');
+
+  const next = effective === '' || effective === '[]'
+    ? `${comments === '' ? '' : `${comments}\n`}${block}`
+    : `${current.replace(/\s*$/, '')}\n\n${block}`;
+  writeFileAtomic(file, next);   // 原子写：见 writeFileAtomic 的说明
+  return true;
+}
+
+/** 在 profile 的 package.json 里声明本地依赖（DSH 借此把插件纳入 profile 依赖图）。 */
+function ensureProfileDependency(file: string, pluginDir: string): boolean {
+  const current = readText(file);
+  if (current === null) return false;
+  let manifest: { dependencies?: Record<string, string> };
+  try {
+    manifest = JSON.parse(current) as { dependencies?: Record<string, string> };
+  } catch {
+    return false;
+  }
+  const wanted = `link:${pluginDir}`;
+  const dependencies = manifest.dependencies ?? {};
+  if (dependencies[PLUGIN_NAME] === wanted) return false;
+  manifest.dependencies = { ...dependencies, [PLUGIN_NAME]: wanted };
+  fs.writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`);
+  return true;
+}
+
+/**
+ * 建立指向插件目录的模块解析入口（与 `dsh plugin add` 产生的形态一致）。
+ *
+ * 必须是**目录级**入口：POSIX 用 `dir` 符号链接，Windows 用 junction（目录联接，
+ * 普通用户即可创建 —— Windows 上创建符号链接需要管理员或开发者模式）。两者都
+ * 失败时退化为直接复制目录：模块解析只需要那个目录存在。
+ */
+function ensurePluginEntry(entryPath: string, pluginDir: string): boolean {
+  // 已是指向同一目标的链接 → 幂等返回
+  try {
+    if (fs.readlinkSync(entryPath) === pluginDir) return false;
+  } catch {
+    // 不是符号链接（可能是上一次的拷贝，或尚不存在）
+  }
+  if (fs.existsSync(entryPath)) {
+    // 拷贝形态：客户端 bundle 一致就复用（避免每次启动重写）
+    try {
+      const existing = fs.readFileSync(path.join(entryPath, 'lib', 'client.js'));
+      const wanted = fs.readFileSync(path.join(pluginDir, 'lib', 'client.js'));
+      if (existing.equals(wanted)) return false;
+    } catch {
+      // 读不到 → 下面重建
+    }
+    fs.rmSync(entryPath, { recursive: true, force: true });
+  }
+  fs.mkdirSync(path.dirname(entryPath), { recursive: true });
+  try {
+    fs.symlinkSync(pluginDir, entryPath, process.platform === 'win32' ? 'junction' : 'dir');
+  } catch {
+    fs.cpSync(pluginDir, entryPath, { recursive: true });
+  }
+  return true;
+}
+
+/**
+ * 随包运行时里 persona 包的相对路径 —— **相对 `node_modules` 目录**
+ * （即 `dshNodeModulesDir()` 的返回值），不是相对 dsh 包目录。
+ *
+ * ⚠️ 这里曾多写一层 `node_modules`，拼出
+ * `<node_modules>/node_modules/@deepseek-ai/dsh-persona/...` 这种永不存在的路径，
+ * 于是 `personaNeedsPrefix` 读不到源码、返回 null、预设原样保留 `text:`；
+ * 而 0.1.5 起 persona 要求 `prefix:` —— 预设会 fail-loud 挂载失败，
+ * 表现就是「选了法律模式但律师端弹不出来」。
+ */
+const RUNTIME_PERSONA_ENTRY = ['@deepseek-ai', 'dsh-persona', 'lib', 'index.js'];
+/** 用户自备 DSH 的解析根（相对 DSH_HOME，DSH 会在此解析 profile 依赖）。 */
+const HOME_PERSONA_ENTRIES = [
+  ['profiles', 'node_modules', '@deepseek-ai', 'dsh-persona', 'lib', 'index.js'],
+  ['node_modules', '@deepseek-ai', 'dsh-persona', 'lib', 'index.js'],
+];
+
+/**
+ * 目标 DSH 的 persona 配置要 `text` 还是 `prefix`。
+ *
+ * 两代 DSH 的 `@deepseek-ai/dsh-persona` Config 不兼容：
+ * - 0.1.2 一带：`{ text: 必填, complete, includeRuntimeContext }`
+ * - 0.1.5 一带：`{ prefix: 必填, suffix, complete, includeRuntimeContext }`
+ *
+ * 随包预设只能写一种，写错的那一代会 fail-loud（`S.prefix missing required value`），
+ * 整个法律模式预设挂载失败。所以注入前按目标运行时的实际源码判定并改写。
+ *
+ * @param candidates - 可能的 persona 源码文件路径，按优先级排列。
+ * @returns 需要写成 `prefix` 时返回 true；读不到任何线索时返回 null（保持原样）。
+ */
+function personaNeedsPrefix(candidates: string[]): boolean | null {
+  for (const file of candidates) {
+    const source = readText(file);
+    if (source === null) continue;
+    // 新版把 text 拆成 prefix/suffix；以 prefix 是否为必填字段为准。
+    if (/prefix:\s*z\.string\(\)\s*\.required\(\)/.test(source)) return true;
+    if (/text:\s*z\.string\(\)\s*\.required\(\)/.test(source)) return false;
+  }
+  return null;
+}
+
+/**
+ * 按目标运行时改写预设里的 persona 字段名（`text` ⇄ `prefix`）。
+ *
+ * 只动 persona 那一行 `config:` 下的单个键，其余内容逐字保留。
+ * 无法判定目标版本时原样返回，不猜。
+ */
+function adaptPresetToRuntime(content: string, needsPrefix: boolean | null): string {
+  if (needsPrefix === null) return content;
+  const lines = content.split('\n');
+  const personaAt = lines.findIndex((line) => /^- id:\s*persona\s*$/.test(line));
+  if (personaAt < 0) return content;
+  for (let i = personaAt + 1; i < lines.length && i < personaAt + 6; i += 1) {
+    const from = needsPrefix ? '    text:' : '    prefix:';
+    const to = needsPrefix ? '    prefix:' : '    text:';
+    if (lines[i].startsWith(from)) {
+      lines[i] = to + lines[i].slice(from.length);
+      return lines.join('\n');
+    }
+  }
+  return content;
+}
+
+/**
+ * 幂等注入法律模式载荷。
+ *
+ * 注入物（共约 130KB，随 app 的 Resources 分发）：
+ * - `<home>/plugins/dsh-client-ui-legal-mode/` 插件包本体（含 lib/client.js 客户端半边）
+ * - `<home>/profiles/web/node_modules/<name>` 指向上面的软链（profile 的解析点）
+ * - `<home>/profiles/web/package.json` 声明 `link:` 依赖
+ * - `<home>/profiles/web/cordis.patch.yml` 插入 `ui-legal-mode` 行
+ * - `<home>/.agent-presets/legal-mode/` 出厂预设 —— **只对 0.1.7-rc.2 之前的老运行时有效**。
+ *   新运行时不读这个目录（它自带文档写着 "Nothing reads that directory any more."），
+ *   预设改由 bundle 声明提供，见 bundled-plugins.ts 里的 `dsh-legal-preset`。
+ *   保留这份拷贝是为了兜住用户自备的旧 DSH；新路径才是「法律模式」真正生效的地方。
+ *
+ * profile 目录由 DSH 首次启动创建，因此首次调用会返回 `profilePending`：
+ * 调用方在 DSH 就绪后再调用一次即可补齐，并让窗口重载。
+ *
+ * @param home - 本应用专属的 DSH home。
+ * @param payloadDir - 随包载荷目录（内含 `plugin/` 与 `preset/`）。
+ * @param runtimeDshDir - 实际要拉起的 dsh 包目录（随包运行时或用户自备的），
+ *   用于判定 persona 字段名；省略时按随包运行时之外保守处理。
+ * @returns 是否写盘，以及 profile 是否还没就位。
+ */
+export function ensureLegalModeSetup(
+  home: string,
+  payloadDir: string,
+  runtimeDshDir?: string,
+): LegalModeSetupResult {
+  const pluginSrc = path.join(payloadDir, 'plugin');
+  const presetSrc = path.join(payloadDir, 'preset');
+  if (!fs.existsSync(pluginSrc) || !fs.existsSync(presetSrc)) {
+    return { changed: false, profilePending: false };
+  }
+
+  fs.mkdirSync(home, { recursive: true });
+  let changed = false;
+
+  // 1. 插件本体与预设
+  const pluginDir = path.join(home, 'plugins', 'dsh-client-ui-legal-mode');
+  changed = copyTreeIfChanged(pluginSrc, pluginDir) || changed;
+
+  // 预设里的 persona 字段名要跟随目标运行时的版本（见 personaNeedsPrefix）。
+  // 候选顺序即优先级，**必须让实际要拉起的运行时排在最前**：
+  // home 下可能留着上一次用别的 DSH 版本解析出的旧副本，若让它抢先，
+  // 判定出来的字段名会和真正运行的运行时不符（正是本次踩的坑）。
+  const personaCandidates = [
+    ...(runtimeDshDir ? [path.join(runtimeDshDir, ...RUNTIME_PERSONA_ENTRY)] : []),
+    ...HOME_PERSONA_ENTRIES.map((parts) => path.join(home, ...parts)),
+  ];
+  const needsPrefix = personaNeedsPrefix(personaCandidates);
+
+  for (const name of ['preset.yml', 'agent.cordis.yml']) {
+    const sourceText = readText(path.join(presetSrc, name));
+    const dest = path.join(home, '.agent-presets', PRESET_ID, name);
+    if (sourceText === null) continue;
+    const next = name === 'agent.cordis.yml'
+      ? adaptPresetToRuntime(sourceText, needsPrefix)
+      : sourceText;
+    let current: string | null = null;
+    try {
+      current = fs.readFileSync(dest, 'utf8');
+    } catch {
+      current = null;
+    }
+    if (current === next) continue;
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.writeFileSync(dest, next);
+    changed = true;
+  }
+
+  // 2. 【home 级】patch + 解析点 —— 这是**首次启动就能生效的关键**
+  //
+  // ── 为什么必须有这一段（2026-09-27 实测确认）──────────────────────────
+  // DSH 的客户端插件清单是 **服务启动那一刻** 建好的，之后**重新加载页面也不会变**
+  // （实测：注入后重拉界面，插件数仍是 58、不含法律模式；重启 DSH 才变成 59）。
+  // 而 `<home>/profiles/web/` 是 **DSH 首次启动才创建** 的 —— 所以写在 profile 级的
+  // 注入，天生就晚于 DSH 启动，首次启动**必然**看不到法律模式。
+  //
+  // `<home>` 是壳自己创建的，可以在拉起 DSH **之前**就写好。
+  // 官方文档也写明 home 级 patch  "applied over every profile's own layer"、
+  // outranks the per-profile layer，且 DSH 的设置导入完全不碰它。
+  // 实测：启动前写好 home 级 patch + `<home>/node_modules` 解析点，
+  // DSH 首次启动的插件清单里就**已经包含** ui-legal-mode（零报错）。
+  //
+  // ⚠️ 2026-10-01 更正：以前这里写着"与 profile 级重复是安全的（实测只挂载一次）"。
+  //    那是旧 DSH 上的实测，且忽略了 profile 级 patch 归 DSH 自己重写这件事。
+  //    现在改为**只留 home 级**，profile 级的旧行会被 removeOurInsertBlocks 删掉。
+  changed = ensurePluginEntry(
+    path.join(home, 'node_modules', ...PLUGIN_NAME.split('/')),
+    pluginDir,
+  ) || changed;
+  // 启动前体检：坏 patch 会让 DSH 直接起不来（真实用户实测，见 repairPatchFileIfBroken 的说明）
+  changed = repairPatchFileIfBroken(path.join(home, 'cordis.patch.yml')) || changed;
+  changed = ensurePatchRow(path.join(home, 'cordis.patch.yml')) || changed;
+
+  // 3. profile 侧：**只保留模块接线，不再往 patch 里插行**（2026-10-01 去重复）。
+  //
+  // ⚠️ 目录**先于文件**落盘：DSH 把 profiles/<name> 建出来后，cordis.patch.yml 与
+  // package.json 还要过一会儿才写。早先这里只在"目录不存在"时算 pending，于是
+  // 文件那一瞬间不在，下面就静默 `return false` 放弃写入。
+  const profileDir = profileDirOf(home);
+  const profilePending =
+    !fs.existsSync(profileDir) ||
+    !fs.existsSync(path.join(profileDir, 'package.json')) ||
+    !fs.existsSync(path.join(profileDir, 'cordis.patch.yml'));
+  if (!profilePending) {
+    // 启动前体检 —— **这个文件就是真实用户那次「打不开」的元凶**
+    // （profiles/deepwhale/cordis.patch.yml 开头一个 NUL 字节）。
+    // 它在用户数据目录里，壳有能力也有责任在 DSH 读它之前修好。
+    changed = repairPatchFileIfBroken(path.join(profileDir, 'cordis.patch.yml')) || changed;
+    changed = ensurePluginEntry(
+      path.join(profileDir, 'node_modules', ...PLUGIN_NAME.split('/')),
+      pluginDir,
+    ) || changed;
+    changed = ensureProfileDependency(path.join(profileDir, 'package.json'), pluginDir) || changed;
+    // 老用户 profile 级那份重复行要**删掉**：profile 级 patch 归 DSH 管，
+    // 我们的行留在那里只会让同一 id 被声明两次（见 removeOurInsertBlocks 的说明）。
+    changed =
+      removeOurInsertBlocks(path.join(profileDir, 'cordis.patch.yml'), [PLUGIN_ROW_ID]) || changed;
+  }
+
+  return { changed, profilePending };
+}

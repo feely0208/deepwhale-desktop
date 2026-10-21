@@ -1,0 +1,324 @@
+import { app, BrowserWindow, safeStorage } from 'electron';
+import * as fs from 'fs';
+import * as path from 'path';
+import { Store } from './store';
+
+export interface BalanceInfo {
+  currency: string;
+  totalBalance: string;
+  grantedBalance: string;
+  toppedUpBalance: string;
+}
+
+export interface UsageSnapshot {
+  /** 账号是否可用（is_available），null 表示尚未拉到数据 */
+  available: boolean | null;
+  balanceInfos: BalanceInfo[];
+  fetchedAt: number | null;
+  error: string | null;
+  todayRequests: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  apiKeyConfigured: boolean;
+  lowBalance: boolean;
+}
+
+interface DailyStats {
+  date: string;
+  requests: number;
+  inputTokens: number;
+  outputTokens: number;
+}
+
+/** 官方余额查询接口（留常量，便于未来替换/扩展） */
+const BALANCE_URL = 'https://api.deepseek.com/user/balance';
+
+/**
+ * 用量与额度：
+ * - 额度：官方 GET /user/balance，主进程 fetch，渲染层只拿脱敏展示数据；
+ * - 用量：首版本地统计（解析 DSH 日志中的 token / 手动记录），在线明细接口留常量待接入；
+ * - API Key：优先复用 DEEPSEEK_API_KEY 环境变量；手动填写用 safeStorage 加密，
+ *   绝不明文写 settings.json、不打印日志、不在面板显示。
+ */
+export class UsageManager {
+  private timer: NodeJS.Timeout | null = null;
+  private snapshot: UsageSnapshot;
+  private statsFile: string;
+  private stats: DailyStats = { date: '', requests: 0, inputTokens: 0, outputTokens: 0 };
+  private notifiedLowDate = '';
+
+  constructor(
+    private store: Store,
+    private onUpdate: (s: UsageSnapshot) => void,
+    private onLowBalance: (threshold: number) => void
+  ) {
+    this.statsFile = path.join(app.getPath('userData'), 'usage-stats.json');
+    this.snapshot = this.emptySnapshot();
+    this.loadStats();
+  }
+
+  get latest(): UsageSnapshot {
+    return { ...this.snapshot };
+  }
+
+  start(): void {
+    void this.refresh();
+    const minutes = Math.max(1, this.store.get('usageRefreshMinutes'));
+    this.timer = setInterval(() => void this.refresh(), minutes * 60_000);
+  }
+
+  stop(): void {
+    if (this.timer) clearInterval(this.timer);
+    this.timer = null;
+  }
+
+  /**
+   * DSH 自己那份凭证文件（登录、或在 DSH 设置里填的 API Key 都落在这里）。
+   * 路径与 DSH 一致：`$DSH_HOME/.credentials.yaml`，默认 `<userData>/dsh-home`。
+   */
+  private dshCredentialFile(): string | null {
+    try {
+      const home =
+        process.env.DSH_HOME && process.env.DSH_HOME !== ''
+          ? process.env.DSH_HOME
+          : path.join(app.getPath('userData'), 'dsh-home');
+      return path.join(home, '.credentials.yaml');
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * 从 DSH 凭证文件里取 `DEEPSEEK_API_KEY`（只读、失败返回 null）。
+   *
+   * ── 为什么优先用它（2026-10-18）──────────────────────────────────────
+   *   官方 0.2.1 的「账号与余额」页读的是**同一个** `/user/balance` 接口、同一组字段
+   *   （`topped_up_balance` = 充值余额、`granted_balance` = 赠金余额）。
+   *   外展窗口原来只认自己那份 `apiKeyEncrypted` —— 用户登录后那边有凭证、这边没有，
+   *   两处对不上、还得填两次 Key。改成优先读 DSH 这份之后：
+   *   **同一个账户 → 同一个接口 → 必然显示同样的数字**，登录过就不用再填。
+   *   读不到（没登录 / 文件不存在 / 格式变了）就退回原顺序，绝不影响可用性。
+   */
+  private dshApiKey(): string | null {
+    const file = this.dshCredentialFile();
+    if (!file) return null;
+    try {
+      const text = fs.readFileSync(file, 'utf-8');
+      const m = text.match(/^\s*DEEPSEEK_API_KEY:\s*['"]?([^'"\s]+)['"]?\s*$/m);
+      return m ? m[1] : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * 解析 API Key（顺序 = 与官方页面同源优先）：
+   *   ① DSH 凭证文件里的 DEEPSEEK_API_KEY（登录过 / 在 DSH 里填过就有）
+   *   ② 环境变量 DEEPSEEK_API_KEY
+   *   ③ 我们自己 safeStorage 加密存的那份（老用户手动填的 key）
+   */
+  resolveApiKey(): string | null {
+    const fromDsh = this.dshApiKey();
+    if (fromDsh) return fromDsh;
+    const fromEnv = process.env.DEEPSEEK_API_KEY;
+    if (fromEnv) return fromEnv;
+    const enc = this.store.get('apiKeyEncrypted');
+    if (enc) {
+      try {
+        if (safeStorage.isEncryptionAvailable()) {
+          return safeStorage.decryptString(Buffer.from(enc, 'base64'));
+        }
+        return Buffer.from(enc, 'base64').toString('utf-8'); // 兜底：可逆混淆
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  /** 手动设置 API Key：优先 safeStorage 加密；不可用时退化为可逆混淆存储（不落明文） */
+  setApiKey(key: string): void {
+    try {
+      if (!key) {
+        this.store.set('apiKeyEncrypted', null);
+        return;
+      }
+      if (safeStorage.isEncryptionAvailable()) {
+        this.store.set('apiKeyEncrypted', safeStorage.encryptString(key).toString('base64'));
+      } else {
+        // 兜底：可逆混淆（避免明文落盘；非安全方案，仅当系统安全存储不可用时）
+        this.store.set('apiKeyEncrypted', Buffer.from(key, 'utf-8').toString('base64'));
+      }
+      this.store.save();
+    } catch (e) {
+      console.error('[usage] API Key 保存失败:', e);
+      throw e;
+    }
+    void this.refresh();
+  }
+
+  /** 拉取余额（失败静默，下次定时/手动重试，不阻塞主流程） */
+  async refresh(): Promise<void> {
+    const key = this.resolveApiKey();
+    this.snapshot.apiKeyConfigured = !!key;
+    if (!key) {
+      this.snapshot.error = '未配置 API Key（可设置环境变量 DEEPSEEK_API_KEY）';
+      this.emit();
+      return;
+    }
+    try {
+      const res = await fetch(BALANCE_URL, {
+        headers: { Authorization: `Bearer ${key}`, Accept: 'application/json' },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!res.ok) throw new Error(`余额接口 HTTP ${res.status}`);
+      const data = (await res.json()) as {
+        is_available?: boolean;
+        balance_infos?: Array<{
+          currency?: string;
+          total_balance?: string;
+          granted_balance?: string;
+          topped_up_balance?: string;
+        }>;
+      };
+      this.snapshot.available = data.is_available !== false;
+      this.snapshot.balanceInfos = Array.isArray(data.balance_infos)
+        ? data.balance_infos.map((b) => ({
+            currency: b.currency ?? '?',
+            totalBalance: b.total_balance ?? '0',
+            grantedBalance: b.granted_balance ?? '0',
+            toppedUpBalance: b.topped_up_balance ?? '0',
+          }))
+        : [];
+      this.snapshot.error = null;
+      this.snapshot.fetchedAt = Date.now();
+      this.checkLowBalance();
+      this.emit();
+    } catch (e) {
+      this.snapshot.error = e instanceof Error ? e.message : String(e);
+      this.emit();
+    }
+  }
+
+  /** 记录一次请求（含 token 用量，供面板展示本地累计） */
+  recordUsage(inputTokens: number, outputTokens: number): void {
+    this.ensureToday();
+    this.stats.requests += 1;
+    this.stats.inputTokens += Math.max(0, inputTokens);
+    this.stats.outputTokens += Math.max(0, outputTokens);
+    this.saveStats();
+    this.snapshot.todayRequests = this.stats.requests;
+    this.snapshot.totalInputTokens = this.stats.inputTokens;
+    this.snapshot.totalOutputTokens = this.stats.outputTokens;
+    this.emit();
+  }
+
+  /** 从 DSH 子进程日志行解析 token 统计（常见 JSON/日志格式兜底） */
+  consumeLogLine(line: string): void {
+    const input = this.matchNum(line, /("?(?:prompt|input)_tokens"?\s*[:=]\s*)(\d+)/i);
+    const output = this.matchNum(line, /("?(?:completion|output)_tokens"?\s*[:=]\s*)(\d+)/i);
+    const total = this.matchNum(line, /("?total_tokens"?\s*[:=]\s*)(\d+)/i);
+    if (input >= 0 || output >= 0 || total >= 0) {
+      this.recordUsage(input >= 0 ? input : total >= 0 ? total : 0, output >= 0 ? output : 0);
+    }
+  }
+
+  /** 注入用量面板到主窗口（did-finish-load 后调用） */
+  async applyPanel(win: BrowserWindow): Promise<void> {
+    try {
+      const css = fs.readFileSync(path.join(__dirname, '../usage/usage-panel.css'), 'utf-8');
+      await win.webContents.insertCSS(css, { cssOrigin: 'author' });
+    } catch (e) {
+      console.error('[usage] 面板样式注入失败:', e);
+    }
+    try {
+      const js = fs.readFileSync(path.join(__dirname, '../usage/usage-panel.js'), 'utf-8');
+      await win.webContents.executeJavaScript(js);
+    } catch (e) {
+      console.error('[usage] 面板脚本注入失败:', e);
+    }
+    this.emit();
+  }
+
+  /** 隐藏面板（executeJavaScript 移除注入的 DOM） */
+  async hidePanel(win: BrowserWindow): Promise<void> {
+    try {
+      await win.webContents.executeJavaScript(
+        "const el = document.getElementById('dsh-usage-panel'); if (el) el.remove();"
+      );
+    } catch {
+      // 页面未就绪，忽略
+    }
+  }
+
+  private emit(): void {
+    this.onUpdate(this.latest);
+  }
+
+  private checkLowBalance(): void {
+    const threshold = this.store.get('usageLowBalanceAlert');
+    const today = todayKey();
+    const low = this.snapshot.balanceInfos.some((b) => {
+      const v = parseFloat(b.totalBalance);
+      return !Number.isNaN(v) && v < threshold;
+    });
+    this.snapshot.lowBalance = low;
+    if (low && this.notifiedLowDate !== today) {
+      this.notifiedLowDate = today;
+      this.onLowBalance(threshold);
+    }
+  }
+
+  private ensureToday(): void {
+    const key = todayKey();
+    if (this.stats.date !== key) {
+      this.stats = { date: key, requests: 0, inputTokens: 0, outputTokens: 0 };
+    }
+  }
+
+  private loadStats(): void {
+    try {
+      const raw = fs.readFileSync(this.statsFile, 'utf-8');
+      const parsed = JSON.parse(raw) as DailyStats;
+      this.stats = { date: parsed.date, requests: parsed.requests ?? 0, inputTokens: parsed.inputTokens ?? 0, outputTokens: parsed.outputTokens ?? 0 };
+      this.ensureToday(); // 跨天自动清零
+      this.snapshot.todayRequests = this.stats.requests;
+      this.snapshot.totalInputTokens = this.stats.inputTokens;
+      this.snapshot.totalOutputTokens = this.stats.outputTokens;
+    } catch {
+      this.ensureToday();
+    }
+  }
+
+  private saveStats(): void {
+    try {
+      fs.mkdirSync(path.dirname(this.statsFile), { recursive: true });
+      fs.writeFileSync(this.statsFile, JSON.stringify(this.stats, null, 2), 'utf-8');
+    } catch (e) {
+      console.error('[usage] 保存用量统计失败:', e);
+    }
+  }
+
+  private matchNum(line: string, re: RegExp): number {
+    const m = line.match(re);
+    return m ? parseInt(m[2], 10) : -1;
+  }
+
+  private emptySnapshot(): UsageSnapshot {
+    return {
+      available: null,
+      balanceInfos: [],
+      fetchedAt: null,
+      error: null,
+      todayRequests: 0,
+      totalInputTokens: 0,
+      totalOutputTokens: 0,
+      apiKeyConfigured: !!process.env.DEEPSEEK_API_KEY,
+      lowBalance: false,
+    };
+  }
+}
+
+function todayKey(): string {
+  return new Date().toISOString().slice(0, 10);
+}

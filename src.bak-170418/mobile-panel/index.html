@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>手机连接</title>
+<style>
+  /* 与桌面端同源的辉光基调（深底 #0b1018 + 青蓝强调）：面板不再跑动画，省电也不抢注意力 */
+  :root{
+    --bg:#0b1018; --fg:#e8ecf2; --dim:#93a1b0; --line:rgba(255,255,255,.10);
+    --accent:#4a8ac4; --accent-deep:#2d5f9e; --ok:#3fb950;
+    --glow:0 10px 28px rgba(74,138,196,.42), 0 2px 8px rgba(45,95,158,.3);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;background:
+      radial-gradient(circle closest-side at 20% 110%, rgba(46,92,168,.55) 0%, rgba(46,92,168,0) 70%),
+      radial-gradient(circle closest-side at 80% 115%, rgba(82,146,214,.5) 0%, rgba(82,146,214,0) 70%),
+      var(--bg);
+    color:var(--fg);font:14px/1.6 -apple-system,system-ui,"PingFang SC","Noto Sans CJK SC",sans-serif;
+    padding:22px 22px 26px;display:flex;flex-direction:column;gap:16px}
+  h1{font-size:17px;margin:0}
+  .sub{margin:0;color:var(--dim);font-size:13px}
+  .card{border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.05);padding:16px}
+  .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  button{font:inherit;height:40px;padding:0 16px;border-radius:10px;cursor:pointer;
+    border:1px solid var(--line);background:rgba(255,255,255,.07);color:var(--fg)}
+  button.primary{border-color:transparent;font-weight:600;color:#f4f9ff;
+    background:linear-gradient(180deg,#5c9ad4,#2d5f9e);box-shadow:var(--glow)}
+  button:disabled{opacity:.5;cursor:default}
+  .state{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--dim)}
+  .dot{width:8px;height:8px;border-radius:50%;background:#6b7280}
+  .dot.on{background:var(--ok);box-shadow:0 0 10px rgba(63,185,80,.8)}
+  .qr{display:none;flex-direction:column;align-items:center;gap:12px;margin-top:6px}
+  .qr.show{display:flex}
+  .qr svg{width:240px;height:240px;background:#fff;border-radius:12px;padding:8px}
+  .code{font-size:26px;letter-spacing:4px;font-weight:700;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  .addr{font-size:12px;color:var(--dim);word-break:break-all;text-align:center}
+  ol{margin:6px 0 0;padding-left:18px;color:var(--dim);font-size:13px}
+  li{margin:4px 0}
+  .err{color:#ffb4b0;font-size:13px;min-height:18px}
+</style>
+</head>
+<body>
+  <div>
+    <h1>手机连接</h1>
+    <p class="sub">手机和电脑连同一个 WiFi，用深鲸 Mobile 扫下面的二维码即可 —— 不用自己配转发与认证。</p>
+  </div>
+
+  <div class="card">
+    <div class="state"><span class="dot" id="dot"></span><span id="state-text">手机访问：未开启</span></div>
+    <div class="row" style="margin-top:12px">
+      <button class="primary" id="btn-start">开启手机访问</button>
+      <button id="btn-stop" disabled>关闭</button>
+      <button id="btn-rotate" disabled>换一个配对码</button>
+    </div>
+    <div class="err" id="err"></div>
+  </div>
+
+  <div class="card">
+    <div class="qr" id="qr-box">
+      <div id="qr-svg"></div>
+      <div class="code" id="pair-code">------</div>
+      <div class="addr" id="origin">—</div>
+      <div class="row">
+        <button id="btn-copy">复制地址</button>
+        <button id="btn-copy-link">复制配对链接</button>
+      </div>
+    </div>
+    <ol id="steps" style="display:none">
+      <li>在手机上打开深鲸 Mobile</li>
+      <li>点「扫描二维码」（或手填地址与配对码）</li>
+      <li>配对码一次性、5 分钟有效；关闭这个面板即停止对外服务</li>
+    </ol>
+    <p class="sub" id="idle-hint">点「开启手机访问」后会在这里显示二维码。</p>
+  </div>
+
+  <div class="card" id="remote-card" style="display:none">
+    <div class="state"><span class="dot" id="remote-dot"></span><span id="remote-state">远程访问（在外面用）：连接中…</span></div>
+    <div class="addr" id="remote-origin" style="margin-top:8px">—</div>
+    <div class="row" style="margin-top:10px">
+      <button id="btn-copy-remote">复制远程地址</button>
+    </div>
+    <p class="sub" style="margin-top:8px">人在外面时：手机填这个地址 + 同一个配对码。走我们自己的中继，不开放任何端口、不需要公网 IP。</p>
+  </div>
+
+<script>
+  var api = window.mobilePanel;
+  var $ = function (id) { return document.getElementById(id); };
+  var current = { origin: '', pairCode: '', payload: '' };
+
+  function render(st) {
+    var running = !!(st && st.running);
+    $('dot').className = 'dot' + (running ? ' on' : '');
+    $('state-text').textContent = running ? '手机访问：已开启（只监听局域网）' : '手机访问：未开启';
+    $('btn-start').disabled = running;
+    $('btn-stop').disabled = !running;
+    $('btn-rotate').disabled = !running;
+    $('qr-box').className = 'qr' + (running ? ' show' : '');
+    $('steps').style.display = running ? '' : 'none';
+    $('idle-hint').style.display = running ? 'none' : '';
+    // 远程地址（外面用）：有隧道就显示；连没连上用灯标出来
+    var rc = $('remote-card');
+    if (rc) {
+      var hasRemote = !!(st && st.remoteOrigin);
+      rc.style.display = running && hasRemote ? '' : 'none';
+      if (hasRemote) {
+        $('remote-origin').textContent = st.remoteOrigin;
+        var on = !!(st && st.tunnelConnected);
+        $('remote-dot').className = 'dot' + (on ? ' on' : '');
+        $('remote-state').textContent = on
+          ? '远程访问（在外面用）：已连接中继 ✓'
+          : '远程访问（在外面用）：连接中继中…';
+      }
+    }
+    if (running) {
+      if (st.qr) $('qr-svg').innerHTML = st.qr;
+      if (st.pairCode) $('pair-code').textContent = st.pairCode;
+      if (st.origin) $('origin').textContent = st.origin;
+      current = { origin: st.origin || '', pairCode: st.pairCode || '', payload: st.payload || '' };
+    } else {
+      $('qr-svg').innerHTML = '';
+      $('pair-code').textContent = '------';
+      $('origin').textContent = '—';
+    }
+  }
+
+  $('btn-start').addEventListener('click', async function () {
+    $('err').textContent = '';
+    $('btn-start').disabled = true;
+    var r = await api.start();
+    if (!r || !r.ok) {
+      $('err').textContent =
+        (r && r.reason === 'dsh-not-ready')
+          ? '深鲸桌面还没完全启动，等界面能正常聊天后再试。'
+          : '开启失败：' + ((r && (r.error || r.reason)) || '未知原因');
+      $('btn-start').disabled = false;
+      return;
+    }
+    render(Object.assign({ running: true }, r));
+  });
+  $('btn-stop').addEventListener('click', async function () {
+    await api.stop();
+    stopPolling();
+    render({ running: false });
+  });
+  $('btn-rotate').addEventListener('click', async function () {
+    var r = await api.rotate();
+    if (r && r.ok) render(Object.assign({ running: true }, r));
+  });
+  $('btn-copy').addEventListener('click', function () { api.copy(current.origin); });
+  $('btn-copy-link').addEventListener('click', function () { api.copy(current.payload || current.origin); });
+  (function () {
+    var b = $('btn-copy-remote');
+    if (b) b.addEventListener('click', function () {
+      var o = ($('remote-origin') || {}).textContent || '';
+      api.copy(o);
+    });
+  })();
+  api.onState(function (st) { render(st); });
+  api.status().then(function (st) { render(st || { running: false }); });
+
+  // ⚠️ 隧道连接是异步的（约 1 秒），面板原来只在"开启"那一刻渲染一次 →
+  //    远程状态永远停在"连接中…"（用户实测）。这里定时刷新状态（2 秒一次）。
+  var pollTimer = null;
+  function startPolling() {
+    if (pollTimer) return;
+    pollTimer = setInterval(function () {
+      api.status().then(function (st) { if (st) render(st); });
+    }, 2000);
+  }
+  function stopPolling() {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  }
+  startPolling();
+</script>
+</body>
+</html>

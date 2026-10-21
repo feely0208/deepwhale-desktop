@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'self' file: data:; img-src 'self' file: data:; style-src 'self' 'unsafe-inline'; script-src 'self' file:"
+  />
+  <title>dsh pet</title>
+  <link rel="stylesheet" href="pet.css" />
+</head>
+<body>
+  <div id="pet" class="pet" title="右键菜单">
+    <!-- 帧动画宠物（spritesheet 标准：manifest.json + spritesheet.png） -->
+    <canvas id="sprite-pet" class="pet-sprite" width="192" height="208" hidden></canvas>
+    <!-- 普通自定义宠物（.gif/.svg/.png/.jpg/.webp） -->
+    <img id="custom-pet" class="pet-custom" alt="pet" hidden />
+  </div>
+  <script src="pet.js"></script>
+</body>
+</html>

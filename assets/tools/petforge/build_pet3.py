@@ -177,7 +177,7 @@ SPEED = {
     "lawyer":     {"idle": 0.95, "jumping": 0.8, "waving": 0.85, "default": 0.9},
     "prosecutor": {"idle": 1.05, "jumping": 0.8, "waving": 0.9, "default": 0.9},
     "bailiff":    {"idle": 1.3, "jumping": 0.65, "waving": 0.9, "default": 0.8},
-    "clerk":      {"idle": 1.15, "jumping": 0.55, "waving": 0.8, "review": 0.5, "ball": 0.6, "swimming": 0.6, "diving": 1.0, "look": 1.0, "default": 0.75},
+    "clerk":      {"idle": 2.6, "jumping": 1.6, "waving": 1.8, "review": 2.2, "ball": 2.0, "swimming": 2.0, "diving": 2.2, "look": 2.0, "default": 1.8},
     "forensic":   {"idle": 1.25, "jumping": 1.0, "waving": 1.1, "default": 1.05},
     "chef":       {"idle": 0.85, "jumping": 0.6, "waving": 0.8, "default": 0.8},
     "teacher":    {"idle": 1.0, "jumping": 0.85, "waving": 0.9, "default": 0.95},
@@ -483,9 +483,9 @@ def _place(base_img, scale_x=1.0, scale_y=1.0, dx=0, dy=0, angle=0.0, bright=1.0
 #   反馈档 → 用户主动交互时的明显反应（上抬/下压 9~11px）
 CALM_ACTIONS = {"still", "breath", "rest", "read", "nod", "tilt"}
 WORK_ACTIONS = {"nod_fast", "bow"}          # 干活：速记、低头看材料
-CALM_FACTOR = 0.22
-WORK_FACTOR = 0.60
-ACTIVE_FACTOR = 0.70
+CALM_FACTOR = 0.35
+WORK_FACTOR = 0.85
+ACTIVE_FACTOR = 1.0
 
 
 def frames_for(action, base, neck, overlap, head, body, n, amp=1.0):

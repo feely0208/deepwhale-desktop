@@ -206,8 +206,10 @@ export class PetWindow {
 
     const scale = Math.min(2, Math.max(0.6, this.store.get('petScale')));
     const win = new BrowserWindow({
-      width: Math.round(180 * scale),
-      height: Math.round(180 * scale),
+      // 2026-10-21 修：原来是 180x180，但帧动画 sprite 是 192x208 / 200x200，
+      // 窗口比素材小 → 角色上下被裁（用户："显示不全"，脚没了）。改成 208 见方。
+      width: Math.round(208 * scale),
+      height: Math.round(208 * scale),
       transparent: true,
       frame: false,
       alwaysOnTop: true,
@@ -352,8 +354,8 @@ export class PetWindow {
     const win = this.window;
     if (!win) return;
     const scale = Math.min(2, Math.max(0.6, this.store.get('petScale')));
-    const w = Math.round(180 * scale);
-    const h = Math.round(180 * scale);
+    const w = Math.round(208 * scale);
+    const h = Math.round(208 * scale);
     // 保持右下角位置不变
     const b = win.getBounds();
     win.setBounds({ x: b.x + b.width - w, y: b.y + b.height - h, width: w, height: h });

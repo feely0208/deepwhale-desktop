@@ -46,9 +46,12 @@ if (entry === undefined) {
     if (text.length < 10) problems.push(`${version} items[${i}] 的 text 太短（像占位符）：${text}`);
     if (/TODO|待补|xxx/i.test(text)) problems.push(`${version} items[${i}] 里还有占位文字：${text}`);
   });
-  // 用户报上来的问题必须有"修复"口径的交代（本版至少要有 fix 条目）
+  // 用户报上来的问题必须有"修复"口径的交代（本版至少要有 fix 条目）。
+  // 例外：首发新增的版本，缺陷都在发布前修掉、用户侧没有旧版本缺陷可告知，
+  // 可用 noFixNeeded 写明理由跳过 —— 口径与 2026-10-20 的「只写新增」决定一致。
   const hasFix = items.some((it) => it?.kind === 'fix');
-  if (!hasFix) {
+  const noFixReason = typeof entry.noFixNeeded === 'string' ? entry.noFixNeeded.trim() : '';
+  if (!hasFix && noFixReason.length < 10) {
     problems.push(`${version} 的条目里一条 fix 都没有 —— 这版修的是用户报的问题，必须有"修复"口径的说明`);
   }
   // 平台相关的能力别写成全平台（安装目录只有 Windows 有）

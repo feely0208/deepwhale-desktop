@@ -590,7 +590,9 @@ export class PetWindow {
       skipTaskbar: true,
       webPreferences: {
         preload: path.join(__dirname, '../preload/preload.js'),
-        contextIsolation: false,
+        // 必须 true：preload 用 contextBridge.exposeInMainWorld 暴露 API，
+        // false 会让 contextBridge 失效 → window.dsh undefined（2026-10-21 踩过）
+        contextIsolation: true,
         nodeIntegration: false,
       },
     });

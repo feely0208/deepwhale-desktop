@@ -1390,7 +1390,6 @@ function registerIpc(): void {
         ? await mainWin.webContents.executeJavaScript(
             `(async () => {
                const t = ${JSON.stringify(q)};
-               const t = ${JSON.stringify(q)};
                // 更通用的输入框查找：DSH 的编辑器可能是 contenteditable/ProseMirror，
                // 也可能是 textarea；按优先级挨个试。
                const cands = [

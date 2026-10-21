@@ -7,14 +7,14 @@
     {
       "state": "idle",
       "row": 0,
-      "frames": 12,
-      "speed": 1.04
+      "frames": 9,
+      "speed": 1.15
     },
     {
       "state": "waving",
       "row": 1,
-      "frames": 5,
-      "speed": 0.8
+      "frames": 12,
+      "speed": 3.39
     },
     {
       "state": "jumping",
@@ -67,8 +67,8 @@
     {
       "state": "review",
       "row": 10,
-      "frames": 8,
-      "speed": 4.17
+      "frames": 12,
+      "speed": 2.78
     },
     {
       "state": "sleeping",

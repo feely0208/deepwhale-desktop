@@ -58,9 +58,11 @@
 
   // 招牌动作（用户点名"排在最前面"、要优先看到）：喷水 / 跳跃 / 甩水 / 顶球 / 翻跟头。
   // 甩水=swimming（尾巴摆得快 + 身后涟漪水花），diving 也算招牌（下潜带水泡）。
-  var ACTION_POOL = ['dash', 'waving', 'jumping', 'flip', 'ball', 'swimming', 'diving'];
-  // 安静的动作只在偶尔出现（不让宠物看起来像复读机，但也不占主要出场机会）
-  var ACTION_POOL_RARE = ['standing', 'look', 'review', 'sleeping'];
+  // 主动作池（按用户要求排序：写字、挥手、吹泡泡、翻跟头、翻书 优先）
+  // 数组越靠前权重越高（见 pickAction 的加权逻辑）
+  var ACTION_POOL = ['review', 'waving', 'look', 'flip', 'ball', 'jumping', 'swimming', 'diving'];
+  // 安静的动作偶尔出现
+  var ACTION_POOL_RARE = ['standing', 'sleeping'];
   var lastAction = null;
 
   var spriteName = params.get('sprite');
@@ -261,10 +263,31 @@
   function pickAction() {
     var main = ACTION_POOL.filter(function (st) { return !!findByState(st); });
     var rare = ACTION_POOL_RARE.filter(function (st) { return !!findByState(st); });
-    var pool = (Math.random() < 0.15 && rare.length) ? rare : main;
+    // 12% 概率抽安静动作，其余从主池按**加权**抽（越靠前权重越高）
+    var pool = (Math.random() < 0.12 && rare.length) ? rare : main;
     if (!pool.length) pool = main.concat(rare);
     if (!pool.length) return null;
-    var pick = pool[Math.floor(Math.random() * pool.length)];
+    var pick;
+    if (pool === main && pool.length > 1) {
+      // 线性权重：第 1 个权重 = n，最后 1 个权重 = 1
+      var weights = [];
+      var total = 0;
+      for (var i = 0; i < pool.length; i++) {
+        var w = pool.length - i;
+        weights.push(w);
+        total += w;
+      }
+      var roll = Math.random() * total;
+      var acc = 0;
+      pick = pool[0];
+      for (var j = 0; j < pool.length; j++) {
+        acc += weights[j];
+        if (roll <= acc) { pick = pool[j]; break; }
+      }
+    } else {
+      pick = pool[Math.floor(Math.random() * pool.length)];
+    }
+    // 不连着重复同一个动作
     if (pool.length > 1 && pick === lastAction) {
       pick = pool[(pool.indexOf(pick) + 1) % pool.length];
     }

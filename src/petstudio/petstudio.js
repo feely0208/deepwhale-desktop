@@ -86,4 +86,79 @@
   }
 
   refreshPets();
+
+  // ── AI 一句话生成（2026-10-20 加）──────────────────────────────
+  // 之前只有「设置 → 宠物」里才有这个功能，用户打开宠物工坊找不到，
+  // 还以为 SVG 模板就是"生成结果"。这里补上，符合"做宠物就在工坊做"的直觉。
+  var forgeDesc = document.getElementById('studio-forge-desc');
+  var forgeStyle = document.getElementById('studio-forge-style');
+  var forgeProv = document.getElementById('studio-forge-provider');
+  var forgeKey = document.getElementById('studio-forge-key');
+  var forgeRun = document.getElementById('studio-forge-run');
+  var forgeDocBtn = document.getElementById('studio-forge-doc');
+  var forgeMsg = document.getElementById('studio-forge-msg');
+
+  function forgeSay(text, kind) {
+    forgeMsg.textContent = text || '';
+    forgeMsg.className = 'forge-msg' + (kind ? ' ' + kind : '');
+  }
+
+  if (window.dsh && window.dsh.petForgeConfig) {
+    window.dsh.petForgeConfig().then(function (cfg) {
+      if (!cfg) return;
+      if (cfg.provider) forgeProv.value = cfg.provider;
+      if (cfg.apiKey) forgeKey.value = cfg.apiKey;
+    });
+  }
+
+  function saveCfg() {
+    if (window.dsh && window.dsh.petForgeSetConfig) {
+      window.dsh.petForgeSetConfig({ provider: forgeProv.value, apiKey: forgeKey.value });
+    }
+  }
+  if (forgeProv) forgeProv.addEventListener('change', saveCfg);
+  if (forgeKey) forgeKey.addEventListener('blur', saveCfg);
+
+  if (forgeDocBtn) {
+    forgeDocBtn.addEventListener('click', function () {
+      if (window.dsh && window.dsh.petForgeOpenDoc) {
+        window.dsh.petForgeOpenDoc().then(function (r) {
+          if (r && r.ok === false) forgeSay('打开说明失败：' + (r.error || ''), 'err');
+        });
+      }
+    });
+  }
+
+  if (forgeRun) {
+    forgeRun.addEventListener('click', function () {
+      var desc = (forgeDesc.value || '').trim();
+      if (!desc) { forgeSay('先描述一下你想要的宠物', 'warn'); forgeDesc.focus(); return; }
+      var key = (forgeKey.value || '').trim();
+      if (!key) { forgeSay('请填 API Key（需支持图像生成，DeepSeek 模型不生图）', 'warn'); forgeKey.focus(); return; }
+      saveCfg();
+      forgeRun.disabled = true;
+      forgeRun.textContent = '生成中…';
+      forgeSay('正在生成，约需 30~60 秒，请稍候…');
+      window.dsh.petForge({
+        description: desc,
+        style: forgeStyle.value,
+        provider: forgeProv.value,
+        apiKey: key
+      }).then(function (r) {
+        forgeRun.disabled = false;
+        forgeRun.textContent = '生成';
+        if (r && r.ok) {
+          forgeSay('已生成「' + (r.name || '新宠物') + '」，已加入下方列表', 'ok');
+          forgeDesc.value = '';
+          refreshPets();
+        } else {
+          forgeSay((r && r.error) || '生成失败', 'err');
+        }
+      }).catch(function (e) {
+        forgeRun.disabled = false;
+        forgeRun.textContent = '生成';
+        forgeSay('生成失败：' + (e && e.message ? e.message : String(e)), 'err');
+      });
+    });
+  }
 })();

@@ -142,16 +142,64 @@
     @media (prefers-color-scheme: dark) { .tip { color: #6b7280; } }
     .status { font-size: 12px; color: #1a7f37; min-height: 16px; }
     @media (prefers-color-scheme: dark) { .status { color: #3fb950; } }
-  </style>
+  
+  /* AI 一句话生成区块 */
+  .forge{margin:12px 18px 0;padding:14px 16px;border:1px solid var(--line,#2a3550);border-radius:12px;background:rgba(20,32,54,.6);display:flex;flex-direction:column;gap:10px}
+  .forge-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+  .forge-head b{font-size:14px}
+  .forge-sub{font-size:12px;opacity:.65}
+  .forge input[type=text],.forge input[type=password]{min-height:34px;padding:6px 10px;border-radius:8px;border:1px solid var(--line,#2a3550);background:transparent;color:inherit;font-size:13px}
+  .forge-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .forge-row label{display:flex;align-items:center;gap:6px;font-size:12px}
+  .forge-row select{min-height:32px;padding:4px 8px;border-radius:8px;border:1px solid var(--line,#2a3550);background:transparent;color:inherit;font-size:13px}
+  .forge-row input[type=password]{flex:1;min-width:180px}
+  .forge button{min-height:32px;padding:0 14px;border-radius:8px;border:1px solid var(--line,#2a3550);background:transparent;color:inherit;font-size:13px;cursor:pointer}
+  .forge button.primary{background:#4b7bec;border-color:#4b7bec;color:#fff}
+  .forge button:disabled{opacity:.6;cursor:default}
+  .forge-msg{font-size:12px;line-height:1.5;min-height:16px}
+  .forge-msg.ok{color:#3ecf8e}.forge-msg.err{color:#ff6b6b}.forge-msg.warn{color:#e8c25a}
+  .stage-tip{font-size:12px;opacity:.55;margin:6px 0 10px;line-height:1.5}
+</style>
 </head>
 <body>
   <header>
     🛠 宠物工坊
-    <span class="hint">自己制作桌面宠物：编辑 SVG 实时预览保存，或导入图片（自动去白底）生成</span>
+    <span class="hint">一句话让 AI 画一只，或手写 SVG / 导入图片</span>
   </header>
+  <!-- AI 一句话生成（2026-10-20 加：原来只有设置页才有，用户在这里找不到） -->
+  <section class="forge">
+    <div class="forge-head">
+      <b>AI 一句话生成桌宠</b>
+      <span class="forge-sub">用你自己的图像生成模型，需自备 API Key（本软件不提供算力；DeepSeek 模型不生图）</span>
+    </div>
+    <input type="text" id="studio-forge-desc" maxlength="200"
+           placeholder="例：一只穿法袍戴眼镜的熊猫，抱着一摞卷宗" spellcheck="false" />
+    <div class="forge-row">
+      <label>动作风格
+        <select id="studio-forge-style">
+          <option value="generic">通用</option><option value="lawyer">律师</option>
+          <option value="judge">法官</option><option value="prosecutor">检察官</option>
+          <option value="bailiff">法警</option><option value="forensic">法医</option>
+          <option value="clerk">书记员</option><option value="chef">厨师</option>
+        </select>
+      </label>
+      <label>生图接口
+        <select id="studio-forge-provider">
+          <option value="agnes">Agnes</option><option value="dashscope">通义万相</option>
+          <option value="doubao">豆包</option><option value="zhipu">智谱</option>
+          <option value="siliconflow">硅基流动</option><option value="openai">OpenAI</option>
+        </select>
+      </label>
+      <input type="password" id="studio-forge-key" placeholder="API Key（只保存在本机）" spellcheck="false" />
+      <button id="studio-forge-run" class="primary">生成</button>
+      <button id="studio-forge-doc">宠物怎么捏</button>
+    </div>
+    <div class="forge-msg" id="studio-forge-msg"></div>
+  </section>
   <div class="cols">
     <div class="left">
       <div class="stage" id="stage"></div>
+      <div class="stage-tip" id="stage-tip">↑ 这是默认模板，可改右侧 SVG 代码，或导入图片；要 AI 生成请用上面的输入框</div>
       <div class="row">
         <button id="btn-apply" class="primary">应用预览</button>
         <button id="btn-save">保存为宠物…</button>

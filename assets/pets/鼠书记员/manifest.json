@@ -2,73 +2,73 @@
   "displayName": "鼠书记员",
   "cellWidth": 192,
   "cellHeight": 208,
-  "columns": 24,
+  "columns": 12,
   "rows": [
     {
       "state": "idle",
       "row": 0,
-      "frames": 10,
-      "speed": 3.2
+      "frames": 6,
+      "speed": 2.6
     },
     {
       "state": "waving",
       "row": 1,
-      "frames": 14,
-      "speed": 3.8
+      "frames": 5,
+      "speed": 1.8
     },
     {
       "state": "jumping",
       "row": 2,
-      "frames": 2,
-      "speed": 3.0
+      "frames": 6,
+      "speed": 1.6
     },
     {
       "state": "flip",
       "row": 3,
-      "frames": 1,
-      "speed": 1.0
+      "frames": 6,
+      "speed": 1.8
     },
     {
       "state": "ball",
       "row": 4,
-      "frames": 14,
-      "speed": 3.6
+      "frames": 6,
+      "speed": 2.0
     },
     {
       "state": "swimming",
       "row": 5,
-      "frames": 12,
-      "speed": 3.6
+      "frames": 6,
+      "speed": 2.0
     },
     {
       "state": "diving",
       "row": 6,
-      "frames": 12,
-      "speed": 3.6
+      "frames": 6,
+      "speed": 2.2
     },
     {
       "state": "standing",
       "row": 7,
-      "frames": 3,
-      "speed": 3.2
+      "frames": 4,
+      "speed": 1.8
     },
     {
       "state": "look",
       "row": 8,
-      "frames": 12,
-      "speed": 3.6
+      "frames": 6,
+      "speed": 2.0
     },
     {
       "state": "review",
       "row": 9,
-      "frames": 16,
-      "speed": 3.6
+      "frames": 6,
+      "speed": 2.2
     },
     {
       "state": "sleeping",
       "row": 10,
-      "frames": 12,
-      "speed": 3.8
+      "frames": 6,
+      "speed": 1.8
     }
   ]
 }

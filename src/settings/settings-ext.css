@@ -336,3 +336,23 @@
   color: inherit;
   border: 1px solid var(--dsw-alias-border-l1);
 }
+
+/* 宠物下拉菜单（2026-10-21：原来是一长条 div 列表，占空间还被挤出可视区） */
+.dsh-ext-select {
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 32px 6px 10px;
+  margin: 4px 0 10px;
+  border: 1px solid var(--line, #2a3550);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' stroke='%23888' stroke-width='1.6' fill='none' stroke-linecap='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+.dsh-ext-select:focus { outline: 2px solid #4b7bec; outline-offset: 1px; }

@@ -2,19 +2,19 @@
   "displayName": "鼠书记员",
   "cellWidth": 192,
   "cellHeight": 208,
-  "columns": 12,
+  "columns": 24,
   "rows": [
     {
       "state": "idle",
       "row": 0,
-      "frames": 9,
-      "speed": 1.15
+      "frames": 24,
+      "speed": 1.2
     },
     {
       "state": "waving",
       "row": 1,
-      "frames": 12,
-      "speed": 3.39
+      "frames": 24,
+      "speed": 1.8
     },
     {
       "state": "jumping",
@@ -25,20 +25,20 @@
     {
       "state": "dash",
       "row": 3,
-      "frames": 6,
-      "speed": 0.75
+      "frames": 24,
+      "speed": 1.6
     },
     {
       "state": "flip",
       "row": 4,
-      "frames": 6,
-      "speed": 0.75
+      "frames": 24,
+      "speed": 1.6
     },
     {
       "state": "ball",
       "row": 5,
-      "frames": 6,
-      "speed": 0.6
+      "frames": 24,
+      "speed": 1.6
     },
     {
       "state": "swimming",
@@ -50,7 +50,7 @@
       "state": "diving",
       "row": 7,
       "frames": 6,
-      "speed": 2.25
+      "speed": 1.0
     },
     {
       "state": "standing",
@@ -61,20 +61,20 @@
     {
       "state": "look",
       "row": 9,
-      "frames": 6,
-      "speed": 1.39
+      "frames": 24,
+      "speed": 1.6
     },
     {
       "state": "review",
       "row": 10,
-      "frames": 12,
-      "speed": 2.78
+      "frames": 24,
+      "speed": 1.6
     },
     {
       "state": "sleeping",
       "row": 11,
-      "frames": 6,
-      "speed": 0.75
+      "frames": 24,
+      "speed": 1.8
     },
     {
       "state": "walking-left",
@@ -112,5 +112,14 @@
       "frames": 6,
       "speed": 0.75
     }
-  ]
+  ],
+  "sounds": {
+    "review": "sound/review.mp3",
+    "look": "sound/look.mp3",
+    "flip": "sound/flip.mp3",
+    "dash": "sound/dash.mp3",
+    "ball": "sound/ball.mp3",
+    "sleeping": "sound/sleeping.mp3",
+    "waving": "sound/waving.mp3"
+  }
 }

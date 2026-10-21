@@ -135,10 +135,52 @@ export class PetWindow {
     console.log(`[pet] 当前宠物「${String(cur)}」不可用，已回落到「${fallback}」`);
   }
 
+  /** 音效开关变化时通知宠物窗口 */
+  pushSoundSetting(): void {
+    const w = this.window;
+    if (w && !w.isDestroyed()) {
+      w.webContents.send('pet:sound-changed', !!this.store.get('petSound'));
+    }
+  }
+
   /** 在访达中打开用户宠物目录（不存在则先创建） */
   openPetsFolder(): void {
     this.ensureUserPetsDir();
     void shell.openPath(this.userPetsDir());
+  }
+
+  /** 当前宠物是否有音效（manifest 里的 sounds 字段） */
+  hasSounds(): boolean {
+    try {
+      const name = this.store.get('petGif');
+      if (!name || !this.isSpritePet(name)) return false;
+      const mf = path.join(this.userPetsDir(), name, 'manifest.json');
+      const m = JSON.parse(fs.readFileSync(mf, 'utf-8')) as { sounds?: Record<string, string> };
+      return !!(m.sounds && Object.keys(m.sounds).length);
+    } catch { return false; }
+  }
+
+  /**
+   * 读某个状态的音效，返回 data URI（供渲染进程用 Audio 播放）。
+   * manifest 里 sounds: { "review": "sound/writing.mp3", ... }
+   */
+  soundDataUri(state: string): string | null {
+    try {
+      const name = this.store.get('petGif');
+      if (!name || !this.isSpritePet(name)) return null;
+      const dir = path.join(this.userPetsDir(), name);
+      const m = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf-8')) as {
+        sounds?: Record<string, string>;
+      };
+      const rel = m.sounds?.[state];
+      if (!rel) return null;
+      const abs = path.join(dir, rel);
+      if (!fs.existsSync(abs)) return null;
+      const buf = fs.readFileSync(abs);
+      const ext = path.extname(abs).slice(1).toLowerCase();
+      const mime = ext === 'wav' ? 'audio/wav' : ext === 'ogg' ? 'audio/ogg' : 'audio/mpeg';
+      return `data:${mime};base64,` + buf.toString('base64');
+    } catch { return null; }
   }
 
   /** 宠物预览（data URI，供设置页展示）：SVG 直接读；帧动画宠物读目录 preview.png；其余返回 null */

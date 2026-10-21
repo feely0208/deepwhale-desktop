@@ -89,6 +89,46 @@
     }
   }
 
+  // ── 宠物音效（2026-10-21 加）─────────────────────────────────
+  // 设计：manifest 里 sounds: { "review": "sound/writing.mp3", ... }
+  // 状态进入时播放一次；标记了 loop 的状态（如写字）循环播放，切走就停。
+  // 默认关闭，用户在设置页打开才会响——不影响只想要安静桌宠的人。
+  var soundEnabled = false;
+  var soundCache = {};
+  var currentAudio = null;
+  var LOOP_STATES = { review: true, ball: true, sleeping: true };
+
+  function stopSound() {
+    if (currentAudio) { try { currentAudio.pause(); } catch (e) {} currentAudio = null; }
+  }
+
+  function playStateSound(state) {
+    stopSound();
+    if (!soundEnabled) return;
+    var name = spriteName;
+    if (!name) return;
+    window.dsh.petSoundInfo(state).then(function (uri) {
+      if (!uri || !soundEnabled) return;
+      try {
+        var a = new Audio(uri);
+        a.volume = 0.45;
+        a.loop = !!LOOP_STATES[state];
+        a.play().catch(function () {});
+        currentAudio = a;
+      } catch (e) {}
+    }).catch(function () {});
+  }
+
+  function refreshSoundEnabled() {
+    window.dsh.petSoundGet().then(function (r) {
+      soundEnabled = !!(r && r.enabled);
+      if (!soundEnabled) stopSound();
+      else if (spriteState) playStateSound(spriteState);
+    }).catch(function () {});
+  }
+  refreshSoundEnabled();
+  window.dsh.onPetSoundChanged && window.dsh.onPetSoundChanged(refreshSoundEnabled);
+
   function findByState(name) {
     var rows = (spriteInfo && spriteInfo.manifest.rows) || [];
     for (var i = 0; i < rows.length; i++) {
@@ -141,12 +181,14 @@
     if (curRow && (curRow !== row || state !== spriteState)) {
       fadeFrom = { row: curRow, idx: frameIdx, t0: performance.now() };
     }
+    var stateChanged = (spriteState !== state);
     spriteState = state;
     curRow = row;
     speedMul = mul;
     frameIdx = 0;
     accMs = 0;
     drawSpriteFrame();
+    if (stateChanged) { try { playStateSound(state); } catch (e) {} }
   }
 
   function drawFrameAt(row, idx) {

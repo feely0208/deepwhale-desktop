@@ -571,13 +571,17 @@ export class PetWindow {
     if (pb) {
       const disp = screen.getDisplayMatching(pb);
       const wa = disp.workArea;
-      // 优先放宠物下方；下方放不下就放上方
-      x = Math.round(pb.x + pb.width / 2 - W / 2);
-      y = pb.y + pb.height + GAP;
-      if (y + H > wa.y + wa.height) y = Math.max(wa.y + 8, pb.y - H - GAP);
-      x = Math.min(Math.max(wa.x + 8, x), wa.x + wa.width - W - 8);
+      // 2026-10-21 改：放宠物**右侧**，且右侧放不下就放左侧 ——
+      // 之前放正下方，虽然算下来不重叠，但用户仍反馈"点了就隐身"，
+      // 改成明确不重叠的侧边布局，并保证整窗可见。
+      y = Math.round(pb.y + pb.height / 2 - H / 2);
+      x = pb.x + pb.width + GAP;
+      if (x + W > wa.x + wa.width) x = pb.x - W - GAP;          // 右侧放不下 → 左侧
+      x = Math.max(wa.x + 8, Math.min(x, wa.x + wa.width - W - 8));
+      y = Math.max(wa.y + 8, Math.min(y, wa.y + wa.height - H - 8));
     }
 
+    console.log(`[ask] 宠物窗口 ${pb ? `${pb.x},${pb.y} ${pb.width}x${pb.height}` : '未知'} → 输入框 ${x},${y} ${W}x${H}`);
     this.askWin = new BrowserWindow({
       width: W,
       height: H,
@@ -591,7 +595,7 @@ export class PetWindow {
       transparent: true,
       hasShadow: true,
       roundedCorners: true,
-      alwaysOnTop: true,
+      alwaysOnTop: false,   // 不置顶：之前 true 会抢层级压住宠物（用户反馈"点了就隐身"）
       skipTaskbar: true,
       webPreferences: {
         preload: path.join(__dirname, '../preload/preload.js'),
@@ -640,16 +644,9 @@ export class PetWindow {
     const template: MenuItemConstructorOptions[] = [
       { label: '问它一句…', click: () => this.openAskWindow() },
       { label: '宠物皮肤', submenu: petItems },
-      {
-        label: '氛围音',
-        submenu: [
-          ambientItem('关闭', 'off'),
-          { type: 'separator' },
-          ambientItem('音乐盒（清脆）', 'musicbox'),
-          ambientItem('竖琴慢板（舒缓）', 'harp'),
-          ambientItem('平和（安静）', 'peaceful'),
-        ],
-      },
+      // 2026-10-21 临时下线：用户反馈合成的音乐"像噪音"。
+      // 功能代码保留（petAmbientSet / playAmbient），等拿到合适的轻音乐素材再开。
+      { label: '停止氛围音', click: () => { this.store.set('petAmbient', 'off'); this.pushAmbientSetting(); }, visible: !!String(this.store.get('petAmbient') ?? 'off').match(/^(white|pink|brown|musicbox|harp|peaceful)$/) },
       { type: 'separator' },
       {
         label: '穿透点击',

@@ -1421,6 +1421,10 @@ function registerIpc(): void {
                  el.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true }));
                  el.dispatchEvent(new Event('change', { bubbles: true }));
                }
+               // 注入后自动回车发送（点鼠提问的意图就是直接问，不该再点一次发送）
+               await new Promise(r => setTimeout(r, 140));
+               el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true }));
+               el.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true }));
                return 'ok';
              })()`,
             true

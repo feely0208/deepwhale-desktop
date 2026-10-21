@@ -115,32 +115,40 @@ function bumpFile(file, opts) {
   const applied = [];
   const groupHits = {};
   text = text.replace(
-    /(<div class="dlx-group">)([\s\S]*?)(?=<div class="dlx-group">|<\/div><\/div>\s*$|$)/g,
+    /(<div class="dlx-group"[^>]*>)([\s\S]*?)(?=<div class="dlx-group"[^>]*>|<\/div><\/div>\s*$|$)/g,
     (whole, open, body) => {
       // 归属只看分组标题（`<h3>`）。**绝不能**用「正文里出现过某族名」来判断：
       // 套装组的标题就是「深鲸套装（桌面 + 律师端）」，正文里桌面端、律师端都提，
       // 那样判断会让壳族/律师端规则二次命中套装组，把刚修好的 bug 原样带回来。
       const title = (body.match(/<h3>([^<]*)<\/h3>/) ?? [])[1] ?? '';
-      const fam = families.find((f) => f.oldV && title.includes(f.title));
+      // 不要求 oldV：download.html 的卡片链接是 /dl/ 重定向，推断不出旧版本号。
+      const fam = families.find((f) => title.includes(f.title));
       if (!fam) return whole; // 移动端等分组：不归任何一族，原样放行
       let out = body;
       let hits = 0;
       // 平台卡片上的版本徽标
       // 只有**真的改了字**才计入 hits —— 目标版本与旧版本相同时（比如套装这一版
       // 故意留在旧版，等 CDN 传完再切），替换是空操作，不能报成"改了 N 处"。
+      // 徽标按「分组 + 任意 semver」替换，不依赖 oldV：
+      // download.html 的卡片链接是 /dl/ 重定向，页面里没有 `DeepWhale-Desktop-x.y.z`
+      // 这种真实文件名，oldV 会推断成 undefined → 旧实现对它一直"无需改动"
+      // （2026-10-21 实测：1.0.61 发版后下载页还挂着 1.0.60 / 律师端 0.1.11 / 套装 1.0.28）。
       out = out.replace(
-        new RegExp(`(class="dlx-chip ver">)v${esc(fam.oldV)}(<)`, 'g'),
-        (_m, a, b) => {
-          if (fam.oldV !== fam.newV) hits += 1;
+        /(class="dlx-chip ver">)v(\d+\.\d+\.\d+)(<)/g,
+        (m, a, shown, b) => {
+          if (shown === fam.newV) return m;
+          hits += 1;
           return `${a}v${fam.newV}${b}`;
         },
       );
       // 分组标题里的「vX · N 个平台」（N 只在显式传了 platforms 时才改）
       out = out.replace(
-        new RegExp(`(class="cnt">)v${esc(fam.oldV)}( · )(\\d+)( 个平台)`, 'g'),
-        (_m, a, sep, n, tail) => {
-          if (fam.oldV !== fam.newV || (fam.platforms && fam.platforms !== n)) hits += 1;
-          return fam.platforms ? `${a}v${fam.newV}${sep}${fam.platforms}${tail}` : `${a}v${fam.newV}${sep}${n}${tail}`;
+        /(class="cnt">)v(\d+\.\d+\.\d+)( · )(\d+)( 个平台)/g,
+        (m, a, shown, sep, n, tail) => {
+          const wantPlatforms = fam.platforms ?? n;
+          if (shown === fam.newV && wantPlatforms === n) return m;
+          hits += 1;
+          return `${a}v${fam.newV}${sep}${wantPlatforms}${tail}`;
         },
       );
       if (hits > 0) groupHits[fam.key] = (groupHits[fam.key] || 0) + hits;

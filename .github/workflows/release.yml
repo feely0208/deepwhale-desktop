@@ -56,6 +56,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # 发版一致性：版本号/package-lock/两站常量/下载页徽标必须一致（2026-10-21 加）
+      - name: 发版一致性守卫（版本号 / package-lock / 两站常量 / 下载页徽标）
+        run: node scripts/check-release-consistency.js
+
       - name: 安装器配置守卫（appId 冻结 / oneClick / 固定目录）
         run: npm run check:installer
 

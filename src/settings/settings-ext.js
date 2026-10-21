@@ -56,10 +56,9 @@
       '    <div class="dsh-ext-row">宠物大小：<b id="dsh-ext-pet-scale-val">100%</b></div>' +
       '    <input type="range" class="dsh-ext-range" id="dsh-ext-pet-scale" min="0.6" max="2" step="0.1" />' +
       '    <div class="dsh-ext-preview" id="dsh-ext-pet-preview"><span class="ph">—</span></div>' +
-      '    <select class="dsh-ext-select" id="dsh-ext-pet-list"></select>' +
+      '    <div class="dsh-ext-list" id="dsh-ext-pet-list"></div>' +
       '    <label class="dsh-ext-check"><input type="checkbox" id="dsh-ext-pet-visible" /> 显示宠物</label>' +
       '    <label class="dsh-ext-check"><input type="checkbox" id="dsh-ext-pet-clickthrough" /> 穿透点击（可点到宠物后面的内容）</label>' +
-      '    <label class="dsh-ext-check"><input type="checkbox" id="dsh-ext-pet-sound" /> 播放宠物音效（翻书/写字等，默认关闭）</label>' +
       '    <div class="dsh-ext-btns">' +
       '      <button class="dsh-ext-btn" id="dsh-ext-pet-open">打开宠物目录…</button>' +
       '      <button class="dsh-ext-btn" id="dsh-ext-pet-studio">宠物工坊…</button>' +
@@ -200,35 +199,33 @@
     var frameValEl = document.getElementById('dsh-ext-pet-fps-val');
     var scaleEl = document.getElementById('dsh-ext-pet-scale');
     var scaleValEl = document.getElementById('dsh-ext-pet-scale-val');
-    var petSoundEl = document.getElementById('dsh-ext-pet-sound');
 
     function renderPets(state) {
       var current = state.current;
       petListEl.innerHTML = '';
       // 2026-10-21：宠物列表改成下拉菜单（原来是一长条 div 列表，占空间、还被挤到滚动区外）
+      // 2026-10-21 恢复列表：用户反馈下拉菜单是"报废方案"，原来的列表布局更好
       (state.list || []).forEach(function (n) {
-        var opt = document.createElement('option');
-        opt.value = n;
-        opt.textContent = n;
-        if (n === current) opt.selected = true;
-        petListEl.appendChild(opt);
+        var div = document.createElement('div');
+        div.className = 'dsh-ext-item' + (current === n ? ' active' : '');
+        div.textContent = n;
+        div.addEventListener('click', function () {
+          window.dsh.petSelect(n);
+          petCurrentEl.textContent = n;
+          Array.prototype.forEach.call(petListEl.children, function (c) { c.classList.remove('active'); });
+          div.classList.add('active');
+          setTimeout(function () {
+            window.dsh.petState().then(function (s2) {
+              if (s2 && s2.previewDataUri) petPreviewEl.innerHTML = '<img src="' + s2.previewDataUri + '" alt="pet" />';
+              else petPreviewEl.innerHTML = '<span class="ph">' + n + '</span>';
+            });
+          }, 120);
+        });
+        petListEl.appendChild(div);
       });
-      petListEl.onchange = function () {
-        var n = petListEl.value;
-        window.dsh.petSelect(n);
-        petCurrentEl.textContent = n;
-        // 切完立刻刷新预览图，否则会一直显示上一只（2026-10-20 实测）
-        setTimeout(function () {
-          window.dsh.petState().then(function (s2) {
-            if (s2 && s2.previewDataUri) petPreviewEl.innerHTML = '<img src="' + s2.previewDataUri + '" alt="pet" />';
-            else petPreviewEl.innerHTML = '<span class="ph">' + n + '</span>';
-          });
-        }, 120);
-      };
       petCurrentEl.textContent = current || '—';
       petVisibleEl.checked = !!state.visible;
       petClickEl.checked = !!state.clickThrough;
-      if (petSoundEl && window.dsh.petSoundGet) window.dsh.petSoundGet().then(function (r) { petSoundEl.checked = !!(r && r.enabled); });
       var fm = state.frameMs || 130;
       frameEl.value = String(fm);
       frameValEl.textContent = fm + 'ms/帧';
@@ -326,7 +323,6 @@
 
     window.dsh.petState().then(renderPets);
     petVisibleEl.addEventListener('change', function () { window.dsh.petSetVisible(petVisibleEl.checked); });
-    if (petSoundEl) petSoundEl.addEventListener('change', function () { window.dsh.petSoundSet(petSoundEl.checked); });
     petClickEl.addEventListener('change', function () { window.dsh.petSetClickThrough(petClickEl.checked); });
     frameEl.addEventListener('input', function () { frameValEl.textContent = frameEl.value + 'ms/帧'; });
     frameEl.addEventListener('change', function () {

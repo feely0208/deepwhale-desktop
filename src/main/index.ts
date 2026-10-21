@@ -1375,15 +1375,6 @@ function registerIpc(): void {
     pet.ensureUserPetsDir();
     return forgePet(opts, pet.userPetsDir());
   });
-  ipcMain.handle('pet:sound-info', (_e, state: string) => {
-    if (!pet) return null;
-    return pet.soundDataUri(state);
-  });
-  ipcMain.handle('pet:sound:get', () => ({ enabled: !!store.get('petSound'), available: !!pet?.hasSounds() }));
-  ipcMain.on('pet:sound:set', (_e, enabled: boolean) => {
-    store.set('petSound', !!enabled);
-    pet?.pushSoundSetting();
-  });
   ipcMain.handle('pet:open-forge-doc', async () => {
     const doc = forgeDocPath();
     const err = await shell.openPath(doc);

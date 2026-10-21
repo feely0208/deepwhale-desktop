@@ -70,13 +70,5 @@
       "frames": 12,
       "speed": 1.8
     }
-  ],
-  "sounds": {
-    "review": "sound/review.mp3",
-    "look": "sound/look.mp3",
-    "flip": "sound/flip.mp3",
-    "ball": "sound/ball.mp3",
-    "sleeping": "sound/sleeping.mp3",
-    "waving": "sound/waving.mp3"
-  }
+  ]
 }

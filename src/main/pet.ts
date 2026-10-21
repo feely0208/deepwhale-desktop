@@ -141,13 +141,7 @@ export class PetWindow {
 
 
 
-  /** 音效开关变化时通知宠物窗口 */
-  pushSoundSetting(): void {
-    const w = this.window;
-    if (w && !w.isDestroyed()) {
-      w.webContents.send('pet:sound-changed', !!this.store.get('petSound'));
-    }
-  }
+
 
   /** 在访达中打开用户宠物目录（不存在则先创建） */
   openPetsFolder(): void {
@@ -155,16 +149,7 @@ export class PetWindow {
     void shell.openPath(this.userPetsDir());
   }
 
-  /** 当前宠物是否有音效（manifest 里的 sounds 字段） */
-  hasSounds(): boolean {
-    try {
-      const name = this.store.get('petGif');
-      if (!name || !this.isSpritePet(name)) return false;
-      const mf = path.join(this.userPetsDir(), name, 'manifest.json');
-      const m = JSON.parse(fs.readFileSync(mf, 'utf-8')) as { sounds?: Record<string, string> };
-      return !!(m.sounds && Object.keys(m.sounds).length);
-    } catch { return false; }
-  }
+
 
   /**
    * 读某个状态的音效，返回 data URI（供渲染进程用 Audio 播放）。

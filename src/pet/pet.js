@@ -119,6 +119,46 @@
     }).catch(function () {});
   }
 
+  // ── 氛围音（2026-10-21 加）：白噪音/粉红噪音/棕噪音，循环播放
+  var ambientAudio = null;
+  var ambientKind = 'off';
+  var ambientCache = {};
+
+  function stopAmbient() {
+    if (ambientAudio) { try { ambientAudio.pause(); } catch (e) {} ambientAudio = null; }
+  }
+
+  function playAmbient(kind) {
+    stopAmbient();
+    if (!kind || kind === 'off') return;
+    ambientKind = kind;
+    var start = function (uri) {
+      if (!uri || ambientKind !== kind) return;
+      try {
+        var a = new Audio(uri);
+        a.loop = true;
+        a.volume = 0.28;
+        a.play().catch(function () {});
+        ambientAudio = a;
+      } catch (e) {}
+    };
+    if (ambientCache[kind]) { start(ambientCache[kind]); return; }
+    window.dsh.petAmbientInfo(kind).then(function (uri) {
+      if (!uri) return;
+      ambientCache[kind] = uri;
+      start(uri);
+    }).catch(function () {});
+  }
+
+  function refreshAmbient() {
+    window.dsh.petAmbientGet().then(function (r) {
+      var k = (r && r.kind) || 'off';
+      if (k !== ambientKind || (k !== 'off' && !ambientAudio)) playAmbient(k);
+    }).catch(function () {});
+  }
+  refreshAmbient();
+  window.dsh.onPetAmbientChanged && window.dsh.onPetAmbientChanged(function (k) { playAmbient(k); });
+
   function refreshSoundEnabled() {
     window.dsh.petSoundGet().then(function (r) {
       soundEnabled = !!(r && r.enabled);
@@ -469,8 +509,8 @@
     // 没怎么动 = 当成"点一下"：**默认第一个动作就是冲刺划水**（用户指定），
     // 点它就直接窜半个屏幕，最容易发现。
     if (!moved && Date.now() - downAt < 450) {
-      // 2026-10-21：**只对没有 dash 能力的宠物**替换点击动作。
-      // 大肥鱼这类有 dash 的宠物保留划水冲刺（"乘风破浪"是它的特色，别动）。
+      // 2026-10-21：单击 = 问它一句（打开提问框），同时做个视觉反馈。
+      // 有 dash 能力的宠物（大肥鱼）仍保留划水冲刺 —— "乘风破浪"是它的特色。
       if (findByState('dash')) {
         playDash();
       } else {
@@ -478,6 +518,10 @@
           return findByState(a);
         });
         if (show.length) setSpriteState(show[Math.floor(Math.random() * show.length)]);
+      }
+      // 除了纯装饰动作，单击也打开提问框（用户明确要"点鼠提问"）
+      if (window.dsh && window.dsh.petAskOpen) {
+        try { window.dsh.petAskOpen(); } catch (e) {}
       }
     } else if (hovered) {
       startHoverCycle();

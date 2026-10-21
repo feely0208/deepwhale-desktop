@@ -14,6 +14,13 @@ contextBridge.exposeInMainWorld('dsh', {
   petSoundInfo: (state: string) => ipcRenderer.invoke('pet:sound-info', state),
   petSoundGet: () => ipcRenderer.invoke('pet:sound:get'),
   petSoundSet: (enabled: boolean) => ipcRenderer.send('pet:sound:set', enabled),
+  petAsk: (text: string) => ipcRenderer.invoke('pet:ask', text),
+  petAskOpen: () => ipcRenderer.send('pet:ask-open'),
+  petAskClose: () => ipcRenderer.send('pet:ask-close'),
+  petAmbientInfo: (kind: string) => ipcRenderer.invoke('pet:ambient-info', kind),
+  petAmbientGet: () => ipcRenderer.invoke('pet:ambient:get'),
+  petAmbientSet: (kind: string) => ipcRenderer.send('pet:ambient:set', kind),
+  onPetAmbientChanged: (cb: (kind: string) => void) => { ipcRenderer.on('pet:ambient-changed', (_e, k) => cb(k)); },
   onPetSoundChanged: (cb: () => void) => { ipcRenderer.on('pet:sound-changed', () => cb()); },
   /** 冲刺划水：让宠物窗口按方向滑出去半个屏幕（主进程做缓动 + 边界限制） */
   petDash: (direction: number) => ipcRenderer.send('pet:dash', direction),

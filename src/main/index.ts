@@ -1375,6 +1375,83 @@ function registerIpc(): void {
     pet.ensureUserPetsDir();
     return forgePet(opts, pet.userPetsDir());
   });
+  // 「问它一句」：把问题带到主界面（2026-10-21）
+  // 优先注入 DSH 输入框；找不到就退回剪贴板，不让用户白打字。
+  ipcMain.handle('pet:ask', async (_e, text: string) => {
+    const q = String(text ?? '').trim();
+    if (!q) return { ok: false, error: '内容为空' };
+    try {
+      if (mainWin && !mainWin.isDestroyed()) {
+        if (mainWin.isMinimized()) mainWin.restore();
+        mainWin.show();
+        mainWin.focus();
+      }
+      const injected = mainWin
+        ? await mainWin.webContents.executeJavaScript(
+            `(async () => {
+               const t = ${JSON.stringify(q)};
+               const t = ${JSON.stringify(q)};
+               // 更通用的输入框查找：DSH 的编辑器可能是 contenteditable/ProseMirror，
+               // 也可能是 textarea；按优先级挨个试。
+               const cands = [
+                 '[contenteditable="true"]',
+                 '[contenteditable]',
+                 'textarea',
+                 '[role="textbox"]',
+                 'input[type="text"]'
+               ];
+               let el = null;
+               for (const sel of cands) {
+                 const found = [...document.querySelectorAll(sel)].find(e => e.offsetParent !== null);
+                 if (found) { el = found; break; }
+               }
+               if (!el) return 'not-found';
+               el.focus();
+               // 方式一：execCommand（对 contenteditable 最可靠，会触发真正的输入事件）
+               let ok = false;
+               try {
+                 ok = document.execCommand('insertText', false, t);
+               } catch (e) { ok = false; }
+               if (!ok) {
+                 if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') {
+                   const proto = el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+                   Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, t);
+                 } else {
+                   el.textContent = t;
+                 }
+                 el.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true }));
+                 el.dispatchEvent(new Event('change', { bubbles: true }));
+               }
+               return 'ok';
+             })()`,
+            true
+          )
+        : 'no-window';
+      if (injected === 'ok') {
+        pet?.closeAskWindow();
+        return { ok: true, mode: 'injected' };
+      }
+      clipboard.writeText(q);
+      pet?.closeAskWindow();
+      return { ok: true, mode: 'clipboard' };
+    } catch (err) {
+      try { clipboard.writeText(q); } catch { /* ignore */ }
+      pet?.closeAskWindow();
+      return { ok: true, mode: 'clipboard', error: (err as Error).message };
+    }
+  });
+  ipcMain.on('pet:ask-close', () => pet?.closeAskWindow());
+  ipcMain.on('pet:ask-open', () => pet?.openAskWindow());
+
+  ipcMain.handle('pet:ambient-info', (_e, kind: string) => {
+    if (!pet) return null;
+    return pet.ambientDataUri(kind);
+  });
+  ipcMain.handle('pet:ambient:get', () => ({ kind: String(store.get('petAmbient') ?? 'off') }));
+  ipcMain.on('pet:ambient:set', (_e, kind: string) => {
+    store.set('petAmbient', String(kind ?? 'off'));
+    pet?.pushAmbientSetting();
+  });
   ipcMain.handle('pet:sound-info', (_e, state: string) => {
     if (!pet) return null;
     return pet.soundDataUri(state);

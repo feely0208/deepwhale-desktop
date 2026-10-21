@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>问鼠书记员</title>
+<style>
+  :root { color-scheme: dark light; }
+  * { box-sizing: border-box; }
+  html, body { background: transparent; }
+  body {
+    margin: 0; padding: 10px; font: 13px/1.5 -apple-system, "PingFang SC", sans-serif;
+    color: #e8ecf4; user-select: none;
+  }
+  .card {
+    background: rgba(27,31,42,.97); border: 1px solid rgba(255,255,255,.12);
+    border-radius: 14px; padding: 12px 14px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.45);
+    -webkit-app-region: drag;
+  }
+  textarea, button, .head span { -webkit-app-region: no-drag; }
+  .head { cursor: default; }
+  .head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .head b { font-size: 14px; }
+  .head span { font-size: 12px; opacity: .55; }
+  textarea {
+    width: 100%; min-height: 72px; max-height: 200px; resize: none;
+    padding: 10px 12px; border-radius: 10px; border: 1px solid #2c3444;
+    background: #232936; color: inherit; font: inherit; outline: none;
+  }
+  textarea:focus { border-color: #4b7bec; }
+  .row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+  .row .hint { flex: 1; font-size: 11.5px; opacity: .5; }
+  button {
+    min-height: 32px; padding: 0 16px; border-radius: 8px; border: 1px solid #2c3444;
+    background: transparent; color: inherit; font: inherit; cursor: pointer;
+  }
+  button.primary { background: #4b7bec; border-color: #4b7bec; color: #fff; }
+  button:disabled { opacity: .5; cursor: default; }
+  #msg { margin-top: 8px; font-size: 12px; min-height: 16px; }
+  #msg.ok { color: #3ecf8e; } #msg.err { color: #ff6b6b; } #msg.warn { color: #e8c25a; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="head"><b>问鼠书记员</b><span>回车发送 · Esc 关闭</span></div>
+  <textarea id="q" placeholder="比如：帮我把这段合同里的付款条款摘出来" spellcheck="false"></textarea>
+  <div class="row">
+    <span class="hint" id="hint">发送后会带到主界面的新会话里</span>
+    <button id="cancel">取消</button>
+    <button class="primary" id="send">发送</button>
+  </div>
+  <div id="msg"></div>
+</div>
+<script src="ask.js"></script>
+</body>
+</html>

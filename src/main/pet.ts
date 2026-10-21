@@ -135,6 +135,31 @@ export class PetWindow {
     console.log(`[pet] 当前宠物「${String(cur)}」不可用，已回落到「${fallback}」`);
   }
 
+  /** 氛围音文件目录（打包后在内置 assets/ambient；开发时同路径） */
+  private ambientDir(): string {
+    return path.join(__dirname, '../assets/ambient');
+  }
+
+  /** 读氛围音 data URI：white=白噪音 / pink=粉红噪音 / brown=棕噪音 */
+  ambientDataUri(kind: string): string | null {
+    const map: Record<string, string> = { white: 'white.mp3', pink: 'pink.mp3', brown: 'brown.mp3' };
+    const file = map[kind];
+    if (!file) return null;
+    try {
+      const abs = path.join(this.ambientDir(), file);
+      if (!fs.existsSync(abs)) return null;
+      return 'data:audio/mpeg;base64,' + fs.readFileSync(abs).toString('base64');
+    } catch { return null; }
+  }
+
+  /** 氛围音变化时通知宠物窗口 */
+  pushAmbientSetting(): void {
+    const w = this.window;
+    if (w && !w.isDestroyed()) {
+      w.webContents.send('pet:ambient-changed', String(this.store.get('petAmbient') ?? 'off'));
+    }
+  }
+
   /** 音效开关变化时通知宠物窗口 */
   pushSoundSetting(): void {
     const w = this.window;
@@ -525,6 +550,58 @@ export class PetWindow {
     return 'file://' + path.join(this.userPetsDir(), name).replace(/ /g, '%20');
   }
 
+  /** 「问它一句」小窗口（2026-10-21） */
+  private askWin: BrowserWindow | null = null;
+
+  openAskWindow(): void {
+    if (this.askWin && !this.askWin.isDestroyed()) {
+      this.askWin.show();
+      this.askWin.focus();
+      return;
+    }
+    // 贴着宠物弹出（不是在屏幕中间蹦一个白框）
+    const W = 440, H = 220, GAP = 10;
+    const pb = this.window?.getBounds();
+    let x: number | undefined, y: number | undefined;
+    if (pb) {
+      const disp = screen.getDisplayMatching(pb);
+      const wa = disp.workArea;
+      // 优先放宠物下方；下方放不下就放上方
+      x = Math.round(pb.x + pb.width / 2 - W / 2);
+      y = pb.y + pb.height + GAP;
+      if (y + H > wa.y + wa.height) y = Math.max(wa.y + 8, pb.y - H - GAP);
+      x = Math.min(Math.max(wa.x + 8, x), wa.x + wa.width - W - 8);
+    }
+
+    this.askWin = new BrowserWindow({
+      width: W,
+      height: H,
+      x,
+      y,
+      resizable: false,
+      minimizable: false,
+      maximizable: false,
+      fullscreenable: false,
+      frame: false,
+      transparent: true,
+      hasShadow: true,
+      roundedCorners: true,
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      webPreferences: {
+        preload: path.join(__dirname, '../preload/preload.js'),
+        contextIsolation: false,
+        nodeIntegration: false,
+      },
+    });
+    void this.askWin.loadFile(path.join(__dirname, '../ask/ask.html'));
+    this.askWin.on('closed', () => { this.askWin = null; });
+  }
+
+  closeAskWindow(): void {
+    if (this.askWin && !this.askWin.isDestroyed()) this.askWin.close();
+  }
+
   private showContextMenu(): void {
     const pets = this.listPets();
     const current = this.store.get('petGif');
@@ -541,8 +618,31 @@ export class PetWindow {
       })
     );
 
+    // 氛围音（2026-10-21）：白噪音/粉红噪音/棕噪音，循环播放，帮用户专注
+    const ambient = String(this.store.get('petAmbient') ?? 'off');
+    const ambientItem = (label: string, kind: string): MenuItemConstructorOptions => ({
+      label,
+      type: 'radio',
+      checked: ambient === kind,
+      click: () => {
+        this.store.set('petAmbient', kind);
+        this.pushAmbientSetting();
+      },
+    });
+
     const template: MenuItemConstructorOptions[] = [
+      { label: '问它一句…', click: () => this.openAskWindow() },
       { label: '宠物皮肤', submenu: petItems },
+      {
+        label: '氛围音',
+        submenu: [
+          ambientItem('关闭', 'off'),
+          { type: 'separator' },
+          ambientItem('白噪音（提神）', 'white'),
+          ambientItem('粉红噪音（柔和）', 'pink'),
+          ambientItem('棕噪音（低沉）', 'brown'),
+        ],
+      },
       { type: 'separator' },
       {
         label: '穿透点击',

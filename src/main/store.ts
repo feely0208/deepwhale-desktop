@@ -85,6 +85,8 @@ export interface Settings {
   petFrameMs: number;
   /** 播放宠物音效（翻书/写字等；默认关闭，用户自己开） */
   petSound: boolean;
+  /** 氛围音：off / white / pink / brown */
+  petAmbient: string;
   /** 宠物显示大小（0.6~2 倍，窗口尺寸） */
   petScale: number;
   /** 宠物窗口穿透点击 */
@@ -141,6 +143,7 @@ const DEFAULTS: Settings = {
   petGif: '青色大肥鱼',
   /** 播放宠物音效（默认关闭，用户自己开） */
   petSound: false,
+  petAmbient: 'off',
   petFrameMs: 80,
   petScale: 1,
   clickThrough: false,

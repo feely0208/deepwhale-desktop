@@ -6,6 +6,17 @@
 
 （下个版本待办；新条目写在这里）
 
+## [未发布] 加固：运行在临时目录（自动更新残留）时明确提示重装（2026-10-26）
+
+- 用户日志铁证：进程从 `%TEMP%\nsd808.tmp\old-install\resources\app\…` 启动，随包运行时残缺，
+  168 个插件 `ERR_MODULE_NOT_FOUND`，最后回退到 npx 上的 0.1.5-rc.1。
+- 原来只自愈快捷方式（`windows-shortcut.ts`），**不检查当前进程本身在不在临时目录**，所以用户会一直在残缺副本里用。
+- 修法：`runningFromTempInstall()` + `warnIfRunningFromTempInstall()` —— 打包态下 exe 路径含 `\temp\` / `\tmp\` / `old-install`
+  时：写一条 `running-from-temp` 故障日志，并弹一次「需要重新安装」对话框（可一键打开临时目录）。
+  不阻塞启动，开发态不触发。
+- 配置损坏自愈其实早就有：`patch-heal.ts` 的 `healPatchFiles()`（NUL 字节/截断/解析失败 → 备份 `.corrupt-*` 后重置），
+  启动时扫 home 与各 profile 的 `cordis.patch.yml`；本次日志里 2026-10-02 那条 NUL 异常就是它覆盖的场景。
+
 ## [未发布] 修复：兜底命令钉着远古 DSH 版本，回退时静默降级到 0.1.5（2026-10-26，Windows 用户日志确认）
 
 - 证据（用户日志）：`settings.json` 里 `command` 是 `npx @deepseek-ai/dsh@0.1.5-rc.1 web --port 3095 --no-open`；

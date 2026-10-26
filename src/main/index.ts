@@ -1594,6 +1594,53 @@ async function handleDshStartFailure(firstError: unknown): Promise<boolean> {
   }
 }
 
+/**
+ * 是否运行在自动更新留下的临时副本里。
+ *
+ * 2026-10-26 用户日志：进程从 `%TEMP%\nsd808.tmp\old-install\resources\app\…` 跑，
+ * 随包运行时残缺 → 168 个插件 `ERR_MODULE_NOT_FOUND` → 壳回退到远古 npx DSH（0.1.5），
+ * 于是 Office 预览/打印、1017 徽章、文件管理器这些“新功能”在用户那儿凭空消失。
+ */
+function runningFromTempInstall(): boolean {
+  if (!app.isPackaged) return false;
+  const exe = process.execPath.replace(/\//g, '\\').toLowerCase();
+  return /\\temp\\|\\tmp\\|old-install/.test(exe);
+}
+
+/** 运行在临时目录时：记故障日志 + 弹一次明确提示（不阻塞启动） */
+async function warnIfRunningFromTempInstall(): Promise<void> {
+  if (!runningFromTempInstall()) return;
+  const exe = process.execPath;
+  console.error('[startup] ⚠️ 应用运行在临时目录（自动更新残留），功能可能残缺：' + exe);
+  try {
+    appendCrashLog({
+      kind: 'running-from-temp',
+      summary: '应用运行在临时目录（自动更新残留副本）',
+      detail: `exe=${exe}\n提示：应卸载后重新安装；旧副本里的随包运行时可能是残缺的。`,
+      at: new Date().toISOString(),
+    });
+  } catch {
+    /* 记日志失败不影响启动 */
+  }
+  try {
+    const { response } = await dialog.showMessageBox({
+      type: 'warning',
+      title: '需要重新安装',
+      message: '深鲸桌面正在从临时目录运行（自动更新留下的残留副本）',
+      detail:
+        '这个副本里的运行时是残缺的：Office 预览/打印、模型徽章、文件管理器等功能会缺失或报错。\n\n' +
+        '请退出应用 → 卸载 → 重新安装最新版本。',
+      buttons: ['知道了', '打开临时目录'],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+    });
+    if (response === 1) void shell.openPath(path.dirname(exe));
+  } catch {
+    /* 弹窗失败不影响启动 */
+  }
+}
+
 async function showStartingPage(win: BrowserWindow, failed = false): Promise<void> {
   await win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(startingPageHtml(failed)));
 }
@@ -1605,6 +1652,10 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
   app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
 
   app.whenReady().then(async () => {
+    // 启动时若发现「进程本身在 %TEMP%\…\old-install\ 里跑」，明确提醒重装（2026-10-26 日志铁证）。
+    // 只修快捷方式不够：旧副本里随包运行时是残缺的，用户会一直在残缺环境里用。
+    void warnIfRunningFromTempInstall();
+
     // Windows：自愈被更新搞歪的桌面/开始菜单快捷方式（只在 win32 + 打包态执行）。
     //    用户实测：自动更新后桌面快捷方式被指到 %TEMP%\…\old-install\，而普通用户
     //    不会去开始菜单重建 → 必须在启动时自动修（见 windows-shortcut.ts 的注释）。

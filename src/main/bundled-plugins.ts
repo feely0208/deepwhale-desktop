@@ -79,6 +79,16 @@ const BUNDLED_PLUGINS: BundledPlugin[] = [
   // 数据来自 DSH 的插件服务；手机端（我们自己的辉光 UI）经自家网关调用。
   // ⚠️ 与 scripts/build-bundled-plugins.js 的拷贝段**必须同进同出**（否则声明了但载荷里没有）。
   { name: '@deepwhale-cn/dsh-shell-mobile', dir: 'dsh-shell-mobile' },
+  // 「深鲸记忆」（2026-10-26 用户定：1.0.62 起随包走）。
+  //
+  // 为什么它属于"壳必需"而不算业务插件：它是**每轮注入 MEMORY.md / USER.md 的那个东西**
+  // —— 没有它，新用户就没有跨会话记忆，属于桌面端的基础体验，不是可选工具。
+  //
+  // ⚠️ 包名**没有 scope**（npm 上就叫 `dsh-memory-doctor`，不是 @deepwhale-cn/ 开头），
+  //    但 profile `bundles` 里写的必须与包自身 package.json 的 name 完全一致。
+  // ⚠️ 载荷目录仍按"包名去掉 scope"的约定叫 `dsh-memory-doctor`。
+  // ⚠️ 与 scripts/build-bundled-plugins.js 的拷贝段**必须同进同出**（该脚本从 npm 拉这个包）。
+  { name: 'dsh-memory-doctor', dir: 'dsh-memory-doctor' },
   // ⛔ 品牌标记（空白会话顶部的青色大肥鱼）—— **不进包**（2026-10-08 用户决定）。
   //
   // 用户原话：「不要换新会话的大肥鱼头像，还是用官方原生的」。

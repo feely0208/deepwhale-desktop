@@ -8,9 +8,10 @@
  * 产出：
  *   bundled-plugins/
  *   ├── dsh-cn-compliance/         （含 cordis.patch.yml / lib / skill）
- *   └── dsh-cn-doc-formatter/      （含 cordis.patch.yml / lib / skill）
+ *   ├── dsh-cn-doc-formatter/      （含 cordis.patch.yml / lib / skill）
+ *   └── dsh-memory-doctor/         「深鲸记忆」，1.0.62 起随包（无 scope 的 npm 包）
  *
- * 这两个包体积都很小（各 <110KB），随包分发零负担，换来的是**装完即用、不联网**。
+ * 这几个包体积都很小（各 100~200KB），随包分发零负担，换来的是**装完即用、不联网**。
  *
  * 用法：
  *   node scripts/build-bundled-plugins.js
@@ -27,6 +28,10 @@ const { execFileSync } = require('child_process');
 const PLUGINS = [
   '@deepwhale-cn/dsh-cn-compliance',
   '@deepwhale-cn/dsh-cn-doc-formatter',
+  // 「深鲸记忆」（2026-10-26 用户定：1.0.62 起随包走）。
+  // ⚠️ 这个包**没有 scope**（npm 上就是 `dsh-memory-doctor`），所以下面的 dirName
+  //    不能直接 `name.split('/')[1]` —— 那样会得到 undefined。已按"有斜杠才取后半段"处理。
+  'dsh-memory-doctor',
 ];
 
 function fetchJson(url) {
@@ -102,7 +107,8 @@ async function main() {
 
   try {
   for (const name of PLUGINS) {
-    const dirName = name.split('/')[1];
+    // 有 scope 取后半段（@scope/name → name）；无 scope 的包（如 dsh-memory-doctor）直接用包名。
+    const dirName = name.includes('/') ? name.split('/')[1] : name;
     const meta = await fetchJson(`https://registry.npmjs.org/${encodeURIComponent(name)}`);
     const version = meta['dist-tags'].latest;
     const tarball = meta.versions[version].dist.tarball;

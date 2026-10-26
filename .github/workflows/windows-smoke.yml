@@ -110,14 +110,46 @@ jobs:
           }
           if ($failed) { throw "关键断言未通过" }
 
-      - name: Upload logs & screenshots
+      # ⚠️ 仓库是公开的：Actions 日志与 artifact 所有人都能看到，所以要**先去敏再上传**。
+      #    去什么：DSH 的带 token URL（?token=…）、疑似密钥、Authorization 头。
+      #    说明：这些 token 都是 runner 上临时实例的（机器跑完即销毁），但公开日志里也不该出现。
+      - name: Collect & sanitize artifacts
+        if: always()
+        shell: pwsh
+        run: |
+          $out = "smoke-artifacts"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          foreach ($f in @('smoke.out.log','smoke.err.log')) {
+            if (Test-Path $f) { Copy-Item $f (Join-Path $out $f) -Force }
+          }
+          $logs = Join-Path $env:APPDATA 'DeepWhale Desktop\logs'
+          if (Test-Path $logs) { Copy-Item $logs (Join-Path $out 'app-logs') -Recurse -Force }
+          $shots = Get-ChildItem -Path (Join-Path $env:APPDATA 'DeepWhale Desktop') -Filter *.png -Recurse -ErrorAction SilentlyContinue
+          if ($shots) {
+            New-Item -ItemType Directory -Force -Path (Join-Path $out 'shots') | Out-Null
+            $i = 0
+            foreach ($s in $shots) { Copy-Item $s.FullName (Join-Path $out ("shots\shot-{0}.png" -f $i)); $i++ }
+          }
+          $rules = @(
+            @{ re = 'token=[^&\s"'']+';          rep = 'token=***' },
+            @{ re = 'access_token=[^&\s"'']+';   rep = 'access_token=***' },
+            @{ re = 'sk-[A-Za-z0-9]{12,}';        rep = 'sk-***' },
+            @{ re = '(?i)(authorization:\s*)\S+'; rep = '$1***' }
+          )
+          Get-ChildItem -Path $out -Recurse -File -Include *.log,*.txt,*.json,*.yml,*.yaml -ErrorAction SilentlyContinue | ForEach-Object {
+            $text = Get-Content $_.FullName -Raw -ErrorAction SilentlyContinue
+            if ($null -eq $text) { return }
+            $new = $text
+            foreach ($r in $rules) { $new = [regex]::Replace($new, $r.re, $r.rep) }
+            if ($new -ne $text) { Set-Content -LiteralPath $_.FullName -Value $new -NoNewline -Encoding utf8 }
+          }
+          Write-Host "去敏完成，待上传："
+          Get-ChildItem $out -Recurse | Select-Object -First 20 | ForEach-Object { Write-Host "  $($_.FullName)" }
+
+      - name: Upload artifacts (sanitized)
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: windows-smoke-${{ github.run_id }}
           if-no-files-found: warn
-          path: |
-            smoke.out.log
-            smoke.err.log
-            ${{ env.APPDATA }}\DeepWhale Desktop\logs\**
-            ${{ env.APPDATA }}\DeepWhale Desktop\**\*.png
+          path: smoke-artifacts/**

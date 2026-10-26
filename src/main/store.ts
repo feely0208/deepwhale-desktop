@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { DSH_RUNTIME_VERSION } from './dsh-version.generated';
 import { PROFILE_NAME } from './profile';
+import { migrateStaleDshCommand } from './settings-migrate';
 
 /**
  * 应用设置（极简 JSON store）。
@@ -185,6 +186,12 @@ export class Store {
         this.data.lanAccess = true;
         this.data.lanAccessMigrated = true;
       }
+      // 每次加载都校正兜底命令里的 DSH 版本（只动我们自己的默认形态、且更老时）：
+      // 实测（2026-10-26，Windows 1.0.61 用户日志）settings.json 里存的是
+      // `npx @deepseek-ai/dsh@0.1.5-rc.1 …`，而随包运行时是 0.2.x。一旦随包运行时不可用，
+      // 壳会静默回退到这条命令 → 用户跑的是远古 DSH：office-to-pdf、1017 徽章、
+      // open-in-app 全都“消失”，而界面上没有任何提示。按版本号升级掉它。
+      this.data.command = migrateStaleDshCommand(this.data.command);
       // 一次性迁移：宠物帧率老默认 130ms/帧（约 7fps）播起来一顿一顿的（用户实测反馈）。
       // 只有"还停在老默认值"的用户才升级；自己调过的一律尊重。
       if (!this.data.petFrameMigrated) {

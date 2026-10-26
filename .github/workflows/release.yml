@@ -215,6 +215,8 @@ jobs:
           node scripts/check-office-node-wrapper.js
           # 模型改名补丁的清理回归（老用户升级后要恢复官方 1017 徽章）
           node scripts/test-model-label.js
+          # 兜底命令里的 DSH 版本迁移（老用户 settings.command 可能钉着远古版本）
+          node scripts/test-settings-migrate.js
           # 法律模式必须真的进 Agent 预设花名册 —— 只验客户端插件在不在是不够的：
           # 曾经客户端插件好好的，而预设写进了运行时已不读的目录，
           # 三平台的选择器里都没有「法律模式」，所有检查却都是绿的。

@@ -6,6 +6,19 @@
 
 （下个版本待办；新条目写在这里）
 
+## [未发布] 修复：兜底命令钉着远古 DSH 版本，回退时静默降级到 0.1.5（2026-10-26，Windows 用户日志确认）
+
+- 证据（用户日志）：`settings.json` 里 `command` 是 `npx @deepseek-ai/dsh@0.1.5-rc.1 web --port 3095 --no-open`；
+  而随包运行时是 `0.2.1-rc.2`。这条命令只在「随包运行时不可用」时才用，但一旦用上，
+  用户得到的是 0.1.5 内核 —— `office-to-pdf` / `skill-office` / 1017 徽章 / open-in-app 等**后来才有的功能全部不存在**，
+  而界面没有任何提示（同机日志里同时有 168 个 `ERR_MODULE_NOT_FOUND`，运行目录还是
+  `%TEMP%\nsd808.tmp\old-install\resources\app\…`）。
+- 修法 1：`src/main/settings-migrate.ts` + `store.load()` 每次启动校正兜底命令：
+  **只**把 `@deepseek-ai/dsh@x.y.z` 里**更老的版本**升到随包版本；自定义可执行文件、比随包更新的版本一律不动。
+- 修法 2：`service-manager` 在走兜底命令时打明确告警（原来只有 profile 名的 warn），
+  避免「功能凭空消失」再被当成玄学。
+- 测试：`scripts/test-settings-migrate.js`（5 项），已挂进 release.yml 离线守卫。
+
 ## [未发布] 修复：模型「1017」徽章不显示——撤掉 1.0.60 的改名补丁（2026-10-26）
 
 - 现象：Windows（未登录）模型选择器显示 `DeepSeek-V4.1-Flash-1017` 纯文本，没有截图里那种 `1017` 蓝色徽章。

@@ -311,6 +311,13 @@ export class ServiceManager extends EventEmitter {
       return;
     }
 
+    // ⚠️ 走到这里说明**没用上随包运行时**（bundledBin 缺失/不可用），
+    // 用户会在毫无提示的情况下得到“功能缺失”的旧内核（2026-10-26 实测过：
+    // Windows 用户因此丢了 office-to-pdf、1017 徽章、open-in-app）。明确喊出来。
+    console.warn(
+      '[service] ⚠️ 未使用随包 DSH 运行时，回退到 settings.command：' + this.command +
+        ' —— 若界面功能异常，先把命令里的版本改成随包版本（或重装桌面端）。',
+    );
     const parsed = parseCommand(this.command);
     const command = parsed.command;
     // 兜底命令（settings.command，通常是 `npx @deepseek-ai/dsh@x web --port …`）里

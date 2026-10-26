@@ -1078,11 +1078,24 @@ function registerIpc(): void {
     const { promisify } = await import('util');
     const run = promisify(execFile);
 
-    const nmDir = dshNodeModulesDir(bundledDshBin(app.isPackaged, app.getAppPath(), process.resourcesPath));
-    if (!nmDir) return { ok: false, output: '', message: 'Office 转换器未就绪' };
-    const cli = pathMod.join(nmDir, '@deepseek-ai', 'libreoffice-kit', 'lib', 'cli.js');
+    // ⚠️ 必须用**物化后的**转换栈（<home>/office-runtime/kit），不能用 asar 里的 dsh-runtime/node_modules：
+    //    平台引擎包（libreoffice-kit-win32-x64 / -darwin-arm64 …）被 electron-builder 排除出 asar，
+    //    运行时打进 Resources/office-kit/ 再物化到 home。走 asar 路径时 kit 找不到引擎，
+    //    报 `Installed LibreOfficeKit package is incomplete: …`（2026-10-26 用户实测，1.0.62 仍未修好）。
+    //    预览链路（office-preview.ts）与冒烟检查早就用 home 路径，这里漏改。
+    const home = legalModeHome(app.getPath('userData'));
+    const kitDir = pathMod.join(home, 'office-runtime', 'kit', 'node_modules', '@deepseek-ai');
+    const cli = pathMod.join(kitDir, 'libreoffice-kit', 'lib', 'cli.js');
     if (!fsMod.existsSync(cli)) {
-      return { ok: false, output: '', message: 'Office 转换器未就绪' };
+      return { ok: false, output: '', message: 'Office 转换器未就绪（转换栈未物化，重启一次应用）' };
+    }
+    // 引擎包必须真的在（否则 kit 会报 incomplete，用户只看到一句没用的英文）
+    const 引擎 = process.platform === 'win32' ? `libreoffice-kit-win32-${process.arch === 'arm64' ? 'arm64' : 'x64'}`
+      : process.platform === 'darwin' ? `libreoffice-kit-darwin-${process.arch === 'arm64' ? 'arm64' : 'x64'}`
+      : 'libreoffice-kit-wasm';
+    const 引擎目录 = pathMod.join(kitDir, 引擎);
+    if (!fsMod.existsSync(引擎目录)) {
+      return { ok: false, output: '', message: `Office 引擎未就绪（缺 ${引擎}），请重装/重启应用` };
     }
     const outDir = fsMod.mkdtempSync(pathMod.join(app.getPath('temp'), 'dsh-print-'));
     const output = pathMod.join(outDir, 'converted.pdf');

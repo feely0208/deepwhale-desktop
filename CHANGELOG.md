@@ -4,6 +4,19 @@
 
 ## [未发布]
 
+### 修复：Windows 打印仍失败——真正的第二层根因是「取错了 kit 目录」（2026-10-26，1.0.62 用户实测）
+
+- 用户报错原文：`{"code":"unavailable","error":"Installed LibreOfficeKit package is incomplete: @deepseek-ai/libreoffice-kit-win32-x64"}`
+- 根因：1.0.62 只修了「用 Electron 当 Node」（`bin/node` → `process.execPath`），但**打印链路取的是 asar 里的
+  `dsh-runtime/node_modules/@deepseek-ai/libreoffice-kit`**。而平台引擎包（`libreoffice-kit-win32-x64` 等）被
+  `electron-builder.yml` 明确排除出 asar，运行时放进 `Resources/office-kit/` 再物化到 `<home>/office-runtime/kit/`。
+  于是 kit 在 asar 旁边找不到引擎 → 报 incomplete。预览链路与冒烟检查一直用 home 路径，**只有打印这一条漏改**。
+- 修法：`convertOfficeToPdf` 改用 `<home>/office-runtime/kit/node_modules/@deepseek-ai/libreoffice-kit/lib/cli.js`，
+  并显式检查对应平台引擎包是否存在；缺了就给人话提示，不再抛 kit 的英文原始错误。
+- 守卫：`check-office-node-wrapper.js` 增加断言——打印链路不许出现 `dshNodeModulesDir(`，必须指向 `office-runtime/kit`。
+- 待验证：Windows 实机（macOS 上用同一条命令已实测能把 docx 转成 PDF）。
+
+
 （下个版本待办；新条目写在这里）
 
 ## [1.0.62] — Windows 三项修复 + 深鲸记忆随包（2026-10-26）

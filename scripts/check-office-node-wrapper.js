@@ -55,6 +55,21 @@ for (const file of [path.join(root, 'src', 'main', 'office-preview.ts')]) {
     problems.push(`${rel} 没有用 process.execPath + ELECTRON_RUN_AS_NODE 跑转换 CLI`);
   }
 }
+// 打印链路必须用**物化后**的转换栈（<home>/office-runtime/kit），不能回落到 asar 里的 dsh-runtime/node_modules：
+// 平台引擎包被排除出 asar，回落就报 `Installed LibreOfficeKit package is incomplete`（2026-10-26 用户实测）。
+{
+  const rel = 'src/main/index.ts';
+  const src = fs.readFileSync(path.join(root, rel), 'utf8');
+  const at = src.indexOf('async function convertOfficeToPdf');
+  const 打印段 = at >= 0 ? src.slice(at, at + 4000) : '';
+  if (打印段.includes('dshNodeModulesDir(')) {
+    problems.push(`${rel} 的 convertOfficeToPdf 又用 dshNodeModulesDir() 取 kit —— 必须用 <home>/office-runtime/kit（asar 里没有平台引擎包）`);
+  }
+  if (!打印段.includes("'office-runtime', 'kit'")) {
+    problems.push(`${rel} 的 convertOfficeToPdf 没有指向 home 下物化后的 kit 目录`);
+  }
+}
+
 {
   const rel = 'src/main/index.ts';
   const src = fs.readFileSync(path.join(root, rel), 'utf8');

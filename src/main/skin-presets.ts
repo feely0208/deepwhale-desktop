@@ -299,6 +299,10 @@ export function presetBackgroundCss(preset: string): string | null {
          核对过：全树只有「.<hash>_overlay」一条规则拿该 token 当背景；
              「VOzbGW_overlay」（设置弹窗遮罩）自身没有背景，只会让它的**子面板**变实
              —— 那恰好是用户 2026-10-01 提过的方向（「设置里面看有点透底」）。 */
+      /* ⚠️ 2026-10-27：DSH 换主题时会**先删 body[data-ds-dark-theme]、再逐个写 token**，
+         中间几十毫秒里下面这条"无条件纯白"会把全屏浮层（设置页/账号页）刷成白 → 用户看到白屏。
+         所以深色覆盖不能只认 body 属性，还要认 DSH 同时写在 <html> 上的内联 color-scheme
+         （那个在整个切换过程中不会消失）。见文件后面的 html[style*="color-scheme: dark"] 组。 */
       [class*="_overlay"], [class*="_Overlay"] { --dsw-alias-bg-base: #ffffff !important; }
 
       /* ⚠️ 右侧栏「全屏」也必须是不透明的（2026-10-14 用户截图：最大化后界面"成一坨"）。
@@ -335,8 +339,12 @@ export function presetBackgroundCss(preset: string): string | null {
       /* 深色下同理：铺满视口的浮层用**实底色**（取值与本预设正文底同色 rgb(11,16,24)），
          这样全屏时不会透出底下的会话文字。见上面浅色那段的说明。 */
       body[data-ds-dark-theme] [class*="_overlay"],
-      body[data-ds-dark-theme] [class*="_Overlay"] { --dsw-alias-bg-base: #0b1018 !important; }
+      body[data-ds-dark-theme] [class*="_Overlay"],
+      /* 属性空窗兜底：以 <html> 的内联 color-scheme 为准（DSH 换主题时它始终在） */
+      html[style*="color-scheme: dark"] [class*="_overlay"],
+      html[style*="color-scheme: dark"] [class*="_Overlay"] { --dsw-alias-bg-base: #0b1018 !important; }
       /* 深色同理：右栏全屏的面板与它内部用该 token 的面都做实（取值 = 本预设正文底 rgb(11,16,24)） */
+      html[style*="color-scheme: dark"] [data-sidebar-right-panel='fullscreen'] { background: #0b1018 !important; --dsw-alias-bg-base: #0b1018 !important; }
       body[data-ds-dark-theme] [data-sidebar-right-panel='fullscreen'] {
         background: #0b1018 !important;
         --dsw-alias-bg-base: #0b1018 !important;

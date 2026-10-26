@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { Store } from './store';
 import { presetBackgroundCss, glowRemovalScript } from './skin-presets';
+import { appendCrashLog } from './crash-guard';
 
 /**
  * 皮肤系统（按用户需求重构）：
@@ -12,6 +13,22 @@ import { presetBackgroundCss, glowRemovalScript } from './skin-presets';
  *   让图片透出；透明度可调（skinOpacity 0.3~1）；
  * - 自定义 CSS：userData/custom.css 优先级最高，fs.watch 即时重注入。
  */
+
+/** 皮肤相关失败：控制台 + 落盘（打包应用没有控制台，只有落盘才能事后查） */
+function 记皮肤失败(阶段: string, e: unknown): void {
+  console.error('[skin] ' + 阶段 + ':', e);
+  try {
+    appendCrashLog({
+      kind: 'skin-failed',
+      summary: '皮肤/主题应用失败：' + 阶段,
+      detail: e instanceof Error ? (e.stack || e.message) : String(e),
+      at: new Date().toISOString(),
+    });
+  } catch {
+    /* 记日志失败不影响主流程 */
+  }
+}
+
 export class SkinManager {
   private insertedKeys: string[] = [];
   private watcher: fs.FSWatcher | null = null;
@@ -23,14 +40,28 @@ export class SkinManager {
 
   /** 应用当前主题 + 背景皮肤 + 自定义 CSS（did-finish-load 后调用） */
   async apply(win: BrowserWindow): Promise<void> {
-    await this.clear(win);
+    // ⚠️ 2026-10-27（白屏事故）：原来是「先 clear 再 applyBackground」——
+    //    中间有一段"皮肤 CSS 全没了、原生重绘已经开始"的裸窗期；此时 DSH 恰好删掉
+    //    body[data-ds-dark-theme]，全屏浮层就被刷成纯白。
+    //    改成 swap：先把新 CSS 注入上去，**全部成功之后**再移除旧 key，任何时刻都有皮肤。
+    const 旧keys = [...this.insertedKeys];
+    this.insertedKeys = [];
     this.stopWatch();
 
-    await this.applyBackground(win);
-
-    if (this.store.get('customCssEnabled')) {
-      await this.applyCustomCss(win);
-      this.watchCustomCss(win);
+    try {
+      await this.applyBackground(win);
+      if (this.store.get('customCssEnabled')) {
+        await this.applyCustomCss(win);
+        this.watchCustomCss(win);
+      }
+    } finally {
+      for (const key of 旧keys) {
+        try {
+          await win.webContents.removeInsertedCSS(key);
+        } catch {
+          /* 旧 key 已经失效（页面重载过）就跳过 */
+        }
+      }
     }
   }
 
@@ -85,7 +116,7 @@ export class SkinManager {
       }
       shell.openPath(this.customCssFile);
     } catch (e) {
-      console.error('[skin] 打开自定义 CSS 失败:', e);
+      记皮肤失败('打开自定义 CSS 失败', e);
     }
   }
 
@@ -135,7 +166,7 @@ export class SkinManager {
       const buf = resized.toPNG();
       return 'data:image/png;base64,' + buf.toString('base64');
     } catch (e) {
-      console.error('[skin] 背景图编码失败:', e);
+      记皮肤失败('背景图编码失败', e);
       return null;
     }
   }
@@ -230,7 +261,7 @@ export class SkinManager {
       const key = await win.webContents.insertCSS(css, { cssOrigin: 'author' });
       this.insertedKeys.push(key);
     } catch (e) {
-      console.error('[skin] 背景皮肤应用失败:', e);
+      记皮肤失败('背景皮肤应用失败', e);
     }
   }
 
@@ -249,7 +280,7 @@ export class SkinManager {
       const key = await win.webContents.insertCSS(css, { cssOrigin: 'author' });
       this.insertedKeys.push(key);
     } catch (e) {
-      console.error('[skin] 内置背景预设应用失败:', e);
+      记皮肤失败('内置背景预设应用失败', e);
     }
     // 光斑层用真 DOM 建（三层模糊半径不同，一个伪元素塞不下），见 skin-presets.ts
     try {
@@ -259,7 +290,7 @@ export class SkinManager {
       //   现在和面板色走同一条 CSS 注入通道，不再依赖 DOM 结构。
       //   （保留 glowInjectionScript 导出仅作兜底，不再调用）
     } catch (e) {
-      console.error('[skin] 内置背景光斑注入失败:', e);
+      记皮肤失败('内置背景光斑注入失败', e);
     }
   }
 
@@ -286,7 +317,7 @@ export class SkinManager {
         this.insertedKeys.push(key);
       }
     } catch (e) {
-      console.error('[skin] 自定义 CSS 应用失败:', e);
+      记皮肤失败('自定义 CSS 应用失败', e);
     }
   }
 
@@ -297,7 +328,7 @@ export class SkinManager {
         this.watchTimer = setTimeout(() => void this.apply(win), 200);
       });
     } catch (e) {
-      console.error('[skin] 监听 custom.css 失败:', e);
+      记皮肤失败('监听 custom.css 失败', e);
     }
   }
 

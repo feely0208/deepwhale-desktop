@@ -1655,6 +1655,67 @@ async function warnIfRunningFromTempInstall(): Promise<void> {
 }
 
 /**
+ * 主题一致性自检（2026-10-27，白屏事故的第二道网）。
+ *
+ * 白屏的机制：DSH 换主题时**先删 body[data-ds-dark-theme]、再逐个写 token**，
+ * 我们皮肤 CSS 里的"全屏浮层纯白"在那几十毫秒里生效 → 设置页/账号页整屏刷白。
+ * 已在 CSS 侧用 `<html style="color-scheme: dark">` 做兜底；这里再加一层运行期自检：
+ *
+ *   html 要求深色（color-scheme: dark） && body 没有 dark 属性 && body 背景接近纯白
+ *     → 记一条 `theme-inconsistent` 日志；**只重试一次**重新应用皮肤（swap 已安全），
+ *       实在不行也不循环折腾。
+ */
+function installThemeSanityCheck(win: BrowserWindow): void {
+  const 探针 = `(() => {
+    const h = document.documentElement;
+    const b = document.body;
+    if (!h || !b) return { ok: true };
+    const cs = (h.style && h.style.colorScheme) || getComputedStyle(h).colorScheme || '';
+    const 要深色 = cs.indexOf('dark') >= 0;
+    const 有属性 = b.hasAttribute('data-ds-dark-theme');
+    const bg = getComputedStyle(b).backgroundColor || '';
+    const m = bg.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+    const 近白 = !!m && Number(m[1]) > 230 && Number(m[2]) > 230 && Number(m[3]) > 230;
+    const overlay = document.querySelector('[class*="_overlay"], [class*="_Overlay"]');
+    const oBg = overlay ? getComputedStyle(overlay).backgroundColor : '';
+    return { ok: !(要深色 && 近白 && !有属性), cs, bg, oBg, 有属性 };
+  })()`;
+
+  let 已重试 = false;
+  for (const 延迟 of [800, 2000, 5000]) {
+    setTimeout(() => {
+      void (async () => {
+        if (win.isDestroyed()) return;
+        try {
+          const r = (await win.webContents.executeJavaScript(探针)) as
+            | { ok: boolean; cs?: string; bg?: string; oBg?: string; 有属性?: boolean }
+            | undefined;
+          if (!r || r.ok) return;
+          console.warn('[skin-guard] 主题状态自相矛盾（深色要求 + 近白背景 + 无 dark 属性）:', r);
+          try {
+            appendCrashLog({
+              kind: 'theme-inconsistent',
+              summary: '主题状态不一致（可能白屏）',
+              detail: JSON.stringify(r),
+              at: new Date().toISOString(),
+            });
+          } catch {
+            /* 记不上不阻断 */
+          }
+          if (!已重试) {
+            已重试 = true;
+            console.warn('[skin-guard] 重新应用一次皮肤（swap 注入，不会出现裸窗期）');
+            await skin.apply(win);
+          }
+        } catch {
+          /* 页面在跳转等：忽略 */
+        }
+      })();
+    }, 延迟);
+  }
+}
+
+/**
  * 白屏守卫（2026-10-27）。
  *
  * 用户实测：更新后打开是"辉光背景 + 一片空白"，没有任何提示，也不知道该点哪。
@@ -1990,6 +2051,8 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
     });
     // 白屏守卫：界面 30 秒还没内容就记录诊断 + 注入可见提示（2026-10-27 用户实测「更新后白屏」）
     installBlankScreenGuard(mainWin);
+    // 主题一致性自检：白屏的另一条主要路径（切皮肤/切深浅色）
+    installThemeSanityCheck(mainWin);
     await showStartingPage(mainWin);
 
     /*

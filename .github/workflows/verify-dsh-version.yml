@@ -96,13 +96,16 @@ jobs:
           echo "---- dsh --profile deepwhale --dump-config（前 5 行）----"
           node dsh-runtime/node_modules/@deepseek-ai/dsh/lib/bin.js --profile deepwhale --dump-config 2>&1 | head -5
 
-      - name: 离线守卫（跟版最关键的四项）
+      - name: 离线守卫（跟版最关键的五项）
         run: |
           set -e
           echo "---- ① 注入竞态 ----"; node scripts/test-inject-race.js
           echo "---- ② 菜单中文 ----"; node scripts/check-menu-i18n.js
           echo "---- ③ 法律模式花名册（上游最容易砸到我们的一处）----"; node scripts/check-legal-preset-roster.js
           echo "---- ④ patch 自愈 ----"; node scripts/test-patch-heal.js
+          # ⑤ 守「守卫自己」：客户端清单是多段 compose URL，旧解析只取第一段 →
+          #    把产品判成红 41 次（2026-10-10 ~ 10-26 从未绿过）。这里否定测试它。
+          echo "---- ⑤ 清单解析（多段 combo URL）----"; node scripts/test-client-manifest-items.js
 
       # 🔎 条件是 `!= 'false'` 而不是 `== 'true'`：
       #    定时触发（schedule）时 inputs 是空的，`== 'true'` 会**静默跳过**这两步 ——

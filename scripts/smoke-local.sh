@@ -165,24 +165,12 @@ APP_PID=$!
   # 所以这里重试：拿到清单（COUNT=）或壳退出为止。
   for _ in $(seq 1 30); do
     curl -sSL -c "$UI_JAR" -b "$UI_JAR" -o "$UI_HTML" --max-time 20 "$TURL" 2>/dev/null
-    python3 - "$UI_HTML" > "$PLUGIN_OUT" 2>/dev/null <<'PY'
-import re, sys
-try:
-    html = open(sys.argv[1], encoding='utf-8').read()
-except Exception:
-    print("NO_UI"); raise SystemExit
-m = re.search(r'plugins/\?\?([^"]+)"', html)
-if not m:
-    print("NO_MANIFEST"); raise SystemExit
-items = [x.split('/client.js')[0] for x in m.group(1).split(',') if x]
-print("COUNT=%d" % len(items))
-print("LEGAL=%s" % ("YES" if any('legal' in i for i in items) else "NO"))
-# 诊断：把完整清单落盘，红了能直接看差什么（不留存的话每次都要重跑）
-try:
-    open('/tmp/dsh-smoke-items.txt', 'w', encoding='utf-8').write("\n".join(sorted(items)))
-except Exception:
-    pass
-PY
+    # ⚠️ 清单解析抽到 scripts/client-manifest-items.py：DSH 的首屏清单是**多段**
+    #    `plugins/??…` compose URL（单段有字节上限），旧版只 re.search 第一段 →
+    #    排在后面的插件永远看不到，法律模式恰好落在后面。这段从 2026-10-10 起
+    #    从未绿过（41 次全红、COUNT 恒 57），就是被这个解析 bug 判成假红的。
+    python3 "$(dirname "$0")/client-manifest-items.py" "$UI_HTML" \
+      --dump /tmp/dsh-smoke-items.txt > "$PLUGIN_OUT" 2>/dev/null
     grep -q '^COUNT=' "$PLUGIN_OUT" 2>/dev/null && break
     kill -0 "$APP_PID" 2>/dev/null || break
     sleep 4

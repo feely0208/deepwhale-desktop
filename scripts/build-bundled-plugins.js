@@ -31,7 +31,9 @@ const PLUGINS = [
   // 「深鲸记忆」（2026-10-26 用户定：1.0.62 起随包走）。
   // ⚠️ 这个包**没有 scope**（npm 上就是 `dsh-memory-doctor`），所以下面的 dirName
   //    不能直接 `name.split('/')[1]` —— 那样会得到 undefined。已按"有斜杠才取后半段"处理。
-  'dsh-memory-doctor',
+  // 📌 **钉版本**（用户 2026-10-26 定：62 直接兼容 0.5.8，不跟 latest）—— 写成 `包名@版本`；
+  //    不带版本号的条目仍取 npm dist-tags.latest。
+  'dsh-memory-doctor@0.5.8',
 ];
 
 function fetchJson(url) {
@@ -106,11 +108,16 @@ async function main() {
   fs.mkdirSync(outDir, { recursive: true });
 
   try {
-  for (const name of PLUGINS) {
+  for (const spec of PLUGINS) {
+    // 支持 `包名@版本` 钉版本（如 dsh-memory-doctor@0.5.7）；不写版本则取 dist-tags.latest。
+    const m = spec.match(/^(@[^/]+\/[^@]+|[^@]+)(?:@(.+))?$/);
+    const name = m[1];
+    const 钉版本 = m[2];
     // 有 scope 取后半段（@scope/name → name）；无 scope 的包（如 dsh-memory-doctor）直接用包名。
     const dirName = name.includes('/') ? name.split('/')[1] : name;
     const meta = await fetchJson(`https://registry.npmjs.org/${encodeURIComponent(name)}`);
-    const version = meta['dist-tags'].latest;
+    const version = 钉版本 || meta['dist-tags'].latest;
+    if (!meta.versions[version]) throw new Error(`${name}@${version} 不存在（钉版本写错了？）`);
     const tarball = meta.versions[version].dist.tarball;
     console.log(`[bundled-plugins] ${name}@${version}`);
 

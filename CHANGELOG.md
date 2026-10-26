@@ -9,7 +9,7 @@
 ## [未发布] 随包插件：加入「深鲸记忆」`dsh-memory-doctor`（2026-10-26，1.0.62）
 
 - 用户决定：1.0.62 起深鲸记忆随包走。它每轮注入 `MEMORY.md` / `USER.md`，没有它新用户就没有跨会话记忆 —— 属壳的基础体验，不计入「业务插件不进包」那条铁律。
-- 两处同进同出：`src/main/bundled-plugins.ts` 的 `BUNDLED_PLUGINS` + `scripts/build-bundled-plugins.js` 的 `PLUGINS`（与合规/公文两包同一套路：构建时从 npm `dist-tags.latest` 拉取）。
+- 两处同进同出：`src/main/bundled-plugins.ts` 的 `BUNDLED_PLUGINS` + `scripts/build-bundled-plugins.js` 的 `PLUGINS`（与合规/公文两包同一套路，但**钉版本**：清单写 `dsh-memory-doctor@0.5.8`，走构建脚本新增的 `包名@版本` 语法，不跟 latest —— 用户 2026-10-26 定：62 直接兼容 0.5.8）。0.5.7 起自带**自动压缩**：到 80% 自动归档临时/阶段性条目 + 把长条压成首句（原文进 archived/，可回滚），从根上解决「动不动就满」；0.5.8 再把体检告警分级（只有超上限/完全重复才弹黄条，误报可在面板「忽略」），不再「修一个爆一个」。
 - 顺带修：构建脚本对**无 scope 包名**的处理 —— 原来 `name.split('/')[1]` 对 `dsh-memory-doctor` 会得到 `undefined`，改成「有斜杠才取后半段」。
 - 验证（本机实跑）：`node scripts/build-bundled-plugins.js` 通过 —— 清单声明 10 个、载荷全在；客户端 bundle 守卫 6 个通过；载荷总 736KB（`dsh-memory-doctor` 160KB）；`check-shell-plugins-shipped.js` 通过；载荷内无本机路径与个人邮箱。
 - 遗留（62 发版前处理）：插件更新器需排除随包包 —— 壳启动会把 `dsh-home/plugins/<dir>` 同步成随包版本并把 profile 依赖改写为 `link:`，用户在插件页点更新会被下次启动覆盖。

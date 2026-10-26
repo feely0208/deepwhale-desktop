@@ -15,7 +15,6 @@ import * as path from 'path';
 
 export async function convertOfficeToPdf(inputPath: string): Promise<{ ok: boolean; pdfPath?: string; error?: string }> {
   const home = path.join(app.getPath('userData'), 'dsh-home');
-  const nodeBin = path.join(home, 'office-runtime', 'bin', 'node');
   const cli = path.join(
     home,
     'office-runtime',
@@ -26,14 +25,18 @@ export async function convertOfficeToPdf(inputPath: string): Promise<{ ok: boole
     'lib',
     'cli.js',
   );
-  if (!fs.existsSync(nodeBin) || !fs.existsSync(cli)) {
+  if (!fs.existsSync(cli)) {
     return { ok: false, error: 'Office 预览组件尚未就绪，请重启一次应用后再试' };
   }
   const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-office-preview-'));
   const outPdf = path.join(outDir, 'out.pdf');
   return await new Promise((resolve) => {
-    const child = spawn(nodeBin, [cli, 'convert', '--input', inputPath, '--output', outPdf], {
+    // 用 Electron 当 Node 跑（ELECTRON_RUN_AS_NODE），不经过 office-runtime/bin/node(.cmd)：
+    //   ① Windows 上包装脚本叫 node.cmd，硬编码 bin/node 永远找不到 → 一直报"未就绪"（2026-10-26 用户实测）；
+    //   ② Node 18.20+/20.12+ 起 spawn 不允许直接执行 .cmd（需 shell:true），走包装本身也脆。
+    const child = spawn(process.execPath, [cli, 'convert', '--input', inputPath, '--output', outPdf], {
       timeout: 120000,
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
     });
     let out = '';
     child.stdout?.on('data', (d) => (out += String(d)));

@@ -68,7 +68,8 @@
     "test:web-preview-overlay": "node scripts/test-web-preview-overlay.js",
     "test:model-label": "npm run build && node scripts/test-model-label.js",
     "test:sessions-legacy": "npm run build && node scripts/test-sessions-legacy.js",
-    "check:release-consistency": "node scripts/check-release-consistency.js"
+    "check:release-consistency": "node scripts/check-release-consistency.js",
+    "check:office-node": "node scripts/check-office-node-wrapper.js"
   },
   "dependencies": {
     "electron-updater": "^6.8.9",

@@ -1078,17 +1078,21 @@ function registerIpc(): void {
     const { promisify } = await import('util');
     const run = promisify(execFile);
 
-    const nodeBin = pathMod.join(legalModeHome(app.getPath('userData')), 'office-runtime', 'bin', 'node');
     const nmDir = dshNodeModulesDir(bundledDshBin(app.isPackaged, app.getAppPath(), process.resourcesPath));
     if (!nmDir) return { ok: false, output: '', message: 'Office 转换器未就绪' };
     const cli = pathMod.join(nmDir, '@deepseek-ai', 'libreoffice-kit', 'lib', 'cli.js');
-    if (!fsMod.existsSync(nodeBin) || !fsMod.existsSync(cli)) {
+    if (!fsMod.existsSync(cli)) {
       return { ok: false, output: '', message: 'Office 转换器未就绪' };
     }
     const outDir = fsMod.mkdtempSync(pathMod.join(app.getPath('temp'), 'dsh-print-'));
     const output = pathMod.join(outDir, 'converted.pdf');
     try {
-      await run(nodeBin, [cli, 'convert', '--input', file, '--output', output], { timeout: 120_000 });
+      // 用 Electron 当 Node 跑（ELECTRON_RUN_AS_NODE），不依赖 bin/node(.cmd) 包装：
+      // Windows 上包装是 node.cmd，且 .cmd 不能直接被 execFile（Node 18.20+）→ 必报"未就绪"。
+      await run(process.execPath, [cli, 'convert', '--input', file, '--output', output], {
+        timeout: 120_000,
+        env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+      });
       if (!fsMod.existsSync(output)) return { ok: false, output: '', message: 'Office 转换未产出文件' };
       return { ok: true, output };
     } catch (error) {
@@ -3302,7 +3306,6 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
             try {
               const { spawnSync } = await import('child_process');
               const home = path.join(app.getPath('userData'), 'dsh-home');
-              const nodeBin = path.join(home, 'office-runtime', 'bin', 'node');
               const kitDir = path.join(home, 'office-runtime', 'kit', 'node_modules', '@deepseek-ai');
               const cli = path.join(kitDir, 'libreoffice-kit', 'lib', 'cli.js');
               let engines: string[] = [];
@@ -3312,10 +3315,10 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
                 engines = [];
               }
               // 硬判 ①：cli 与引擎包都在
-              if (!fs.existsSync(nodeBin) || !fs.existsSync(cli) || engines.length === 0) {
+              if (!fs.existsSync(cli) || engines.length === 0) {
                 console.error(
-                  '[smoke] Office 物化产物缺失（node=' + String(fs.existsSync(nodeBin)) +
-                    ' cli=' + String(fs.existsSync(cli)) + ' engines=' + String(engines.length) + '）',
+                  '[smoke] Office 物化产物缺失（cli=' + String(fs.existsSync(cli)) +
+                    ' engines=' + String(engines.length) + '）',
                 );
                 process.exitCode = 1;
               } else {
@@ -3367,9 +3370,10 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
                   if (mk.status !== 0) {
                     console.log('[smoke] 跳过真实转换（本机没有 python-docx）');
                   } else {
-                    const r = spawnSync(nodeBin, [cli, 'convert', '--input', docx, '--output', pdf], {
+                    const r = spawnSync(process.execPath, [cli, 'convert', '--input', docx, '--output', pdf], {
                       encoding: 'utf-8',
                       timeout: 90000,
+                      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
                     });
                     const out = String(r.stdout || '').trim();
                     if (out.indexOf('"backend"') >= 0 && fs.existsSync(pdf)) {

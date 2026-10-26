@@ -6,6 +6,20 @@
 
 （下个版本待办；新条目写在这里）
 
+## [未发布] 修复：Windows 上 Office 打印/预览永远「转换器未就绪」（2026-10-26，1.0.61 用户反馈）
+
+- 现象：Windows 用户点「打印」→「Office 转换器未就绪」；docx/xlsx/pptx 打印不了。macOS 正常。
+- 根因（两条，都在「包装脚本」上）：
+  1. `ensureWrapperNode()` 在 Windows 写的是 `bin/node.cmd`，而打印链路（`convertOfficeToPdf`）与
+     预览链路（`office-preview.ts`）都硬编码检查 `<home>/office-runtime/bin/node` → existsSync 恒 false，
+     于是**直接返回"未就绪"**，连引擎都没被试过。**这条从功能诞生起在 Windows 上就没通过。**
+  2. 就算把名字改成 `node.cmd` 也没用：Node 18.20+/20.12+ 起 `spawn`/`execFile` **不允许直接执行 .cmd**
+     （需 shell:true），走包装本身也是脆的。
+- 修法：两条链路都改成**用自带 Electron 当 Node 跑** —— `spawn(process.execPath, [cli, ...], { env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' } })`，
+  与包装脚本等价、跨平台一致。macOS 上已用同一条命令实测：docx → 159KB PDF 成功。
+- 防回归：新增 `scripts/check-office-node-wrapper.js`（不许再拼 `office-runtime/bin/node`，两条链路必须用
+  `process.execPath` + `ELECTRON_RUN_AS_NODE`），已挂进 release.yml 的离线守卫；`npm run check:office-node` 可单跑。
+
 ## [未发布] 随包插件：加入「深鲸记忆」`dsh-memory-doctor`（2026-10-26，1.0.62）
 
 - 用户决定：1.0.62 起深鲸记忆随包走。它每轮注入 `MEMORY.md` / `USER.md`，没有它新用户就没有跨会话记忆 —— 属壳的基础体验，不计入「业务插件不进包」那条铁律。

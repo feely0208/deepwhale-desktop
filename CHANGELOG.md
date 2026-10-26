@@ -4,6 +4,15 @@
 
 ## [未发布]
 
+### 白屏守卫 + 安全模式（2026-10-27，Windows 62 用户实测「更新后辉光白屏」）
+
+- 现象：更新到 62 后打开，界面框架在（标题/用量条/composer 都在），**对话区一片空白**；无任何提示。
+- 处置（不猜原因，先把"可诊断 + 可自救"做上）：
+  - `installBlankScreenGuard()`：窗口加载后 30 秒仍无内容 → 写 `renderer-blank` 故障日志（带最近 40 条渲染层 console）+ 往页面注入可见提示与「重新加载界面」按钮；
+  - **安全模式**：白屏时在 `<home>/.renderer-blank` 打标记；下次启动 `ensureBundledPlugins` 跳过随包业务插件（深鲸记忆），保证界面能开；一旦界面正常渲染，标记自动清除；
+  - 深鲸记忆 0.5.9：客户端 `apply` 里**每个插槽注册独立 try/catch**，任一注册失败只让那一块消失，不再可能拖垮整页。
+- 说明：62 里**没有任何改动会去动对话区渲染**（改的是 office 主进程、模型名补丁、兜底命令、记忆插件）。白屏更可能与更新安装/插件注册有关，守卫拿到 console 后才能定论。
+
 ### 修复：Windows 打印仍失败——真正的第二层根因是「取错了 kit 目录」（2026-10-26，1.0.62 用户实测）
 
 - 用户报错原文：`{"code":"unavailable","error":"Installed LibreOfficeKit package is incomplete: @deepseek-ai/libreoffice-kit-win32-x64"}`

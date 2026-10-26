@@ -224,7 +224,8 @@ export class UpdateManager {
     // 用户选择"稍后"时，退出应用顺带安装，避免反复打扰。
     // macOS 上不能这么做：那里根本装不上（Squirrel 的签名校验过不去，见 macNeedsManualUpdate），
     // 开着它只会在退出时白折腾一次，所以按平台关掉。
-    autoUpdater.autoInstallOnAppQuit = !macNeedsManualUpdate();
+    // 63 起彻底关掉「退出时自动安装」：更新只由用户去官网手动做。
+    autoUpdater.autoInstallOnAppQuit = false;
 
     this.firstTimer = setTimeout(() => {
       void this.check(false);
@@ -281,6 +282,11 @@ export class UpdateManager {
    * （electron-updater 只在这条路上支持取消）。
    */
   async downloadNow(): Promise<void> {
+    // 63 起应用内不再下载安装包：点了就开官网下载页。
+    if (this.notifyOnly) {
+      await this.openDownloadPage();
+      return;
+    }
     if (this.state.phase === 'downloading' || this.state.phase === 'downloaded') return;
     const version = (this.state as { version?: string }).version ?? '';
     if (version !== '' && version === this.skippedVersion) return;
@@ -769,6 +775,26 @@ export class UpdateManager {
         this.setState({ phase: 'idle', message: `已跳过 ${info.version}` });
         return;
       }
+      // 63 起：只提示，不下载、不安装（用户 2026-10-27 定）。
+      if (this.notifyOnly) {
+        const 上次 = this.notifiedAt[info.version] ?? 0;
+        if (Date.now() - 上次 < 24 * 60 * 60 * 1000) {
+          this.setState({ phase: 'idle', message: `已提示过新版本 ${info.version}` });
+          return;
+        }
+        this.notifiedAt[info.version] = Date.now();
+        this.setState({ phase: 'available', version: info.version, message: `有新版本 ${info.version}，请到官网下载` });
+        const highlights = summarize(await notesFor(info.version), 5);
+        const choice = await this.confirm(
+          `发现新版本 ${info.version}`,
+          (highlights ? `本版更新内容：\n${highlights}\n\n` : '') +
+            '需要更新的话，点「去官网下载」到官网下载安装包（不会自动更新，也不会打断你当前的工作）。',
+          ['去官网下载', '以后再说'],
+        );
+        if (choice === 0) await this.openDownloadPage();
+        this.setState({ phase: 'idle', message: `已提示新版本 ${info.version}` });
+        return;
+      }
       this.setState({
         phase: 'available',
         version: info.version,
@@ -831,6 +857,28 @@ export class UpdateManager {
       this.prompting = false;
     }
   }
+
+  /**
+   * 「只提示、不自动更新」策略（2026-10-27 用户定，1.0.63 起）。
+   *
+   * 为什么改：自动下载/自动安装这条路反复出问题 —— 更新把安装目录算成 Temp、
+   * 更新后白屏、进程被杀导致配置半截……用户原话：「人家用的好好的突然弹出更新窗口，
+   * 体验感很差」。所以从 63 起：**只告诉他有新版本，需要就点「去官网下载」**，
+   * 应用自己绝不下载、绝不安装。
+   */
+  private notifyOnly = true;
+
+  /** 打开官网下载页（唯一「更新」动作） */
+  async openDownloadPage(): Promise<void> {
+    try {
+      await shell.openExternal('https://deepwhale.org.cn/download.html');
+    } catch (error) {
+      console.warn('[update] 打开下载页失败:', error);
+    }
+  }
+
+  /** 同一个版本别天天弹：一天内只提示一次 */
+  private notifiedAt: Record<string, number> = {};
 
   /** 模态确认框；无主窗口时降级为无父对话框 */
   private async confirm(title: string, message: string, buttons: string[]): Promise<number> {

@@ -1654,6 +1654,104 @@ async function warnIfRunningFromTempInstall(): Promise<void> {
   }
 }
 
+/**
+ * 白屏守卫（2026-10-27）。
+ *
+ * 用户实测：更新后打开是"辉光背景 + 一片空白"，没有任何提示，也不知道该点哪。
+ * 这里不猜原因，只做三件事：
+ *   ① 收最近的渲染层 console（白屏时唯一的证据）；
+ *   ② 30 秒还没渲染出内容就写一条 `renderer-blank` 故障日志；
+ *   ③ 往页面里注入一块可见提示 + 「重新加载界面」按钮，别让人对着白屏。
+ *
+ * 注意：**不做任何自动"修复"**（重启/重装这类动作交给用户决定）。
+ */
+const 渲染日志: string[] = [];
+let 白屏守卫已触发 = false;
+
+function installBlankScreenGuard(win: BrowserWindow): void {
+  try {
+    win.webContents.on('console-message', (...args: unknown[]) => {
+      // Electron 的签名跨版本变过：老版 (event, level, message, line, sourceId)，新版 (event)
+      const asOld = args as [unknown, number | undefined, string | undefined, number | undefined, string | undefined];
+      const 行 = typeof asOld[2] === 'string'
+        ? `[${String(asOld[1])}] ${asOld[2]} (${String(asOld[4])}:${String(asOld[3])})`
+        : JSON.stringify(args[0]);
+      渲染日志.push(行);
+      if (渲染日志.length > 40) 渲染日志.shift();
+    });
+  } catch {
+    /* 老 Electron 没有这个事件也不影响守卫 */
+  }
+
+  void (async () => {
+    const 截止 = Date.now() + 30_000;
+    while (Date.now() < 截止) {
+      await new Promise((r) => setTimeout(r, 2000));
+      if (win.isDestroyed()) return;
+      let 有内容 = false;
+      try {
+        有内容 = Boolean(await win.webContents.executeJavaScript(
+          '(() => { const b = document.body; if (!b) return false;' +
+            ' const t = (b.innerText || "").trim();' +
+            ' return t.length > 0 || b.querySelectorAll("*").length > 40; })()',
+        ));
+      } catch {
+        return; // 正在跳转 / 不可执行：放过这一次，下次循环再看
+      }
+      if (有内容) {
+        // 界面正常渲染出来了 → 清掉安全模式标记（下次启动恢复正常插件集）
+        try {
+          const marker = path.join(legalModeHome(app.getPath('userData')), '.renderer-blank');
+          if (fs.existsSync(marker)) {
+            fs.unlinkSync(marker);
+            console.log('[blank-guard] 界面正常，已清除安全模式标记');
+          }
+        } catch {
+          /* 清不掉不影响 */
+        }
+        return;
+      }
+    }
+    if (白屏守卫已触发) return;
+    白屏守卫已触发 = true;
+    // 写安全模式标记：下次启动跳过随包业务插件，保证界面能开
+    try {
+      const marker = path.join(legalModeHome(app.getPath('userData')), '.renderer-blank');
+      fs.mkdirSync(path.dirname(marker), { recursive: true });
+      fs.writeFileSync(marker, new Date().toISOString(), 'utf8');
+      console.warn('[blank-guard] 已写安全模式标记：下次启动会跳过随包业务插件');
+    } catch {
+      /* 写不了也不影响提示 */
+    }
+    try {
+      appendCrashLog({
+        kind: 'renderer-blank',
+        summary: '界面加载后 30 秒仍无内容（疑似白屏）',
+        detail: `url=${win.webContents.getURL()}\n最近渲染层日志：\n${渲染日志.join('\n') || '(无)'}`,
+        at: new Date().toISOString(),
+      });
+    } catch {
+      /* 记不上也不阻断 */
+    }
+    try {
+      await win.webContents.executeJavaScript(`(() => {
+        if (document.getElementById('dsh-blank-guard')) return;
+        const d = document.createElement('div');
+        d.id = 'dsh-blank-guard';
+        d.style.cssText = 'position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;background:#08131f;color:#dbe7f3;font:15px/1.8 -apple-system,"Segoe UI",sans-serif;padding:32px;text-align:center';
+        d.innerHTML = '<div><div style="font-size:20px;margin-bottom:10px">界面没有加载出来</div>'
+          + '<div style="opacity:.75;max-width:560px;margin:0 auto">常见原因：更新残留、插件加载失败、配置损坏。先点下面按钮重载一次；如果还是不行，把日志目录里的 startup 日志发给我们。</div>'
+          + '<div style="margin-top:18px"><button id="dsh-blank-reload" style="padding:9px 20px;border-radius:9px;border:1px solid #2f6f9f;background:#123f5d;color:#e6f1fb;cursor:pointer;font-size:14px">重新加载界面</button></div></div>';
+        document.body.appendChild(d);
+        const b = document.getElementById('dsh-blank-reload');
+        if (b) b.onclick = () => location.reload();
+      })()`);
+    } catch {
+      /* 注入失败就算了 */
+    }
+  })();
+}
+
 async function showStartingPage(win: BrowserWindow, failed = false): Promise<void> {
   await win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(startingPageHtml(failed)));
 }
@@ -1890,6 +1988,8 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
     mainWin.on('closed', () => {
       mainWin = null;
     });
+    // 白屏守卫：界面 30 秒还没内容就记录诊断 + 注入可见提示（2026-10-27 用户实测「更新后白屏」）
+    installBlankScreenGuard(mainWin);
     await showStartingPage(mainWin);
 
     /*

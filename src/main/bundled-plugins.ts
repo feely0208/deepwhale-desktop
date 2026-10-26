@@ -300,7 +300,25 @@ export function ensureBundledPlugins(home: string, payloadDir: string): BundledP
   // ⚠️ 另外把"客户层 bundle 不合法"的插件也拒之门外（2026-10-15 事故）：
   //    一个坏 bundle 会让整页 Failed to load plugins，比少一个插件严重得多。
   const blocked: string[] = [];
+  // 安全模式（2026-10-27）：上一次启动白屏过，就跳过我们随包的**业务插件**（尤其深鲸记忆），
+  // 保证"界面至少能打开"——用户能进设置里自己处理，而不是又对着白屏。
+  // 标记由 index.ts 的白屏守卫写/清（`.renderer-blank`）。
+  const 安全模式 = (() => {
+    try {
+      return fs.existsSync(path.join(home, '.renderer-blank'));
+    } catch {
+      return false;
+    }
+  })();
+  if (安全模式) {
+    console.warn('[bundled] ⚠️ 处于安全模式（上次启动疑似白屏）：本轮跳过深鲸记忆等业务插件，仅保留壳插件');
+  }
+
   const available = BUNDLED_PLUGINS.filter((plugin) => {
+    if (安全模式 && plugin.name === 'dsh-memory-doctor') {
+      console.warn('[bundled] 安全模式：跳过 ' + plugin.name);
+      return false;
+    }
     try {
       const dir = path.join(payloadDir, plugin.dir);
       if (!fs.existsSync(path.join(dir, 'cordis.patch.yml'))) return false;

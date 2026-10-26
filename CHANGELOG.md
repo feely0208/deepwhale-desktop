@@ -6,6 +6,17 @@
 
 （下个版本待办；新条目写在这里）
 
+## [未发布] 修复：模型「1017」徽章不显示——撤掉 1.0.60 的改名补丁（2026-10-26）
+
+- 现象：Windows（未登录）模型选择器显示 `DeepSeek-V4.1-Flash-1017` 纯文本，没有截图里那种 `1017` 蓝色徽章。
+- 根因：官方徽章插件 `@deepseek-ai/dsh-client-ui-deepseek-model-label-1017` 的条件是**硬编码**的：
+  `provider.id ∈ { deepseek-account, deepseek-official }` && `model.id === 'deepseek-flash'` && **`model.name === 'DeepSeek-V4.1-Flash'`**（一字不差）。
+  API key 那条 provider 的 id 就是 `deepseek-official`，模型默认名就是 `DeepSeek-V4.1-Flash` —— **不改名本来就有徽章（未登录也行）**；
+  而 1.0.60 加的 `shell:model-label` 补丁把名字改成 `…-1017`，正好把徽章条件打掉，只剩纯文本。
+- 修法：`ensureModelLabelPatch` → `removeModelLabelPatch`：启动时**删掉**老用户 home patch 里的这个块，恢复官方名与官方徽章。
+  块可能被手改过，兜底按「从标记行删到下一个顶层 `- id:`」处理；删完 YAML 仍合法、其它注入块原样保留、幂等。
+- 测试：`scripts/test-model-label.js` 重写为清理回归（4 组：有块/幂等/无块/只有块），已挂进 release.yml 离线守卫。
+
 ## [未发布] 修复：Windows 上 Office 打印/预览永远「转换器未就绪」（2026-10-26，1.0.61 用户反馈）
 
 - 现象：Windows 用户点「打印」→「Office 转换器未就绪」；docx/xlsx/pptx 打印不了。macOS 正常。

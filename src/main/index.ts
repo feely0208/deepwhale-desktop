@@ -22,7 +22,7 @@ import { ensureLegalModeSetup, legalModeHome, legalModePayloadDir, migrateLegacy
 import { bundledDshBin, dshNodeModulesDir } from './dsh-runtime';
 import { ensureOfficeSetup, officePayloadDir } from './office-runtime';
 import { ensureBundledPlugins, bundledPluginsPayloadDir } from './bundled-plugins';
-import { MODEL_LABEL_MARKER, ensureModelLabelPatch } from './patch-extras';
+import { removeModelLabelPatch } from './patch-extras';
 import { archiveLegacySessions, sessionSearchEnabled } from './session-legacy';
 import { createMainWindow } from './window';
 import { SkinManager } from './skin-manager';
@@ -1958,12 +1958,13 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
           } catch (error) {
             logInjectionFailure('plugins', 'profile 注入', error);
           }
-          // 模型显示名（2026-10-20）：home patch 里覆盖 llm-deepseek 的 config.models。
-          // 已在隔离实例冒烟：name 生效、启动干净；模型增删的维护要求见 patch-extras.ts。
+          // 模型显示名（2026-10-26 反转）：1.0.60/61 写过「把名字改成 …-1017」的补丁，
+          // 但官方 1017 徽章要求 name 恰好是 `DeepSeek-V4.1-Flash`（provider 已是 deepseek-official），
+          // 改名反而把徽章打掉。这里改成**把老补丁删掉**，让官方名 + 官方徽章恢复。
           try {
-            afterModel = { changed: ensureModelLabelPatch(legalHome) };
+            afterModel = { changed: removeModelLabelPatch(legalHome) };
           } catch (error) {
-            logInjectionFailure('model-label', 'home patch 注入', error);
+            logInjectionFailure('model-label', 'home patch 清理', error);
           }
           anyChanged =
             anyChanged ||

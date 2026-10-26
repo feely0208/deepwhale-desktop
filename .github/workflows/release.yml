@@ -213,6 +213,8 @@ jobs:
           node scripts/check-menu-i18n.js
           # Office 转换链路：不许再依赖 office-runtime/bin/node（Windows 上是 node.cmd，1.0.61「转换器未就绪」根因）
           node scripts/check-office-node-wrapper.js
+          # 模型改名补丁的清理回归（老用户升级后要恢复官方 1017 徽章）
+          node scripts/test-model-label.js
           # 法律模式必须真的进 Agent 预设花名册 —— 只验客户端插件在不在是不够的：
           # 曾经客户端插件好好的，而预设写进了运行时已不读的目录，
           # 三平台的选择器里都没有「法律模式」，所有检查却都是绿的。

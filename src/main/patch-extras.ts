@@ -5,8 +5,19 @@
  * 各自管各自的注入；这里放的是「不需要本地路径、块内容固定」的小补丁，
  * 用同一个幂等追加套路，避免每个都写一遍。
  *
- * 现有块：
- *   - shell:model-label  模型显示名跟官方 V4.1-Flash-1017
+ * ⚠️ 2026-10-26 起 `shell:model-label` 从「写入」改成「**清理**」：
+ *    1.0.60/1.0.61 为了显示 1017，把模型名覆盖成了 `DeepSeek-V4.1-Flash-1017`（纯文本）。
+ *    但官方自带 1017 徽章插件（`@deepseek-ai/dsh-client-ui-deepseek-model-label-1017`），
+ *    它的渲染条件写死在代码里：
+ *
+ *        provider.id ∈ { 'deepseek-account', 'deepseek-official' }
+ *        && model.id === 'deepseek-flash'
+ *        && model.name === 'DeepSeek-V4.1-Flash'      ← 必须一字不差
+ *
+ *    API key 那条 provider 的 id 就是 `deepseek-official`，模型默认名就是
+ *    `DeepSeek-V4.1-Flash` —— 也就是说**不改名反而会出现官方徽章（未登录也行）**；
+ *    我们的改名把 name 变成 `…-1017`，把徽章条件打掉了，只剩纯文本。
+ *    → 这段补丁要从老用户机器上**删掉**，让官方名与官方徽章恢复。
  */
 
 import * as fs from 'fs';
@@ -74,14 +85,28 @@ function readText(file: string): string {
  * 幂等写入模型显示名块。
  * @returns 是否真的写了盘（内容已存在时返回 false，避免每次启动都改文件）
  */
-export function ensureModelLabelPatch(home: string): boolean {
+export function removeModelLabelPatch(home: string): boolean {
   const file = patchFileOf(home);
   const current = readText(file);
-  if (current.includes(MODEL_LABEL_MARKER)) return false;
+  if (current === '') return false;
+  if (!current.includes(MODEL_LABEL_MARKER)) return false;
 
-  const base = current.replace(/\s*$/, '');
-  const next = `${base === '' ? '' : `${base}\n\n`}${MODEL_LABEL_BLOCK}`;
-  fs.mkdirSync(home, { recursive: true });
-  fs.writeFileSync(file, `${next.replace(/\s*$/, '')}\n`);
+  let next = current;
+  if (next.includes(MODEL_LABEL_BLOCK)) {
+    next = next.replace(MODEL_LABEL_BLOCK, '');
+  } else {
+    // 兜底：块内容可能被手改过 —— 从标记行删到本块结束（下一个顶层 `- id:` 之前）
+    const lines = next.split('\n');
+    const at = lines.findIndex((l) => l.includes(MODEL_LABEL_MARKER));
+    if (at >= 0) {
+      let stop = at + 1;
+      while (stop < lines.length && !/^- id:/.test(lines[stop])) stop += 1;
+      lines.splice(at, stop - at);
+      next = lines.join('\n');
+    }
+  }
+  next = next.replace(/\n{3,}/g, '\n\n').replace(/\s*$/, '');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, next === '' ? '' : `${next}\n`);
   return true;
 }

@@ -22,6 +22,7 @@ import { ensureLegalModeSetup, legalModeHome, legalModePayloadDir, migrateLegacy
 import { bundledDshBin, dshNodeModulesDir } from './dsh-runtime';
 import { ensureOfficeSetup, officePayloadDir } from './office-runtime';
 import { ensureBundledPlugins, bundledPluginsPayloadDir } from './bundled-plugins';
+import { ensurePluginMarket } from './plugin-market';
 import { removeModelLabelPatch } from './patch-extras';
 import { archiveLegacySessions, sessionSearchEnabled } from './session-legacy';
 import { createMainWindow } from './window';
@@ -1922,6 +1923,22 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
       console.log(`[smoke] bundled plugins: changed=${String(pluginsSetup.changed)} pending=${String(pluginsSetup.profilePending)} payload=${pluginsPayload}`);
     }
 
+    // 官方插件市场（Discover）：DSH 的 `indexes` 默认是空的 —— 不配索引时官方市场
+    // 一个请求都不发，新装用户进去是空页。这里把官网的 format 1 索引播进 profile，
+    // 用户打开「插件市场」就能看到我们的 67 个插件并一键安装。
+    // 为什么不是"去求别人收录"、以及只播种一次的理由，见 ./plugin-market.ts。
+    let marketSetup: { changed: boolean; profilePending: boolean } = { changed: false, profilePending: false };
+    try {
+      marketSetup = ensurePluginMarket(legalHome, legalRuntimeDir);
+    } catch (error) {
+      logInjectionFailure('plugin-market', '索引注入', error);
+    }
+    if (SMOKE) {
+      console.log(
+        `[smoke] plugin-market setup: changed=${String(marketSetup.changed)} pending=${String(marketSetup.profilePending)}`,
+      );
+    }
+
     // 手机连接：让局域网里的手机能连上（DSH 默认只绑 127.0.0.1，手机够不着）。
     // 详见 src/main/mobile-connect.ts —— 地址是运行时探测的，不写死。
     //
@@ -2144,6 +2161,7 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
       let after: { changed: boolean; profilePending: boolean } = { changed: false, profilePending: false };
       let afterOffice: { changed: boolean; profilePending: boolean } = { changed: false, profilePending: false };
       let afterPlugins: { changed: boolean; profilePending: boolean } = { changed: false, profilePending: false };
+      let afterMarket: { changed: boolean; profilePending: boolean } = { changed: false, profilePending: false };
       let afterModel: { changed: boolean } = { changed: false };
       let stableRounds = 0;
       // ⚠️ 累计标记：**有没有任何一轮写过盘**。
@@ -2185,6 +2203,13 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
           } catch (error) {
             logInjectionFailure('plugins', 'profile 注入', error);
           }
+          // 官方插件市场索引：首启时 profile 还不存在 → 这一轮写不进去（pending），
+          // DSH 建好 profile 之后必须补写，否则用户那次启动的「插件市场」一直是空的。
+          try {
+            afterMarket = ensurePluginMarket(legalHome, legalRuntimeDir);
+          } catch (error) {
+            logInjectionFailure('plugin-market', 'profile 注入', error);
+          }
           // 模型显示名（2026-10-26 反转）：1.0.60/61 写过「把名字改成 …-1017」的补丁，
           // 但官方 1017 徽章要求 name 恰好是 `DeepSeek-V4.1-Flash`（provider 已是 deepseek-official），
           // 改名反而把徽章打掉。这里改成**把老补丁删掉**，让官方名 + 官方徽章恢复。
@@ -2198,9 +2223,13 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
             after.changed ||
             afterOffice.changed ||
             afterPlugins.changed ||
+            afterMarket.changed ||
             afterModel.changed;
           const ready =
-            !after.profilePending && !afterOffice.profilePending && !afterPlugins.profilePending;
+            !after.profilePending &&
+            !afterOffice.profilePending &&
+            !afterPlugins.profilePending &&
+            !afterMarket.profilePending;
           const rows = patchHasAllRows();
           if (ready && rows) {
             stableRounds += 1;

@@ -231,6 +231,8 @@ jobs:
           node scripts/test-service-readiness.js
           # 旧 preset id 自愈（早期写的 legal → 现行 legal-mode，升级用户"新建会话建不了"）
           node scripts/test-preset-heal.js
+          # 官方插件市场的索引播种（新装用户打开「插件市场」是满的还是空页；尊重用户删除）
+          node scripts/test-plugin-market.js
           # 更新必须能被用户停下（点取消却继续下载的接线回归）
           node scripts/check-update-cancel.js
           # 右栏全屏不能透底/白屏，同时不能把主界面辉光做没（2026-10-14 用户截图）

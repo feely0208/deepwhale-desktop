@@ -24,6 +24,7 @@
     "test:profile": "node scripts/test-profile.js",
     "test:update-feed": "node scripts/test-update-feed.js",
     "test:mobile-urls": "node scripts/test-mobile-urls.js",
+    "test:mobile-relay": "node scripts/test-mobile-relay.js",
     "check:mobile-attach": "node scripts/check-mobile-attachments.mjs",
     "check:mobile-features": "node scripts/check-mobile-features-e2e.mjs",
     "check:packaged-mobile": "node scripts/check-packaged-app-mobile.mjs",
@@ -70,7 +71,8 @@
     "test:sessions-legacy": "npm run build && node scripts/test-sessions-legacy.js",
     "check:release-consistency": "node scripts/check-release-consistency.js",
     "check:office-node": "node scripts/check-office-node-wrapper.js",
-    "check:skin-theme": "node scripts/check-skin-theme-guard.js"
+    "check:skin-theme": "node scripts/check-skin-theme-guard.js",
+    "test:market": "npm run build && node scripts/test-plugin-market.js"
   },
   "dependencies": {
     "electron-updater": "^6.8.9",

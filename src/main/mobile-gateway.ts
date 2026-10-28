@@ -495,9 +495,13 @@ export function qrSvg(text: string, size = 260): string {
  * 同时也把 origin/code 明文写进去，便于任何扫码器都能显示，人工输入也能用。
  */
 export function pairPayload(session: GatewaySession, extra?: { remote?: string }): string {
-  const q = new URLSearchParams({ origin: session.origin, code: session.pairCode });
-  // 远程地址（在外面用）：二维码里同时带上，App 会先试局域网、失败再试远程 ——
-  // 用户不用区分"我在家还是在外"，扫一次到哪都能用 ✓
-  if (extra?.remote) q.set('remote', extra.remote);
-  return `dshmobile://pair?${q.toString()}`;
+  // ⚠️ 字段顺序有意为之：`remote` 放**最前**、`code` 放**最后**。
+  //    已发布的老版本 App 的解析是「origin 取到下一个 &，code 一直取到结尾」——
+  //    若把 remote 追加在 code 之后，老 App 会把 code 读成 "ABC123&remote=https://…"，配对全废。
+  //    现在：新 App 三个字段都认；老 App 仍然只拿 origin+code，行为不变 ✓
+  const parts: string[] = [];
+  if (extra?.remote) parts.push(`remote=${encodeURIComponent(extra.remote)}`);
+  parts.push(`origin=${encodeURIComponent(session.origin)}`);
+  parts.push(`code=${encodeURIComponent(session.pairCode)}`);
+  return `dshmobile://pair?${parts.join('&')}`;
 }

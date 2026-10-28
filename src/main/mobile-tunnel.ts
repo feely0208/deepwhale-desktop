@@ -27,10 +27,56 @@ import * as http from 'node:http';
 import * as crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
 
-/** 中继地址（固定，写在壳里；换服务器只改这一处） */
-export const RELAY_WS_URL = 'wss://deepwhale.org.cn/_relay/ws';
-/** 手机侧访问中继的 HTTPS 前缀（与上面的 WS 地址同源） */
-export const RELAY_HTTP_BASE = 'https://deepwhale.org.cn/_relay';
+/** 官方中继：手机侧访问的 HTTPS 前缀（默认值；换服务器只改这一处） */
+export const OFFICIAL_RELAY_HTTP_BASE = 'https://deepwhale.org.cn/_relay';
+/** 兼容旧导出：官方中继的 WS 地址 */
+export const OFFICIAL_RELAY_WS_URL = 'wss://deepwhale.org.cn/_relay/ws';
+/** 兼容旧导出：默认中继（手机侧 HTTP 前缀 / 桌面侧 WS 地址） */
+export const RELAY_HTTP_BASE = OFFICIAL_RELAY_HTTP_BASE;
+export const RELAY_WS_URL = OFFICIAL_RELAY_WS_URL;
+
+/** 一对中继地址：手机用 HTTP 前缀，桌面用同一前缀下的 /ws（两者必须同源同路径） */
+export interface RelayEndpoint {
+  /** 手机侧地址前缀，如 https://relay.example.com/_relay */
+  httpBase: string;
+  /** 桌面侧 WebSocket 地址，如 wss://relay.example.com/_relay/ws */
+  wsUrl: string;
+}
+
+/**
+ * 把用户填的「中继地址」规范化成一对可用地址。
+ *
+ * 接受三种写法（容错，不要求用户懂路径）：
+ *   · https://relay.example.com            → 补成 …/_relay（与我们 relay/deploy 的 nginx 约定一致）
+ *   · https://relay.example.com/           → 同上（去尾斜杠）
+ *   · https://relay.example.com/myrelay    → 原样作为前缀，WS 用 …/myrelay/ws
+ *
+ * 只允许 http/https；非法输入直接抛错（设置界面会把它当校验失败显示）。
+ */
+export function relayEndpointFor(raw: string): RelayEndpoint {
+  const input = String(raw ?? '').trim();
+  if (input === '') throw new Error('中继地址不能为空');
+  let u: URL;
+  try {
+    u = new URL(/^[a-z]+:\/\//i.test(input) ? input : `https://${input}`);
+  } catch {
+    throw new Error('中继地址不是合法 URL');
+  }
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') throw new Error('中继地址必须以 http:// 或 https:// 开头');
+  if (u.search !== '' || u.hash !== '') throw new Error('中继地址里不要带查询串或锚点');
+  let pathname = u.pathname.replace(/\/+$/, '');
+  // 只给了域名（没给路径）→ 按部署约定补 /_relay
+  if (pathname === '') pathname = '/_relay';
+  const httpBase = `${u.protocol}//${u.host}${pathname}`;
+  const wsUrl = `${httpBase.replace(/^http/, 'ws')}/ws`;
+  return { httpBase, wsUrl };
+}
+
+/** 默认中继（官方） */
+export const DEFAULT_RELAY: RelayEndpoint = {
+  httpBase: OFFICIAL_RELAY_HTTP_BASE,
+  wsUrl: OFFICIAL_RELAY_WS_URL,
+};
 
 export interface TunnelHandle {
   /** 隧道 ID（手机侧 URL 里那段） */
@@ -58,8 +104,10 @@ interface TunnelOptions {
   gatewayPort: number;
   /** 隧道密钥（持久化在壳的 userData 里） */
   secret: string;
-  /** 中继 WS 地址（测试时可覆盖成本地） */
+  /** 中继 WS 地址（测试时可覆盖成本地；一般不直接用，改用 relayHttpBase） */
   relayUrl?: string;
+  /** 自建中继的 HTTP 基址（如 https://relay.example.com/_relay）；缺省 = 官方中继 */
+  relayHttpBase?: string;
   /** 诊断日志 */
   onLog?: (line: string) => void;
 }
@@ -68,9 +116,11 @@ interface TunnelOptions {
  * 启动隧道客户端（失败会自动按 3s 退避重连；stop() 后不再重连）
  */
 export function startMobileTunnel(opts: TunnelOptions): TunnelHandle {
-  const url = opts.relayUrl ?? RELAY_WS_URL;
+  // 中继地址来自设置（自建）或默认（官方）；隧道 ID 算法不随中继变化，换中继只换入口
+  const endpoint = relayEndpointFor(opts.relayHttpBase ?? OFFICIAL_RELAY_HTTP_BASE);
+  const url = opts.relayUrl ?? endpoint.wsUrl;
   const tunnelId = tunnelIdFor(opts.secret);
-  const remoteOrigin = `${RELAY_HTTP_BASE}/t/${tunnelId}`;
+  const remoteOrigin = `${endpoint.httpBase}/t/${tunnelId}`;
   const log = (m: string): void => {
     try {
       opts.onLog?.(`[tunnel] ${m}`);

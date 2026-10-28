@@ -37,6 +37,10 @@
   ol{margin:6px 0 0;padding-left:18px;color:var(--dim);font-size:13px}
   li{margin:4px 0}
   .err{color:#ffb4b0;font-size:13px;min-height:18px}
+  input[type=url]{font:inherit;height:36px;padding:0 10px;border-radius:9px;border:1px solid var(--line);
+    background:rgba(0,0,0,.28);color:var(--fg);min-width:0;flex:1}
+  .tag{font-size:11px;padding:1px 7px;border-radius:999px;border:1px solid var(--line);color:var(--dim)}
+  .tag.custom{color:#ffd08a;border-color:rgba(255,208,138,.45)}
 </style>
 </head>
 <body>
@@ -79,7 +83,25 @@
     <div class="row" style="margin-top:10px">
       <button id="btn-copy-remote">复制远程地址</button>
     </div>
-    <p class="sub" style="margin-top:8px">人在外面时：手机填这个地址 + 同一个配对码。走我们自己的中继，不开放任何端口、不需要公网 IP。</p>
+    <p class="sub" style="margin-top:8px">手机在外面时自动走中继（同一 WiFi 时优先直连局域网）。不开放任何端口、不需要公网 IP。</p>
+  </div>
+
+  <div class="card" id="relay-card">
+    <div class="state">
+      <span class="dot" id="relay-dot"></span>
+      <span id="relay-state">中继：官方</span>
+      <span class="tag" id="relay-tag" style="margin-left:auto">官方</span>
+    </div>
+    <div class="addr" id="relay-base" style="margin-top:8px">—</div>
+    <div class="row" style="margin-top:10px">
+      <input id="relay-input" type="url" placeholder="https://你的中继域名/_relay" />
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button id="btn-relay-save">保存中继</button>
+      <button id="btn-relay-reset">恢复官方中继</button>
+    </div>
+    <div class="err" id="relay-err"></div>
+    <p class="sub" style="margin-top:4px">自建中继（可私有部署）：填你部署好的中继地址，手机在外面就走你的服务器，数据不经过我们。部署步骤见仓库 <code>relay/README-自建中继.md</code>。</p>
   </div>
 
 <script>
@@ -110,6 +132,16 @@
           ? '远程访问（在外面用）：已连接中继 ✓'
           : '远程访问（在外面用）：连接中继中…';
       }
+    }
+    // 中继卡片：显示当前用的是官方还是自建（轮询时不要动用户正在输入的框）
+    var relayBase = (st && st.relayBase) || '';
+    var relayCustom = !!(st && st.relayCustom);
+    if ($('relay-base')) {
+      $('relay-base').textContent = relayBase || '—';
+      $('relay-state').textContent = '中继：' + (relayCustom ? '自建（你的服务器）' : '官方');
+      $('relay-tag').textContent = relayCustom ? '自建' : '官方';
+      $('relay-tag').className = 'tag' + (relayCustom ? ' custom' : '');
+      $('relay-dot').className = 'dot' + ((st && st.tunnelConnected) ? ' on' : '');
     }
     if (running) {
       if (st.qr) $('qr-svg').innerHTML = st.qr;
@@ -155,6 +187,33 @@
       api.copy(o);
     });
   })();
+  // 中继设置：保存 / 恢复官方（只重连隧道，不动网关，已配对的手机不掉线）
+  function relayBusy(busy) {
+    $('btn-relay-save').disabled = busy;
+    $('btn-relay-reset').disabled = busy;
+  }
+  function applyRelay(value) {
+    $('relay-err').textContent = '';
+    relayBusy(true);
+    return api.setRelay(value).then(function (r) {
+      relayBusy(false);
+      if (!r || !r.ok) {
+        $('relay-err').textContent = (r && r.reason === 'invalid')
+          ? ('地址不合法：' + ((r && r.error) || '请填写 https:// 开头的地址'))
+          : '保存失败：' + ((r && (r.error || r.reason)) || '未知原因');
+        return;
+      }
+      render(Object.assign({ running: true }, r));
+      $('relay-input').value = '';
+    }).catch(function (e) {
+      relayBusy(false);
+      $('relay-err').textContent = '保存失败：' + String(e);
+    });
+  }
+  $('btn-relay-save').addEventListener('click', function () {
+    applyRelay($('relay-input').value || '');
+  });
+  $('btn-relay-reset').addEventListener('click', function () { applyRelay(''); });
   api.onState(function (st) { render(st); });
   api.status().then(function (st) { render(st || { running: false }); });
 

@@ -1,0 +1,39 @@
+# 深鲸手机端 · 自建中继 的 nginx 片段
+# 放进 sites-enabled 里任意 server 块（或按下面整段建一个只服务中继的 server）
+#
+# 约定：外部路径 /_relay/  →  127.0.0.1:8790/（剥掉前缀）
+#   手机 HTTP ： https://relay.example.com/_relay/t/<隧道ID>/...
+#   桌面 WS   ： wss://relay.example.com/_relay/ws
+
+server {
+    listen 443 ssl http2;
+    server_name relay.example.com;
+
+    # 证书：按你自己的方式配置（certbot / 已有通配证书）
+    ssl_certificate     /etc/letsencrypt/live/relay.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/relay.example.com/privkey.pem;
+
+    # 中继只转发字节，别做缓冲限制；但请求体要有上限（防止被当免费存储）
+    client_max_body_size 64m;
+
+    location /_relay/ {
+        # 末尾的 / 很重要：把 /_relay/ 前缀剥掉后再转给中继
+        proxy_pass http://127.0.0.1:8790/;
+
+        proxy_http_version 1.1;
+        # WebSocket 升级（桌面端隧道）必需：
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # 隧道是长连接：读超时放长，否则手机看长任务时会被 nginx 掐断
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+        proxy_buffering off;
+    }
+
+    # 自检用：访问 /_relay/ 应返回 404 not found（说明反代通了、只是没有隧道）
+}

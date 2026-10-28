@@ -1,0 +1,30 @@
+[Unit]
+Description=DeepWhale mobile relay (transparent tunnel for phone access)
+Documentation=file:/opt/deepwhale-relay/README-自建中继.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=deepwhale
+Group=deepwhale
+WorkingDirectory=/opt/deepwhale-relay
+Environment=NODE_ENV=production
+# 只监听回环：对外必须由 nginx 终止 TLS 再反代过来
+Environment=RELAY_PORT=8790
+ExecStart=/usr/bin/node /opt/deepwhale-relay/server.js
+Restart=always
+RestartSec=3
+# 日志进 journald：journalctl -u deepwhale-relay -f
+StandardOutput=journal
+StandardError=journal
+
+# 最小权限（只读代码 + 不需要写盘）
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/deepwhale-relay
+
+[Install]
+WantedBy=multi-user.target

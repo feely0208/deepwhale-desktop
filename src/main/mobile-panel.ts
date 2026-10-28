@@ -20,7 +20,7 @@ import { BrowserWindow, app, clipboard, ipcMain, shell, powerSaveBlocker } from 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { startMobileGateway, qrSvg, pairPayload, detectLanHost } from './mobile-gateway';
-import { startMobileTunnel, makeTunnelSecret } from './mobile-tunnel';
+import { startMobileTunnel, makeTunnelSecret, relayEndpointFor, OFFICIAL_RELAY_HTTP_BASE } from './mobile-tunnel';
 import type { TunnelHandle } from './mobile-tunnel';
 import type { GatewayHandle } from './mobile-gateway';
 
@@ -71,6 +71,61 @@ function rememberTunnelSecret(secret: string): void {
     fs.writeFileSync(f, JSON.stringify({ ...cur, secret, updatedAt: new Date().toISOString() }, null, 2));
   } catch {
     /* 记不住就下次换新隧道 ID（手机会需要重新填地址） */
+  }
+}
+
+/** 自建中继的 HTTP 基址（空字符串 = 用官方中继）。与端口/令牌同放一个状态文件，免得再多一个文件。 */
+function lastRelayBase(): string {
+  try {
+    const f = portFile();
+    if (!f || !fs.existsSync(f)) return '';
+    const v = JSON.parse(fs.readFileSync(f, 'utf8'))?.relayBase;
+    return typeof v === 'string' ? v.trim() : '';
+  } catch {
+    return '';
+  }
+}
+
+function rememberRelayBase(base: string): void {
+  try {
+    const f = portFile();
+    if (!f) return;
+    const cur = fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : {};
+    fs.writeFileSync(f, JSON.stringify({ ...cur, relayBase: base, updatedAt: new Date().toISOString() }, null, 2));
+  } catch {
+    /* 记不住只影响下次启动用哪个中继，不影响本次 */
+  }
+}
+
+/** 当前生效的中继基址（自定义优先，否则官方） */
+function currentRelayBase(): string {
+  const custom = lastRelayBase();
+  return custom === '' ? OFFICIAL_RELAY_HTTP_BASE : custom;
+}
+
+/**
+ * 起（或重起）隧道：**只换中继入口，不动网关**。
+ *
+ * 为什么要单独抽出来：改中继设置时只需要重连隧道；把网关也停掉会踢掉已经配对的手机。
+ */
+function startTunnelFor(gwPort: number): void {
+  try {
+    tunnel?.stop();
+  } catch {
+    /* 旧隧道已断开 */
+  }
+  tunnel = null;
+  try {
+    const secret = lastTunnelSecret() ?? makeTunnelSecret();
+    rememberTunnelSecret(secret);
+    tunnel = startMobileTunnel({
+      gatewayPort: gwPort,
+      secret,
+      relayHttpBase: lastRelayBase() || undefined,
+      onLog: (line) => console.log(line),
+    });
+  } catch (e) {
+    console.log('[mobile-panel] 隧道启动失败（不影响局域网使用）:', String((e as Error)?.message ?? e));
   }
 }
 
@@ -169,18 +224,9 @@ async function startGatewayInternal(): Promise<Record<string, unknown>> {
     // 配对码也落盘（2026-10-19）：以前只在「已开着」分支/换码时写 —— 自动启动时文件里留的是上一轮的码，
     // 而二维码/手机端用的是内存里这个新码 → 排障与自动化读文件拿到的码对不上（我这次真机验收就被挡了）。
     rememberPairCode(gateway.session.pairCode);
-    // 隧道：手机在外面用（连中继 → 回到本机网关）。密钥持久化，重启后隧道 ID 不变。
-    try {
-      const secret = lastTunnelSecret() ?? makeTunnelSecret();
-      rememberTunnelSecret(secret);
-      tunnel = startMobileTunnel({
-        gatewayPort: gwPort,
-        secret,
-        onLog: (line) => console.log(line),
-      });
-    } catch (e) {
-      console.log('[mobile-panel] 隧道启动失败（不影响局域网使用）:', String((e as Error)?.message ?? e));
-    }
+    // 隧道：手机在外面用（连中继 → 回到本机网关）。密钥持久化，重启后隧道 ID 不变；
+    // 中继地址来自设置（自建）或默认（官方）。
+    startTunnelFor(gwPort);
     // ⚠️ 必须在这里写 enabled=true（2026-10-19 真机定位到的根因）：
     //    旧代码只有 rememberEnabled(false)（关闭时），**从来没有写过 true** →
     //    用户点过「关闭手机访问」之后，`enabled` 永远是 false →
@@ -227,10 +273,11 @@ export async function autoStartMobileGateway(): Promise<boolean> {
 export function initMobilePanel(getEndpoint: () => { base: string; token: string } | null): void {
   resolveDshEndpoint = getEndpoint;
 
+  // ⚠️ 必须把 sessionInfo 一起返回：面板每 2 秒轮询一次状态，旧实现只回 origin/pairCode →
+  //    二维码、payload、远程卡片在每次轮询后都被清空/隐藏（"远程地址闪一下就没了"）。
   ipcMain.handle('mobile:status', () => ({
     running: gateway !== null,
-    origin: gateway?.session.origin ?? null,
-    pairCode: gateway?.session.pairCode ?? null,
+    ...sessionInfo(),
     lanHint: detectLanHost(),
   }));
 
@@ -268,6 +315,24 @@ export function initMobilePanel(getEndpoint: () => { base: string; token: string
     return { ok: true, ...sessionInfo() };
   });
 
+  // 改中继（自建）：只重连隧道，不动网关，已配对的手机不会被踢下线。
+  // value 传空字符串 = 恢复官方中继。
+  ipcMain.handle('mobile:set-relay', (_e, raw: unknown) => {
+    const value = String(raw ?? '').trim();
+    let normalized = '';
+    if (value !== '') {
+      try {
+        const ep = relayEndpointFor(value);
+        normalized = ep.httpBase === OFFICIAL_RELAY_HTTP_BASE ? '' : ep.httpBase;
+      } catch (e) {
+        return { ok: false, reason: 'invalid', error: String((e as Error)?.message ?? e) };
+      }
+    }
+    rememberRelayBase(normalized);
+    if (gateway) startTunnelFor(gateway.port);
+    return { ok: true, ...sessionInfo() };
+  });
+
   ipcMain.handle('mobile:copy', (_e, text: string) => {
     clipboard.writeText(String(text ?? ''));
     return { ok: true };
@@ -279,18 +344,36 @@ export function initMobilePanel(getEndpoint: () => { base: string; token: string
   });
 }
 
-function sessionInfo(): { origin: string; pairCode: string; qr: string; payload: string; remoteOrigin: string; tunnelConnected: boolean } {
-  if (!gateway) return { origin: '', pairCode: '', qr: '', payload: '', remoteOrigin: '', tunnelConnected: false };
+function sessionInfo(): {
+  origin: string;
+  pairCode: string;
+  qr: string;
+  payload: string;
+  remoteOrigin: string;
+  tunnelConnected: boolean;
+  relayBase: string;
+  relayCustom: boolean;
+} {
+  const relayBase = currentRelayBase();
+  const relayCustom = relayBase !== OFFICIAL_RELAY_HTTP_BASE;
+  if (!gateway) {
+    return { origin: '', pairCode: '', qr: '', payload: '', remoteOrigin: '', tunnelConnected: false, relayBase, relayCustom };
+  }
   const s = gateway.session;
-  const payload = pairPayload(s);
+  const remoteOrigin = tunnel?.remoteOrigin ?? '';
+  // 二维码里同时带局域网与外网入口：新 App 会「LAN 优先、失败回落中继」，用户不用判断自己在哪；
+  // 老 App 只认 origin+code，payload 的字段顺序保证它仍能解析（见 pairPayload）。
+  const payload = pairPayload(s, remoteOrigin === '' ? undefined : { remote: remoteOrigin });
   return {
     origin: s.origin,
     pairCode: s.pairCode,
     qr: qrSvg(payload),
     payload,
     // 在外面用的地址（同一套配对码/令牌，只是入口换成中继）
-    remoteOrigin: tunnel?.remoteOrigin ?? '',
+    remoteOrigin,
     tunnelConnected: tunnel?.connected() ?? false,
+    relayBase,
+    relayCustom,
   };
 }
 

@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('mobilePanel', {
   start: (): Promise<unknown> => ipcRenderer.invoke('mobile:start'),
   stop: (): Promise<unknown> => ipcRenderer.invoke('mobile:stop'),
   rotate: (): Promise<unknown> => ipcRenderer.invoke('mobile:rotate'),
+  setRelay: (base: string): Promise<unknown> => ipcRenderer.invoke('mobile:set-relay', base),
   copy: (text: string): void => {
     void ipcRenderer.invoke('mobile:copy', text);
   },

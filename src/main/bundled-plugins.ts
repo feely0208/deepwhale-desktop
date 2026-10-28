@@ -88,6 +88,8 @@ const BUNDLED_PLUGINS: BundledPlugin[] = [
   //    但 profile `bundles` 里写的必须与包自身 package.json 的 name 完全一致。
   // ⚠️ 载荷目录仍按"包名去掉 scope"的约定叫 `dsh-memory-doctor`。
   // ⚠️ 与 scripts/build-bundled-plugins.js 的拷贝段**必须同进同出**（该脚本从 npm 拉这个包）。
+  // 侧栏收纳：纯客户端 CSS（无宿主能力），给插件列表限高 + 内部滚动。
+  { name: '@deepwhale-cn/dsh-sidebar-compact', dir: 'dsh-sidebar-compact' },
   { name: 'dsh-memory-doctor', dir: 'dsh-memory-doctor' },
   // ⛔ 品牌标记（空白会话顶部的青色大肥鱼）—— **不进包**（2026-10-08 用户决定）。
   //

@@ -370,6 +370,8 @@ jobs:
           mkdir -p preview-out
           cp release/*.exe preview-out/ 2>/dev/null || true
           ls -lh preview-out
+          # Windows 上脚本内部 spawnSync('npm') 会 ENOENT（npm 实际是 npm.cmd），所以先在外面装好 SDK
+          npm install --no-save --no-audit --no-fund esdk-obs-nodejs >/dev/null 2>&1 || true
           node scripts/sync-to-obs.js --dir preview-out --key-prefix preview/1.0.63 --concurrency 4
 
 

@@ -241,6 +241,10 @@ function materializeOfficeKit(
   runtimeNodeModulesDir: string,
   appVersion: string,
 ): string | null {
+  // 物化内容变了就换 schema，让老用户也强制重建一次 kit（只比 appVersion 的话，
+  // 同版本升级/预览包永远不会重新物化 —— 2026-10-29 koffi 修复就吃了这个亏）。
+  const KIT_SCHEMA = 'koffi-optional-1';
+  const kitStamp = `${appVersion}+${KIT_SCHEMA}`;
   const kitRoot = path.join(home, 'office-runtime', 'kit');
   const modulesDir = path.join(kitRoot, 'node_modules');
   const scopedDir = path.join(modulesDir, '@deepseek-ai');
@@ -254,7 +258,7 @@ function materializeOfficeKit(
   // 版本变了就重建（否则旧 app 的绝对路径会留在软链里）
   try {
     const stamped = fs.existsSync(marker) ? fs.readFileSync(marker, 'utf-8').trim() : '';
-    if (stamped && stamped !== appVersion) {
+    if (stamped && stamped !== kitStamp) {
       fs.rmSync(kitRoot, { recursive: true, force: true });
     }
   } catch {
@@ -333,7 +337,7 @@ function materializeOfficeKit(
         }
       }
     }
-    fs.writeFileSync(marker, appVersion, 'utf-8');
+    fs.writeFileSync(marker, kitStamp, 'utf-8');
   } catch (e) {
     console.warn('[office] 物化转换栈失败:', e);
     return null;

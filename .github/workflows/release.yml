@@ -354,20 +354,6 @@ jobs:
             release/*.yml
           if-no-files-found: error
 
-  publish:
-    needs: build
-    # 只有推送 v* tag 才发布；手动触发的构建只留 Actions artifacts，供发版前验证
-    if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
-    steps:
-      # 同步到 OBS 那一步要跑仓库里的 scripts/sync-to-obs.js，
-      # 所以这里必须有 checkout —— 原来这个 job 只跑 gh 命令，不需要仓库。
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
       # 手动触发的预览构建：把 Windows 安装包传到 CDN 的 preview/ 目录，方便国内直接下载验证。
       # 只传 exe，不传 latest*.yml（绝不影响 62 用户的更新检查）。
       - name: 预览包同步到 CDN（仅手动触发 / Windows）
@@ -384,6 +370,21 @@ jobs:
           cp release/*.exe preview-out/ 2>/dev/null || true
           ls -lh preview-out
           node scripts/sync-to-obs.js --dir preview-out --key-prefix preview/1.0.63 --concurrency 4
+
+
+  publish:
+    needs: build
+    # 只有推送 v* tag 才发布；手动触发的构建只留 Actions artifacts，供发版前验证
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      # 同步到 OBS 那一步要跑仓库里的 scripts/sync-to-obs.js，
+      # 所以这里必须有 checkout —— 原来这个 job 只跑 gh 命令，不需要仓库。
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
 
       - name: 汇总三平台产物
         uses: actions/download-artifact@v4

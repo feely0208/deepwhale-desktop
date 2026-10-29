@@ -368,6 +368,23 @@ jobs:
         with:
           node-version: 22
 
+      # 手动触发的预览构建：把 Windows 安装包传到 CDN 的 preview/ 目录，方便国内直接下载验证。
+      # 只传 exe，不传 latest*.yml（绝不影响 62 用户的更新检查）。
+      - name: 预览包同步到 CDN（仅手动触发 / Windows）
+        if: github.event_name == 'workflow_dispatch' && matrix.key == 'windows-x64'
+        env:
+          OBS_AK: ${{ secrets.OBS_AK }}
+          OBS_SK: ${{ secrets.OBS_SK }}
+          OBS_BUCKET: ${{ secrets.OBS_BUCKET }}
+          OBS_ENDPOINT: ${{ secrets.OBS_ENDPOINT }}
+        run: |
+          set -e
+          if [ -z "$OBS_AK" ]; then echo "::warning::未配置 OBS_AK，跳过预览同步"; exit 0; fi
+          mkdir -p preview-out
+          cp release/*.exe preview-out/ 2>/dev/null || true
+          ls -lh preview-out
+          node scripts/sync-to-obs.js --dir preview-out --key-prefix preview/1.0.63 --concurrency 4
+
       - name: 汇总三平台产物
         uses: actions/download-artifact@v4
         with:

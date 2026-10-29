@@ -358,6 +358,7 @@ jobs:
       # 只传 exe，不传 latest*.yml（绝不影响 62 用户的更新检查）。
       - name: 预览包同步到 CDN（仅手动触发 / Windows）
         if: github.event_name == 'workflow_dispatch' && matrix.key == 'windows-x64'
+        shell: bash
         env:
           OBS_AK: ${{ secrets.OBS_AK }}
           OBS_SK: ${{ secrets.OBS_SK }}

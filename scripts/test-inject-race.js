@@ -39,7 +39,7 @@ const RUNTIME_NODE_MODULES = path.join(REPO, 'dsh-runtime', 'node_modules');
 const PAYLOAD_FILES = [
   [path.join(PAYLOAD.legal, 'plugin'), 'legal-mode/plugin'],
   [path.join(PAYLOAD.office, 'runtime.json'), 'office-runtime/runtime.json'],
-  [path.join(PAYLOAD.plugins, 'dsh-cn-compliance'), 'bundled-plugins/dsh-cn-compliance'],
+  [path.join(PAYLOAD.plugins, 'dsh-memory-doctor'), 'bundled-plugins/dsh-memory-doctor'],
 ];
 {
   const missing = PAYLOAD_FILES.filter(([p]) => !fs.existsSync(p)).map(([, label]) => label);

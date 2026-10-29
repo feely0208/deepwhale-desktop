@@ -296,21 +296,25 @@ jobs:
       # 背景：1.0.63 预览包在无进程的机器上也弹「无法关闭」，已把 NSIS 内置检查删掉、
       # 改由 customInit 的 taskkill 处理。这条用例就是防止那个弹窗再回来：
       # ① 先启动已解包的 app；② 直接在它运行时跑安装器 /S；③ 断言退出码 0 且装出 exe。
+      # 2026-10-29：安装器回归 —— 模拟"用户正在用应用"时静默安装。
+      # 用 PowerShell：① Start-Process 起 app 不占 step 的管道；② -Wait 有超时保护；
+      # ③ 结束进程后再断言，避免把 runner 挂住（上一次 bash 版就是这么挂的）。
       - name: 安装器冒烟（应用运行时静默安装）
         if: matrix.key == 'windows-x64'
-        shell: bash
+        shell: pwsh
         run: |
-          set -e
-          SETUP=$(ls release/*Setup.exe | head -1)
-          echo "installer: $SETUP"
-          ( cd "release/win-unpacked" && ./"DeepWhale Desktop.exe" >/dev/null 2>&1 & )
-          sleep 12
-          tasklist | grep -i "DeepWhale Desktop.exe" || echo "（应用未常驻，继续）"
-          "$SETUP" /S /D=C:\dwh-install-smoke
-          echo "installer exit code: $?"
-          test -f "C:/dwh-install-smoke/DeepWhale Desktop.exe" || { echo "❌ 没有装出 exe"; exit 1; }
-          echo "✅ 应用运行中也能静默安装完成"
-          taskkill //F //T //IM "DeepWhale Desktop.exe" || true
+          $ErrorActionPreference = 'Stop'
+          $setup = Get-ChildItem release\*Setup.exe | Select-Object -First 1
+          Write-Host "installer: $($setup.FullName)"
+          $app = Start-Process -FilePath "release\win-unpacked\DeepWhale Desktop.exe" -PassThru
+          Start-Sleep -Seconds 12
+          Write-Host "app running: $(-not $app.HasExited)"
+          $p = Start-Process -FilePath $setup.FullName -ArgumentList '/S','/D=C:\dwh-install-smoke' -Wait -PassThru
+          Write-Host "installer exit: $($p.ExitCode)"
+          if ($p.ExitCode -ne 0) { throw "安装器退出码非 0：$($p.ExitCode)" }
+          if (-not (Test-Path 'C:\dwh-install-smoke\DeepWhale Desktop.exe')) { throw '没有装出 exe' }
+          Write-Host '✅ 应用运行中也能静默安装完成'
+          Get-Process -Name 'DeepWhale Desktop' -ErrorAction SilentlyContinue | Stop-Process -Force
 
       - name: 能力基线 · Office 预览必须在**打包产物**上真的能用（P0-0）
         shell: bash

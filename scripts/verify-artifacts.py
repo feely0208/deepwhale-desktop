@@ -61,8 +61,7 @@ SHELL_ASSETS = [
     "/legal-mode/plugin/lib/client.js",          # 法律模式的客户端插件
     "/legal-mode/plugin/package.json",
     "/office-runtime/runtime.json",               # office 载荷
-    "/bundled-plugins/dsh-cn-compliance",         # 随包插件（合规）
-    "/bundled-plugins/dsh-cn-doc-formatter",      # 随包插件（公文排版）
+    "/bundled-plugins/dsh-memory-doctor",         # 随包插件（深鲸记忆，63 起唯一随包业务插件）
     "/dist/main/legal-mode.js",                   # 注入逻辑本身（在 app.asar 内）
 ]
 

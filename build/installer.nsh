@@ -54,27 +54,17 @@
 ;    不依赖 exe 名字（旧安装可能漂到 %TEMP%\old-install\...，名字也可能带连字符）。
 ; 2) 卸载器同样会做 CHECK_APP_RUNNING（uninstaller.nsh），所以 customUnInit 也要先杀。
 !macro dwhKillApp
-  DetailPrint "正在关闭正在运行的 DeepWhale Desktop…"
+  ; 温和关一次（给应用自己退出的机会）
   nsExec::Exec `"$SYSDIR\cmd.exe" /C taskkill /IM "DeepWhale Desktop.exe" >nul 2>&1`
   Pop $0
-  Sleep 1200
-  StrCpy $R9 0
-  ${Do}
-    nsExec::Exec `"$SYSDIR\cmd.exe" /C taskkill /F /T /IM "DeepWhale Desktop.exe" >nul 2>&1`
-    Pop $0
-    nsExec::Exec `"$SYSDIR\cmd.exe" /C taskkill /F /T /IM "deepwhale-desktop.exe" >nul 2>&1`
-    Pop $0
-    ; 按路径兜底（覆盖 old-install / 改过名的旧副本）
-    nsExec::Exec `"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -Command "Get-Process | Where-Object { $_.Path -like '*DeepWhale*' } | Stop-Process -Force -ErrorAction SilentlyContinue" >nul 2>&1`
-    Pop $0
-    nsExec::Exec `"$SYSDIR\cmd.exe" /C tasklist /FI "IMAGENAME eq DeepWhale Desktop.exe" /NH | find /I "DeepWhale Desktop.exe" >nul 2>&1`
-    Pop $0
-    ${If} $0 != 0
-      ${ExitDo}
-    ${EndIf}
-    Sleep 1000
-    IntOp $R9 $R9 + 1
-  ${LoopWhile} $R9 < 6
+  Sleep 1500
+  ; 强制结束整棵进程树（/F 强制、/T 含 DSH 子进程）；再来一次防"正在退出"
+  nsExec::Exec `"$SYSDIR\cmd.exe" /C taskkill /F /T /IM "DeepWhale Desktop.exe" >nul 2>&1`
+  Pop $0
+  Sleep 800
+  nsExec::Exec `"$SYSDIR\cmd.exe" /C taskkill /F /T /IM "deepwhale-desktop.exe" >nul 2>&1`
+  Pop $0
+  Sleep 500
 !macroend
 
 !macro customInit

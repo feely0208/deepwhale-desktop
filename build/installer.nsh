@@ -42,3 +42,29 @@
   nsExec::Exec `"$SYSDIR\cmd.exe" /C taskkill /F /T /IM "${APP_EXECUTABLE_FILENAME}" >nul 2>&1`
   Pop $0
 !macroend
+
+; ── 2026-10-29 补：在 CHECK_APP_RUNNING 之前先强制关掉旧版本 ──────────────
+; 现象：1.0.63 预览包装到一半仍弹「无法关闭，请手动关闭后重试」，而用户并没有另开实例
+; （应用关窗只是隐藏到托盘，进程还在；上面覆盖 customCheckAppRunning 的写法在
+;  electron-builder 26 的 include 顺序下没生效 —— 实测弹窗仍来自内置 _CHECK_APP_RUNNING）。
+; 修法：用 customInit —— installer.nsi 里它一定在 install 段 CHECK_APP_RUNNING **之前**执行。
+!macro customInit
+  DetailPrint "正在关闭正在运行的 DeepWhale Desktop…"
+  ; ① 温和关（给应用自己退出的机会）
+  nsExec::Exec `"$SYSDIR\cmd.exe" /C taskkill /IM "DeepWhale Desktop.exe" >nul 2>&1`
+  Pop $0
+  Sleep 1500
+  ; ② 强制结束整棵进程树（/F 强制、/T 含 DSH 子进程），连续两次，避免撞上"正在退出"
+  StrCpy $R9 0
+  ${Do}
+    nsExec::Exec `"$SYSDIR\cmd.exe" /C taskkill /F /T /IM "DeepWhale Desktop.exe" >nul 2>&1`
+    Pop $0
+    nsExec::Exec `"$SYSDIR\cmd.exe" /C tasklist /FI "IMAGENAME eq DeepWhale Desktop.exe" /NH | find /I "DeepWhale Desktop.exe" >nul 2>&1`
+    Pop $0
+    ${If} $0 != 0
+      ${ExitDo}
+    ${EndIf}
+    Sleep 1000
+    IntOp $R9 $R9 + 1
+  ${LoopWhile} $R9 < 5
+!macroend

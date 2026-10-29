@@ -276,12 +276,18 @@ function materializeOfficeKit(
       console.warn('[office] 复制依赖失败:', name, e);
       return;
     }
-    // 继续它的 dependencies（跳过 platform/optional，失败就算了）
+    // 继续它的 dependencies + optionalDependencies。
+    // ⚠️ 2026-10-29：koffi 的原生二进制不在 koffi 包里，而在平台包
+    // `@koromix/koffi-<platform>-<arch>`（optionalDependencies）——
+    // 只复制 dependencies 会让物化后的 kit 找不到 Koffi native module，
+    // 本机内文件预览 docx 直接报错（PDF 不走这条链所以正常）。
     try {
       const pkg = JSON.parse(fs.readFileSync(path.join(from, 'package.json'), 'utf-8')) as {
         dependencies?: Record<string, string>;
+        optionalDependencies?: Record<string, string>;
       };
       for (const dep of Object.keys(pkg.dependencies || {})) copyPackage(dep);
+      for (const dep of Object.keys(pkg.optionalDependencies || {})) copyPackage(dep);
     } catch {
       /* 没 package.json 或不是 JSON，忽略 */
     }

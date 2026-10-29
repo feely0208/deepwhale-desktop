@@ -292,6 +292,26 @@ jobs:
       # 打包完整性守卫（2026-10-05 事故）：Windows 1.0.52 启动即崩
       #   `Error: Cannot find module 'tree-kill'`（主进程顶层 import 失败 → 应用打不开）
       # 依赖没进包 = 装完就是一个打不开的软件，必须在出门前拦住。
+      # 2026-10-29：安装器回归 —— 模拟"用户正在用应用"时静默安装。
+      # 背景：1.0.63 预览包在无进程的机器上也弹「无法关闭」，已把 NSIS 内置检查删掉、
+      # 改由 customInit 的 taskkill 处理。这条用例就是防止那个弹窗再回来：
+      # ① 先启动已解包的 app；② 直接在它运行时跑安装器 /S；③ 断言退出码 0 且装出 exe。
+      - name: 安装器冒烟（应用运行时静默安装）
+        if: matrix.key == 'windows-x64'
+        shell: bash
+        run: |
+          set -e
+          SETUP=$(ls release/*Setup.exe | head -1)
+          echo "installer: $SETUP"
+          ( cd "release/win-unpacked" && ./"DeepWhale Desktop.exe" >/dev/null 2>&1 & )
+          sleep 12
+          tasklist | grep -i "DeepWhale Desktop.exe" || echo "（应用未常驻，继续）"
+          "$SETUP" /S /D=C:\dwh-install-smoke
+          echo "installer exit code: $?"
+          test -f "C:/dwh-install-smoke/DeepWhale Desktop.exe" || { echo "❌ 没有装出 exe"; exit 1; }
+          echo "✅ 应用运行中也能静默安装完成"
+          taskkill //F //T //IM "DeepWhale Desktop.exe" || true
+
       - name: 能力基线 · Office 预览必须在**打包产物**上真的能用（P0-0）
         shell: bash
         run: |

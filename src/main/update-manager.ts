@@ -152,6 +152,15 @@ export class UpdateManager {
   private disposed = false;
   /** 正在等待用户答复，避免并发弹窗 */
   private prompting = false;
+  /**
+   * 自动提示额度：**每次彻底退出再启动只自动提示一次**（用户 2026-10-29 定）。
+   * 原来按「同一版本 24 小时内只提示一次」——但那意味着长时间不关机会反复弹、
+   * 而关掉重开又可能不提示，跟"用户自己决定什么时候更新"的直觉相反。
+   * 现在：只在启动后的第一次自动检查里提示；用户手动检查更新不受此限。
+   */
+  private 自动提示额度 = 1;
+  /** 本次 check 是不是用户手动点的（手动检查要每次都给人反馈） */
+  private 本次检查是手动 = false;
 
   constructor(options: UpdateManagerOptions) {
     this.getWindow = options.getWindow;
@@ -517,6 +526,7 @@ export class UpdateManager {
   private interactiveCheckPending = false;
 
   private async check(interactive: boolean): Promise<void> {
+    this.本次检查是手动 = interactive;
     if (this.disposed) {
       return;
     }
@@ -777,10 +787,13 @@ export class UpdateManager {
       }
       // 63 起：只提示，不下载、不安装（用户 2026-10-27 定）。
       if (this.notifyOnly) {
-        const 上次 = this.notifiedAt[info.version] ?? 0;
-        if (Date.now() - 上次 < 24 * 60 * 60 * 1000) {
-          this.setState({ phase: 'idle', message: `已提示过新版本 ${info.version}` });
-          return;
+        // 自动检查：每次启动最多提示一次；之后静默（用户下次彻底退出重进会再提示一次）。
+        if (!this.本次检查是手动) {
+          if (this.自动提示额度 <= 0) {
+            this.setState({ phase: 'idle', message: `本次启动已提示过新版本 ${info.version}` });
+            return;
+          }
+          this.自动提示额度 -= 1;
         }
         this.notifiedAt[info.version] = Date.now();
         this.setState({ phase: 'available', version: info.version, message: `有新版本 ${info.version}，请到官网下载` });

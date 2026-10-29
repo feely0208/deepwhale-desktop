@@ -26,8 +26,6 @@ interface BundledPlugin {
 
 /** 随包分发的插件清单。 */
 const BUNDLED_PLUGINS: BundledPlugin[] = [
-  { name: '@deepwhale-cn/dsh-cn-compliance', dir: 'dsh-cn-compliance' },
-  { name: '@deepwhale-cn/dsh-cn-doc-formatter', dir: 'dsh-cn-doc-formatter' },
   // 「法律模式」预设。**必须走 bundle**：0.1.7-rc.2 起预设不再是
   // `<home>/.agent-presets/<id>/` 目录（运行时文档原话：Nothing reads that
   // directory any more），而是 `@deepseek-ai/dsh-agent-preset` 的声明，由 bundle

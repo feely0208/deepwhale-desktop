@@ -8,7 +8,6 @@
  * 产出：
  *   bundled-plugins/
  *   ├── dsh-cn-compliance/         （含 cordis.patch.yml / lib / skill）
- *   ├── dsh-cn-doc-formatter/      （含 cordis.patch.yml / lib / skill）
  *   └── dsh-memory-doctor/         「深鲸记忆」，1.0.62 起随包（无 scope 的 npm 包）
  *
  * 这几个包体积都很小（各 100~200KB），随包分发零负担，换来的是**装完即用、不联网**。
@@ -26,8 +25,6 @@ const { execFileSync } = require('child_process');
 
 /** 随包插件清单：包名 → 载荷目录名。目录名取包名去 scope，与 bundled-plugins.ts 对应。 */
 const PLUGINS = [
-  '@deepwhale-cn/dsh-cn-compliance',
-  '@deepwhale-cn/dsh-cn-doc-formatter',
   // 「深鲸记忆」（2026-10-26 用户定：1.0.62 起随包走）。
   // ⚠️ 这个包**没有 scope**（npm 上就是 `dsh-memory-doctor`），所以下面的 dirName
   //    不能直接 `name.split('/')[1]` —— 那样会得到 undefined。已按"有斜杠才取后半段"处理。

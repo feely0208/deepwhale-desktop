@@ -23,6 +23,7 @@ import { bundledDshBin, dshNodeModulesDir } from './dsh-runtime';
 import { ensureOfficeSetup, officePayloadDir } from './office-runtime';
 import { ensureBundledPlugins, bundledPluginsPayloadDir } from './bundled-plugins';
 import { ensurePluginMarket } from './plugin-market';
+import { installPluginGuide } from './plugin-guide';
 import { removeModelLabelPatch } from './patch-extras';
 import { archiveLegacySessions, sessionSearchEnabled } from './session-legacy';
 import { createMainWindow } from './window';
@@ -2070,6 +2071,8 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
     installBlankScreenGuard(mainWin);
     // 主题一致性自检：白屏的另一条主要路径（切皮肤/切深浅色）
     installThemeSanityCheck(mainWin);
+    // 首次启动的「插件指南」浮标（只显示一次；升级/重装不再出现）
+    installPluginGuide(mainWin);
     await showStartingPage(mainWin);
 
     /*

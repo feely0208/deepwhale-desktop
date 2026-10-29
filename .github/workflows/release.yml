@@ -251,6 +251,11 @@ jobs:
           # 客户层插件 bundle 必须返回插件对象（2026-10-15：一个坏 bundle 让整页崩）
           node scripts/check-client-bundles.js shell-plugins bundled-plugins
 
+      # 2026-10-29：Windows 上内置「应用是否在运行」检查会误判（没有进程也报无法关闭），
+      # 打包前把它从模板里删掉；旧进程由 build/installer.nsh 的 customInit 用 taskkill 处理。
+      - name: 移除 NSIS 误判的应用运行检查
+        run: node scripts/patch-nsis-check.js
+
       - name: Package (构建安装包，不发布)
         run: npm run dist -- --publish never ${{ matrix.args }}
         env:

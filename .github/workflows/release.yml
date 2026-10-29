@@ -377,7 +377,7 @@ jobs:
             (cd release && 7z a -tzip -mx=1 ../preview-out/DeepWhale-Desktop-1.0.63-x64-portable.zip win-unpacked >/dev/null)
             ls -lh preview-out
           fi
-          node scripts/sync-to-obs.js --dir preview-out --key-prefix preview/1.0.63 --concurrency 4
+          node scripts/sync-to-obs.js --dir preview-out --key-prefix preview/1.0.63 --concurrency 4 --no-exclude
 
 
   publish:

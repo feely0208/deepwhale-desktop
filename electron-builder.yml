@@ -45,10 +45,6 @@ files:
   #    引擎走 extraResources 发真实目录，DSH 子进程用 NODE_PATH 解析（见
   #    src/main/service-manager.ts）；物化源见 src/main/office-runtime.ts。
   - '!dsh-runtime/node_modules/@deepseek-ai/libreoffice-kit-*'
-  # koffi 是原生模块（libreoffice-kit 的依赖）：**必须在 asar 外**，否则 require
-  # 原生 .node 时 Electron 会报「Cannot find the native Koffi module」（2026-10-29
-  # Windows 实测：本机内文件预览 docx 失败、PDF 正常）。它的 JS 留在 asar 里没问题。
-  - 'dsh-runtime/node_modules/koffi/**'
   # pnpm 包里的 pn / pnpx / pnx 是 pnpm 的**硬链接别名**（源目录里 5 个名字共享同一份
   # 40MB 二进制，磁盘只占 1 份）。但电子打包会把硬链接**展开成独立文件** →
   # app.asar.unpacked 里白白多出 3 × 40MB = 120MB，下载包直接胖一圈（2026-10-20 实测：
@@ -97,6 +93,9 @@ asarUnpack:
   - dsh-runtime/node_modules/node-pty/**
   - dsh-runtime/node_modules/@img/**
   - dsh-runtime/node_modules/@koromix/**
+  # koffi 的 JS 也要解包：它运行时按自身路径找平台二进制，留在 asar 里
+  # 与 @koromix 的相对位置会对不上（2026-10-29）
+  - dsh-runtime/node_modules/koffi/**
   - dsh-runtime/node_modules/sherpa-onnx-*/**
   - dsh-runtime/node_modules/node-addon-require-builtin-*/**
   - dsh-runtime/node_modules/@deepseek-ai/node-addon-system-*/**

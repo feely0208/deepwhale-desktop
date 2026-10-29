@@ -31,12 +31,12 @@ const PLUGINS = [
   // 「深鲸记忆」（2026-10-26 用户定：1.0.62 起随包走）。
   // ⚠️ 这个包**没有 scope**（npm 上就是 `dsh-memory-doctor`），所以下面的 dirName
   //    不能直接 `name.split('/')[1]` —— 那样会得到 undefined。已按"有斜杠才取后半段"处理。
-  // 📌 **钉版本**（用户 2026-10-26 定：63 直接兼容 0.5.15，不跟 latest）—— 写成 `包名@版本`；
+  // 📌 **钉版本**（用户 2026-10-26 定：63 直接兼容 0.5.16，不跟 latest）—— 写成 `包名@版本`；
   //    不带版本号的条目仍取 npm dist-tags.latest。
   // 侧栏收纳（2026-10-28 用户拍板：先上这个，插件多了不挤掉会话区）。
   // 纯 CSS 客户端插件，不注册任何侧栏图标/面板。
   '@deepwhale-cn/dsh-sidebar-compact@0.1.1',
-  'dsh-memory-doctor@0.5.15',
+  'dsh-memory-doctor@0.5.16',
 ];
 
 function fetchJson(url) {

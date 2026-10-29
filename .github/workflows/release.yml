@@ -372,6 +372,11 @@ jobs:
           ls -lh preview-out
           # Windows 上脚本内部 spawnSync('npm') 会 ENOENT（npm 实际是 npm.cmd），所以先在外面装好 SDK
           npm install --no-save --no-audit --no-fund esdk-obs-nodejs >/dev/null 2>&1 || true
+          # 免安装 zip：绕开 NSIS 安装器，验证 63 时直接解压运行（安装器另修）
+          if [ -d release/win-unpacked ]; then
+            (cd release && 7z a -tzip -mx=1 ../preview-out/DeepWhale-Desktop-1.0.63-x64-portable.zip win-unpacked >/dev/null)
+            ls -lh preview-out
+          fi
           node scripts/sync-to-obs.js --dir preview-out --key-prefix preview/1.0.63 --concurrency 4
 
 

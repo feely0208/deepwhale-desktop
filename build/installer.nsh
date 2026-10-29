@@ -48,16 +48,24 @@
 ; （应用关窗只是隐藏到托盘，进程还在；上面覆盖 customCheckAppRunning 的写法在
 ;  electron-builder 26 的 include 顺序下没生效 —— 实测弹窗仍来自内置 _CHECK_APP_RUNNING）。
 ; 修法：用 customInit —— installer.nsi 里它一定在 install 段 CHECK_APP_RUNNING **之前**执行。
-!macro customInit
+
+; ── 2026-10-29 二次加固：Windows 上「无法关闭」仍复现 ─────────────────────
+; 1) customInit 里再加一道 PowerShell 兜底：按「进程路径含 DeepWhale」匹配，
+;    不依赖 exe 名字（旧安装可能漂到 %TEMP%\old-install\...，名字也可能带连字符）。
+; 2) 卸载器同样会做 CHECK_APP_RUNNING（uninstaller.nsh），所以 customUnInit 也要先杀。
+!macro dwhKillApp
   DetailPrint "正在关闭正在运行的 DeepWhale Desktop…"
-  ; ① 温和关（给应用自己退出的机会）
   nsExec::Exec `"$SYSDIR\cmd.exe" /C taskkill /IM "DeepWhale Desktop.exe" >nul 2>&1`
   Pop $0
-  Sleep 1500
-  ; ② 强制结束整棵进程树（/F 强制、/T 含 DSH 子进程），连续两次，避免撞上"正在退出"
+  Sleep 1200
   StrCpy $R9 0
   ${Do}
     nsExec::Exec `"$SYSDIR\cmd.exe" /C taskkill /F /T /IM "DeepWhale Desktop.exe" >nul 2>&1`
+    Pop $0
+    nsExec::Exec `"$SYSDIR\cmd.exe" /C taskkill /F /T /IM "deepwhale-desktop.exe" >nul 2>&1`
+    Pop $0
+    ; 按路径兜底（覆盖 old-install / 改过名的旧副本）
+    nsExec::Exec `"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -Command "Get-Process | Where-Object { $_.Path -like '*DeepWhale*' } | Stop-Process -Force -ErrorAction SilentlyContinue" >nul 2>&1`
     Pop $0
     nsExec::Exec `"$SYSDIR\cmd.exe" /C tasklist /FI "IMAGENAME eq DeepWhale Desktop.exe" /NH | find /I "DeepWhale Desktop.exe" >nul 2>&1`
     Pop $0
@@ -66,5 +74,13 @@
     ${EndIf}
     Sleep 1000
     IntOp $R9 $R9 + 1
-  ${LoopWhile} $R9 < 5
+  ${LoopWhile} $R9 < 6
+!macroend
+
+!macro customInit
+  !insertmacro dwhKillApp
+!macroend
+
+!macro customUnInit
+  !insertmacro dwhKillApp
 !macroend

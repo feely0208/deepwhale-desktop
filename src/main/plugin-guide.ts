@@ -109,7 +109,12 @@ function 页面(): string {
 
   const btn = document.createElement('button');
   btn.id = 'dwh-plugin-guide-btn';
-  btn.textContent = '✨ 插件指南';
+  btn.innerHTML =
+    '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" ' +
+    'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/>' +
+    '<rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>' +
+    '<span>插件指南</span>';
   document.body.appendChild(btn);
 
   const open = () => {
@@ -130,7 +135,10 @@ function 页面(): string {
     wrap.addEventListener('click', async (e) => {
       const t = e.target;
       if (t === wrap) return;
-      if (t.dataset.act === 'close') wrap.remove();
+      if (t.dataset.act === 'close') {
+        wrap.remove();
+        btn.remove();
+      }
       if (t.dataset.act === 'site') window.open('https://deepwhale.org.cn/plugins.html', '_blank');
     });
     wrap.querySelectorAll('.cmd').forEach((el) => {

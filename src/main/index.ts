@@ -24,6 +24,7 @@ import { ensureOfficeSetup, officePayloadDir } from './office-runtime';
 import { ensureBundledPlugins, bundledPluginsPayloadDir } from './bundled-plugins';
 import { ensurePluginMarket } from './plugin-market';
 import { installPluginGuide } from './plugin-guide';
+import { ensureNativeOpen } from './native-open';
 import { removeModelLabelPatch } from './patch-extras';
 import { archiveLegacySessions, sessionSearchEnabled } from './session-legacy';
 import { createMainWindow } from './window';
@@ -1938,6 +1939,13 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
       console.log(
         `[smoke] plugin-market setup: changed=${String(marketSetup.changed)} pending=${String(marketSetup.profilePending)}`,
       );
+    }
+
+    // 原生「在文件管理器中显示 / 打开方式」：web 部署默认关闭，桌面壳里打开（2026-10-30）
+    try {
+      ensureNativeOpen(legalHome);
+    } catch (error) {
+      logInjectionFailure('native-open', '原生打开配置', error);
     }
 
     // 手机连接：让局域网里的手机能连上（DSH 默认只绑 127.0.0.1，手机够不着）。

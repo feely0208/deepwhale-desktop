@@ -42,6 +42,13 @@
   `dsh plugin --profile web add <包名>`，命令可点击复制；只显示一次
   （`<dsh-home>/.plugin-guide-shown` 标记，升级/重装复用同一 home，不会重复出现）。
 
+### 随包运行时升级到 DSH 0.2.1-rc.5（2026-10-30）
+
+- 上游评估（隔离实例实跑）：rc.5 无 engines 限制、启动正常、客户端插件条目与 rc.2 一致、
+  schedule RPC 正常、webserver 字节级未变、cordis 仍 4.0.5（插件 API 稳定）→ 建议跟版；
+- `dsh-runtime.version` 0.2.1-rc.2 → 0.2.1-rc.5，`src/main/dsh-version.generated.ts` 已重新生成；
+- 插件 engines 范围仍为 `>=0.1.0-rc.6 <0.3.0`，全部满足。
+
 ## [1.0.62] — Windows 三项修复 + 深鲸记忆随包（2026-10-26）
 
 ### 加固：运行在临时目录（自动更新残留）时明确提示重装（2026-10-26）

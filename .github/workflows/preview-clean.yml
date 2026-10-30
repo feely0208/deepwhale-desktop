@@ -1,0 +1,38 @@
+# 临时：清理 preview/<version>/ 下的验证包（用完即删本文件）
+name: Preview Clean
+on:
+  workflow_dispatch:
+    inputs:
+      prefix:
+        description: '要清空的对象前缀'
+        required: true
+        default: 'preview/1.0.63/'
+permissions:
+  contents: read
+jobs:
+  clean:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: 删除对象
+        env:
+          OBS_AK: ${{ secrets.OBS_AK }}
+          OBS_SK: ${{ secrets.OBS_SK }}
+          OBS_BUCKET: ${{ secrets.OBS_BUCKET }}
+          OBS_ENDPOINT: ${{ secrets.OBS_ENDPOINT }}
+        run: |
+          npm install --no-save --no-audit --no-fund esdk-obs-nodejs >/dev/null 2>&1
+          node -e '
+          const ObsClient = require("esdk-obs-nodejs");
+          const c = new ObsClient({ access_key_id: process.env.OBS_AK, secret_access_key: process.env.OBS_SK, server: process.env.OBS_ENDPOINT });
+          const prefix = process.argv[1];
+          c.listObjects({ Bucket: process.env.OBS_BUCKET, Prefix: prefix, MaxKeys: 1000 }).then((r) => {
+            const objs = ((r.InterfaceResult && r.InterfaceResult.Contents) || []).map((o) => ({ Key: o.Key }));
+            if (!objs.length) { console.log("nothing to delete"); return; }
+            console.log("deleting", objs.map((o) => o.Key));
+            return c.deleteObjects({ Bucket: process.env.OBS_BUCKET, Quiet: false, Objects: objs }).then((d) => console.log(JSON.stringify(d.InterfaceResult || d.CommonMsg)));
+          }).catch((e) => { console.error(e); process.exit(1); });
+          ' "${{ inputs.prefix }}"

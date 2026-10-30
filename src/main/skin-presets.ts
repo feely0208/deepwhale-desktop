@@ -316,10 +316,14 @@ export function presetBackgroundCss(preset: string): string | null {
              全屏时底下会话正文整片透上来（浅色更像"一片白"）。
          选择器用 DSH 自己的稳定属性 data-sidebar-right-panel="fullscreen"（面板 div 自己带），
          不碰哈希类名；也**不改主界面的 token** —— 辉光在停靠（push）状态下照旧透出来。 */
-      [data-sidebar-right-panel='fullscreen'] {
+      [data-sidebar-right-panel='fullscreen'][data-sidebar-right-open] {
         background: #ffffff !important;
         --dsw-alias-bg-base: #ffffff !important;
       }
+      /* ⚠️ 2026-10-30 用户实测：预览最大化后**直接**退出预览框 → 会话区一片空白（辉光还在）。
+         原因：关闭后容器仍带 data-sidebar-right-panel="fullscreen"（宽度也是 100vw），
+         只是不再带 data-sidebar-right-open —— 上面那条无条件做实就留下一张不透明面板盖住会话。
+         所以做实必须与「展开」同时成立；关闭时面板无背景，本来就看不见。 */
 
       /* ── 深色 ── */
       body[data-ds-dark-theme] {${glowBackgroundCss('dark')}
@@ -344,8 +348,8 @@ export function presetBackgroundCss(preset: string): string | null {
       html[style*="color-scheme: dark"] [class*="_overlay"],
       html[style*="color-scheme: dark"] [class*="_Overlay"] { --dsw-alias-bg-base: #0b1018 !important; }
       /* 深色同理：右栏全屏的面板与它内部用该 token 的面都做实（取值 = 本预设正文底 rgb(11,16,24)） */
-      html[style*="color-scheme: dark"] [data-sidebar-right-panel='fullscreen'] { background: #0b1018 !important; --dsw-alias-bg-base: #0b1018 !important; }
-      body[data-ds-dark-theme] [data-sidebar-right-panel='fullscreen'] {
+      html[style*="color-scheme: dark"] [data-sidebar-right-panel='fullscreen'][data-sidebar-right-open] { background: #0b1018 !important; --dsw-alias-bg-base: #0b1018 !important; }
+      body[data-ds-dark-theme] [data-sidebar-right-panel='fullscreen'][data-sidebar-right-open] {
         background: #0b1018 !important;
         --dsw-alias-bg-base: #0b1018 !important;
       }

@@ -49,6 +49,16 @@
 - `dsh-runtime.version` 0.2.1-rc.2 → 0.2.1-rc.5，`src/main/dsh-version.generated.ts` 已重新生成；
 - 插件 engines 范围仍为 `>=0.1.0-rc.6 <0.3.0`，全部满足。
 
+### 修复：预览最大化后直接退出，会话区被不透明面板盖住（2026-10-30 Windows 实测）
+
+- 现象：右栏预览**最大化**后直接关闭预览框 → 会话正文整片空白（辉光与输入框还在）；
+  先「还原」再关闭就正常。
+- 根因：关闭后 DSH 的右栏容器仍带 `data-sidebar-right-panel="fullscreen"`（宽度也是 100vw），
+  只是不再带 `data-sidebar-right-open`；我们为修「全屏透底」给 fullscreen 加的无条件实底
+  就留下一张不透明面板盖住会话。
+- 修法：三条做实规则（浅色 / 深色 body / 深色 html）全部追加 `[data-sidebar-right-open]`。
+- 守卫：check-skin-fullscreen.js 增加两条断言（必须有 open 条件、不许存在无条件 fullscreen 实底）。
+
 ## [1.0.62] — Windows 三项修复 + 深鲸记忆随包（2026-10-26）
 
 ### 加固：运行在临时目录（自动更新残留）时明确提示重装（2026-10-26）

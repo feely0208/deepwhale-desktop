@@ -83,9 +83,15 @@ if (fsToken) {
 // 深色下也要有（且必须是实底 #0b1018）
 check(
   '深色主题下同样有全屏做实规则（实底 #0b1018）',
-  /body\[data-ds-dark-theme\][^{]*\[data-sidebar-right-panel='fullscreen'\]\s*\{[^}]*background:\s*#0b1018\s*!important/i.test(
+  /body\[data-ds-dark-theme\][^{]*\[data-sidebar-right-panel='fullscreen'\]\[data-sidebar-right-open\]\s*\{[^}]*background:\s*#0b1018\s*!important/i.test(
     css,
   ),
+);
+// 2026-10-30 用户实测：预览最大化后直接退出预览框 → 会话区被一张不透明面板盖住（白屏）。
+// 关闭后容器仍带 fullscreen 属性（宽度 100vw），所以做实**必须**同时要求 data-sidebar-right-open。
+check(
+  '全屏做实必须与「展开」同时成立（关闭后不许留不透明面板）',
+  !/\[data-sidebar-right-panel='fullscreen'\]\s*\{/.test(css),
 );
 
 // ── ② 1.0.55 的浮层做实不许回归 ──

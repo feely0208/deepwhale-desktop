@@ -284,6 +284,14 @@ export class ServiceManager extends EventEmitter {
     // 壳注入的环境变量（如 DSH_HOME）优先于继承来的环境
     if (this.options.env) Object.assign(env, this.options.env);
 
+    // 头部预算（2026-10-31）：host 的 createServer 没覆盖 maxHeaderSize，沿用 Node 默认
+    // 16384。dsh-auth-* cookie 每换一次端口就多一条（约 224B），累积到约 72 条即 431，
+    // 且请求在解析层就被拒、应用层无法清理。提到 64KiB（Chromium 单域上限约 40KB）。
+    const 现有NodeOptions = env.NODE_OPTIONS || '';
+    if (!/--max-http-header-size(=\d+)?/.test(现有NodeOptions)) {
+      env.NODE_OPTIONS = (现有NodeOptions + ' --max-http-header-size=65536').trim();
+    }
+
     // ── 插件安装工具链（2026-10-20）────────────────────────────────
     // GUI 的「添加插件」是在 DSH 运行时里 spawn `pnpm` 的；Finder 启动的 App PATH
     // 只有 /usr/bin:/bin:/usr/sbin:/sbin，pnpm/node 都不在里面 → `spawn pnpm ENOENT`，

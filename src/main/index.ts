@@ -7,6 +7,7 @@ import {
   MenuItemConstructorOptions,
   nativeTheme,
   Notification,
+  session,
   shell,
   Tray,
 } from 'electron';
@@ -17,6 +18,7 @@ import * as path from 'path';
 import { homedir } from 'os';
 import { pathToFileURL } from 'url';
 import { Store } from './store';
+import { guardAuthCookies } from './cookie-guard';
 import { ServiceManager } from './service-manager';
 import { ensureLegalModeSetup, legalModeHome, legalModePayloadDir, migrateLegacyHomeOnce } from './legal-mode';
 import { bundledDshBin, dshNodeModulesDir } from './dsh-runtime';
@@ -1827,6 +1829,9 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
   app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
 
   app.whenReady().then(async () => {
+    // 启动 cookie 守护（2026-10-31）：dsh-auth-* 累积到约 72 条会把 Cookie 头顶破
+    // Node 默认 16KB 预算 → 431 永久锁死欢迎页。这里异步自检、不阻塞启动。
+    void guardAuthCookies(session.defaultSession, Number(store.get('port')) || 3095);
     // 启动时若发现「进程本身在 %TEMP%\…\old-install\ 里跑」，明确提醒重装（2026-10-26 日志铁证）。
     // 只修快捷方式不够：旧副本里随包运行时是残缺的，用户会一直在残缺环境里用。
     void warnIfRunningFromTempInstall();

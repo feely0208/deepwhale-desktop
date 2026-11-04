@@ -2,6 +2,21 @@
 
 本项目所有重要变更都会记录在此。
 
+## [1.0.64] — 启动自检退休旧登录凭据、头部预算提到 64KB（2026-11-04）
+
+### 修复：`dsh-auth-*` cookie 累积到约 72 条触发 431，界面永久打不开（2026-10-31）
+
+- 根因：DSH host 每次启动绑随机端口，会话 cookie 名 = `dsh-auth-<base64url(sha256(authority))>`，而 authority 含端口、浏览器按**域名**存 cookie（端口不进键）→ 每换一次端口就多一条 30 天有效的持久 cookie，全链路没有删除路径。Node 默认 `maxHeaderSize=16384`，单条约 224B，约 72 条后 Cookie 头超限，请求在 **HTTP 解析层**就被 431 拒绝、进不到应用层，所以既不自愈也无法在应用里清。本机实测 72→200 / 73→431。
+- 修法（双保险，两处都小）：
+  - 新增 `src/main/cookie-guard.ts`：启动时 `session.cookies` 自检，`dsh-auth-*` 条数 >60 或字节 >13KB 时按当前端口反推（`127.0.0.1` / `localhost`）保留，其余用 `Max-Age=0` 从 jar 删除；只读名字不解码值、不参与认证；失败只告警不阻塞启动。
+  - `src/main/service-manager.ts`：给 host 子进程注入 `NODE_OPTIONS=--max-http-header-size=65536`（已有该参数则不重复加）。64KB 高于 Chromium 单域约 40KB 的上限，也高于清理阈值，两道防线不会互相打架。
+- 验证（2026-11-04，macOS）：
+  - cookie 守护用真 Electron 隔离分区实测：种 70 条 → 退休 66 条、剩 4 条、当前端口两条保留；低于阈值不动；名字形状不符一条不碰。
+  - 头预算在 **Electron-as-Node**（含打包态 1.0.63 App）上实测：19.9KB Cookie 头默认 → **HTTP 431**，加 `NODE_OPTIONS` → **HTTP 200**（`http.maxHeaderSize` 16384 → 65536），证明打包后 `NODE_OPTIONS` 未被 fuse 屏蔽。
+  - 隔离启动冒烟与 1.0.63 基线（同机 worktree 对照）逐字相同，本版无新增红。
+- 未验证：Windows 实机（本版两处改动跨平台同一实现，431 复现与修复均已在本机用真实 Electron + 真实 HTTP 完成）。
+- 依据：`jitianjiyan/dsh-auth-cookie-guard` 的根因链（MIT，未引入依赖），另见 `~/深鲸运营/生态调研-2026-10-31.md`。
+
 ## [1.0.63] — 白屏守卫/安全模式、打印根因、侧栏收纳（2026-10-29）
 
 ### 白屏守卫 + 安全模式（2026-10-27，Windows 62 用户实测「更新后辉光白屏」）

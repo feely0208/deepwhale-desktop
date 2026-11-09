@@ -249,7 +249,7 @@
 
     el.content.innerHTML =
       '<div class="page-head"><div><h1>' + curTitle + "</h1><div class='sub'>" + curSub + "</div></div>" +
-      '<div style="display:flex;gap:10px;align-items:center"><button class="btn btn-ghost glow" id="dashAiBtn">AI 简报</button><button class="btn btn-primary glow" id="newCaseBtn">＋ 新建案件</button></div></div>' +
+      '<div style="display:flex;gap:10px;align-items:center"><button class="btn btn-ghost glow" id="dashAiBtn">生成简报</button><button class="btn btn-primary glow" id="newCaseBtn">＋ 新建案件</button></div></div>' +
       '<div class="grid cols-4">' + statCards + "</div>" +
       '<div id="dashAiPanel" style="margin-top:18px"></div>' +
       '<div class="grid" style="grid-template-columns: 1.4fr 1fr;margin-top:18px">' +
@@ -269,10 +269,29 @@
     if (di) di.addEventListener("click", function () {
       const panel = document.getElementById("dashAiPanel");
       if (!panel) return;
+      // 与鸿蒙端一致：没有 Key 时由本机按实际数据整理（确定性、零网络）；有 Key 才走 AI
+      const hasKey = !!(window.KeyMgr && window.KeyMgr.getKey && window.KeyMgr.getKey("legal"));
+      const localHtml = function () {
+        try { return (window.__callAI ? window.__callAI("briefing", { cases: mock.cases }) : ""); } catch (e) { return ""; }
+      };
+      const head = function (badge) {
+        return "<div class='card-head' style='margin-bottom:12px'><h2>今日办案简报</h2><span class='badge badge-info'>" + badge + "</span></div>";
+      };
+      if (!hasKey) {
+        panel.innerHTML = head("本机根据你的数据生成") + (localHtml() || "<p>（本机暂无可用数据）</p>");
+        return;
+      }
       panel.innerHTML = "<div class='ai-box'><span class='ev-empty'>正在生成今日办案简报（读取工作台数据）…</span></div>";
-      const out = (window.__callAIAsync ? window.__callAIAsync("briefing", { cases: mock.cases }) : Promise.resolve({ content: (window.__callAI ? window.__callAI("briefing", { cases: mock.cases }) : "<p>（未接 AI 桥）</p>") }));
-      out.then(function (res) { panel.innerHTML = "<div class='card-head' style='margin-bottom:12px'><h2>今日办案简报</h2><span class='badge badge-info'>基于你的工作台数据</span></div>" + ((res && res.content) || ""); })
-        .catch(function () { panel.innerHTML = "<div class='card-head' style='margin-bottom:12px'><h2>今日办案简报</h2></div><p>（生成失败）</p>"; });
+      const out = (window.__callAIAsync ? window.__callAIAsync("briefing", { cases: mock.cases }) : Promise.resolve({ content: localHtml(), llm: false }));
+      out.then(function (res) {
+        if (!res || !res.content) {
+          panel.innerHTML = head("本机根据你的数据生成") + (localHtml() || "<p>（本机暂无可用数据）</p>");
+          return;
+        }
+        panel.innerHTML = head(res.llm ? "AI 生成" : "本机根据你的数据生成") + res.content;
+      }).catch(function () {
+        panel.innerHTML = head("本机根据你的数据生成") + (localHtml() || "<p>（生成失败）</p>");
+      });
     });
     el.content.querySelectorAll("[data-switch]").forEach(function (b) {
       b.addEventListener("click", function () { switchTo(b.getAttribute("data-switch")); });
@@ -417,6 +436,14 @@
       "</div></div>";
   }
 
+  // —— 系统设置里的「隐私政策」卡片（2026-11-09）——
+  // 与鸿蒙端对齐：桌面端此前只有「授权与服务说明」，没有隐私政策入口。
+  // 同样是加法：只多一张卡，原有卡片不动。
+  function privacySetCard() {
+    if (window.PrivacyPolicy && window.PrivacyPolicy.card) return window.PrivacyPolicy.card();
+    return "";
+  }
+
   /** 授权详情：点按钮才展开，不占设置页版面 */
   function openLicenseInfo() {
     var old = document.getElementById("lic-info-modal");
@@ -550,7 +577,7 @@
       html = head("起诉状、代理词、证据目录、法律意见书等案卷文书", "<button class='btn btn-primary glow'>＋ 新建文书</button>") +
         "<div class='card glow'><div class='card-head'><h2>文书列表</h2></div>" +
         table(["文书名称", "类型", "所属案件", "状态", "日期"], d.map(function (r) {
-          return row([r[0], "<span class='badge badge-info'>" + r[1] + "</span>", r[2], "<span class='badge " + (r[3] === "已生成" ? "badge-success" : "badge-warning") + "'>" + r[3] + "</span>", r[4]], [{ k: "evidence", t: "证据/文书" }, { k: "cases", t: "案件" }]);
+          return row([r[0], "<span class='badge badge-info'>" + r[1] + "</span>", r[2], "<span class='badge " + (String(r[3]).indexOf("已生成") === 0 ? "badge-success" : "badge-warning") + "'>" + r[3] + "</span>", r[4]], [{ k: "evidence", t: "证据/文书" }, { k: "cases", t: "案件" }]);
         }).join("")) + "</div>";
     } else if (key === "lawyers") {
       const d = [];
@@ -623,6 +650,7 @@
           "提供可显著加快定位速度；不提供也不影响我们按既定流程为你排查。</div>") +
         licenseSetCard() +
         aboutUpdateSetCard() +
+        privacySetCard() +
         "</div>";
     } else if (key === "profile") {
       const name = meName();
@@ -725,6 +753,11 @@
     const lic = el.content.querySelector("[data-open-lic]");
     if (lic) lic.addEventListener("click", function () { if (window.License && window.License.open) window.License.open(); else if (window.toast) window.toast("激活模块未就绪", "error"); });
     // 授权详情：设置页那张「授权与激活」卡上的按钮（点开才展开，不影响本页其它卡片）
+    const ppBtn = el.content.querySelector("[data-privacy]");
+    if (ppBtn) ppBtn.addEventListener("click", function () {
+      if (window.PrivacyPolicy) window.PrivacyPolicy.open();
+      else toast("隐私政策模块未就绪", "error");
+    });
     const licInfo = el.content.querySelector("[data-lic-info]");
     if (licInfo) licInfo.addEventListener("click", function () { openLicenseInfo(); });
     // 关于与更新：两个按钮（桥未就绪时只提示，不抛错）
@@ -1320,7 +1353,7 @@
       id: uid(), type: type, caseNo: caseObj.no, caseTitle: caseObj.title,
       title: caseObj.title + " · " + type,
       content: raw,
-      date: nowStr(), status: isH ? "已生成(Harness)" : "草稿",
+      date: nowStr(), status: isH ? "已生成(AI·Harness)" : "草稿",
       generator: isH ? "harness" : "template",
     };
     docs.unshift(rec); saveDocs();
@@ -1523,20 +1556,20 @@
       }
       if (t.hasAttribute && t.hasAttribute("data-save")) {
         rec.content = editor.innerHTML;
-        rec.status = "已生成"; rec.date = nowStr();
+        rec.status = "已生成(AI)"; rec.date = nowStr();
         saveDocs(); m.remove(); renderDocuments();
         toast("文书已保存", "success");
       }
       if (t.hasAttribute && t.hasAttribute("data-exportpdf")) {
-        rec.content = editor.innerHTML; rec.status = "已生成"; rec.date = nowStr(); saveDocs();
+        rec.content = editor.innerHTML; rec.status = "已生成(AI)"; rec.date = nowStr(); saveDocs();
         m.remove(); printDoc(rec);
       }
       if (t.hasAttribute && t.hasAttribute("data-exportdocx")) {
-        rec.content = editor.innerHTML; rec.status = "已生成"; rec.date = nowStr(); saveDocs();
+        rec.content = editor.innerHTML; rec.status = "已生成(AI)"; rec.date = nowStr(); saveDocs();
         exportDocx(rec);
       }
       if (t.hasAttribute && t.hasAttribute("data-print")) {
-        rec.content = editor.innerHTML; rec.status = "已生成"; rec.date = nowStr(); saveDocs();
+        rec.content = editor.innerHTML; rec.status = "已生成(AI)"; rec.date = nowStr(); saveDocs();
         m.remove(); printDoc(rec);
       }
     });
@@ -1578,6 +1611,8 @@
     }
     var split = splitDocHtml(rec.content || "");
     var title = split.title || rec.title || "文书";
+    // 《人工智能生成合成内容标识办法》第四条：导出文件本身也要带显式标识，不能只在界面提示
+    split.paragraphs.push("本内容由 AI 生成，仅供办案参考，不构成法律意见，须经律师人工复核后使用。");
     try {
       var bytes = window.Docx.build(title, split.paragraphs);
       var blob = new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
@@ -1600,7 +1635,8 @@
       "<div class='modal-actions approval-no-print'><button class='btn btn-ghost' data-close>关闭</button>" +
       "<button class='btn btn-primary' data-doprint> 一键打印</button></div></div>";
     document.body.appendChild(ov);
-    ov.querySelector(".doc-print").innerHTML = rec.content;
+    ov.querySelector(".doc-print").innerHTML = rec.content +
+      "<p style='margin-top:24px;font-size:12px;color:#666'>本内容由 AI 生成，仅供办案参考，不构成法律意见，须经律师人工复核后使用。</p>";
     ov.querySelector("[data-close]").addEventListener("click", function () { ov.remove(); });
     ov.querySelector("[data-doprint]").addEventListener("click", function () { window.print(); });
   }

@@ -826,41 +826,55 @@
    仅作用于激活弹窗 #legal-license-modal；建档页 #setup 保持原样。 */
 #legal-license-modal input,
 #legal-license-modal select,
-#legal-license-modal textarea,
-#legal-license-modal .sku-card {
-  background: rgba(140, 200, 205, 0.14) !important;
-  border: 1px solid rgba(150, 215, 220, 0.28) !important;
+#legal-license-modal textarea {
+  background: #0b1622 !important;          /* 实底：不再让封面大字透进输入框 */
+  border: 1px solid rgba(150, 215, 220, 0.45) !important;
   color: #f2fbfb !important;
 }
+#legal-license-modal .sku-card {
+  background: rgba(9, 22, 34, 0.82) !important;
+  border: 1px solid rgba(150, 215, 220, 0.32) !important;
+}
 #legal-license-modal input::placeholder {
-  color: rgba(220, 240, 240, 0.55) !important;
+  color: rgba(226, 244, 246, 0.78) !important;   /* 占位文字提亮，才看得清 */
 }
 #legal-license-modal input:focus {
-  border-color: rgba(120, 210, 215, 0.7) !important;
-  box-shadow: 0 0 0 3px rgba(120, 210, 215, 0.18) !important;
-  background: rgba(140, 200, 205, 0.2) !important;
+  border-color: rgba(120, 210, 215, 0.85) !important;
+  box-shadow: 0 0 0 3px rgba(120, 210, 215, 0.22) !important;
+  background: #0e1b29 !important;
 }
 /* 授权弹窗：封面大底 + 统一深蓝覆盖层（既有品牌感，又整卡上下同色、不花） */
 #legal-license-modal {
   background: rgba(6, 18, 30, 0.55) !important;
 }
 #legal-license-modal .modal {
-  background: url('../assets/wallpapers/cover-deepblue.png') center/cover no-repeat !important;
+  /* 统一深色面板：不再用封面大图，避免下半部分发浅、文字看不清 */
+  background: linear-gradient(160deg, #0a1622 0%, #0d2030 100%) !important;
   border: 1px solid rgba(120, 190, 200, 0.22) !important;
   color: #eef4f7 !important;
   position: relative; z-index: 1;
 }
 /* 让封面“深鲸智能”大字透出：覆盖层透明度降低 */
-#legal-license-modal .modal::before {
-  content: ''; position: absolute; inset: 0; border-radius: inherit;
-  background: linear-gradient(160deg, rgba(8, 22, 38, 0.62), rgba(14, 38, 58, 0.62));
-  pointer-events: none; z-index: 0;
-}
+#legal-license-modal .modal::before { content: none; }
 #legal-license-modal .modal > * { position: relative; z-index: 1; }
 
 /* 授权弹窗卡片内次级文字可读（深蓝封面上用浅色） */
+#legal-license-modal .btn-ghost {
+  background: rgba(9, 24, 36, 0.88) !important;
+  border: 1px solid rgba(150, 215, 220, 0.38) !important;
+  color: #e8f6f7 !important;
+}
+#legal-license-modal .btn-ghost.active {
+  background: rgba(79, 140, 255, 0.3) !important;
+  border-color: #7aa8ff !important;
+  color: #ffffff !important;
+}
+#legal-license-modal .modal { text-shadow: 0 1px 3px rgba(0, 0, 0, 0.65); }
+#legal-license-modal .modal input,
+#legal-license-modal .modal select,
+#legal-license-modal .modal textarea { text-shadow: none; }
 #legal-license-modal .sec-title { color: #cfe6ea !important; }
-#legal-license-modal label { color: #cfe6ea !important; }
+#legal-license-modal label { color: #e8f6f7 !important; }
 #legal-license-modal .intl-note, #legal-license-modal div { }
 #legal-license-modal h2, #legal-license-modal h3 { color: #eef4f7 !important; }
 #legal-license-modal #lic-status { color: #a9c6cc !important; }

@@ -404,9 +404,16 @@
       "<b style='color:#cfe6ea'>五、技术支持</b><br>" +
       "仅邮件渠道：service@deepwhale.org。2 个工作日内响应（休息日与法定节假日不计入）。服务时段为工作日 9:00–18:00。仅限本应用本身（安装、激活、功能使用、故障排查、数据导入导出、发票申请）；不含具体案件的实体法律意见、诉讼策略与文书代写等专业服务。" +
       "</div></div>" +
+      // —— 隐私政策入口（与鸿蒙端对齐：同一位置可查阅隐私政策）——
+      "<div style='margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap'>" +
+      "<button type='button' class='btn btn-ghost btn-sm' id='lic-privacy'>隐私政策</button>" +
+      "<span style='font-size:11.5px;color:#8ea3c2'>我们如何处理您的信息：业务数据仅在本地，AI 请求由你的设备直连你配置的接口。</span>" +
+      "</div>" +
       "<div id='lic-msg' style='margin-top:14px;color:#7ddb8a;font-size:13px'></div>" +
       "</div>";
     document.body.appendChild(m);
+    var _ppBtn = m.querySelector("#lic-privacy");
+    if (_ppBtn) _ppBtn.addEventListener("click", function () { if (window.PrivacyPolicy) window.PrivacyPolicy.open(); });
 
     // 机器码显示
     m.querySelector("#lic-machine").textContent = isRealDesktop() ? ("本机机器码：" + realMachine()) : "（浏览器环境无法取得机器码，请在深鲸·律师端桌面端激活）";

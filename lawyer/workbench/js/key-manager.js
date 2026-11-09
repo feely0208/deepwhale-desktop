@@ -79,48 +79,32 @@
   }
 
   // ——「算力与 Key」管理弹窗 ——
+  // 2026-11：只保留一把 Key。同一把 DeepSeek Key 同时作用于「法律工作台」与「深鲸 AI」，
+  // 两栏分开配置对律师端用户是多余概念（原 legal / dsh 两栏 + 联动勾选已去掉）。
   function openUI() {
     var m = document.createElement("div");
     m.className = "modal-overlay show";
     m.innerHTML =
-      "<div class='modal glow' style='width:720px;max-height:88vh;overflow:auto'>" +
-      "<div class='card-head'><h3> 算力与 Key（A款 · 自备算力）</h3></div>" +
-      "<div style='font-size:12px;color:#8ea3c2;margin-bottom:12px'>A款 = 一律自备 DeepSeek API Key（不提供集团算力）。你可以<b>分别</b>为「法律工作台」和「深鲸AI」配置各自的 Key，或<b>联动共用</b>一把以统计用量。Key 仅保存在本机。</div>" +
-      "<div style='display:flex;align-items:center;gap:8px;margin-bottom:12px'>" +
-      "<label style='font-size:13px;color:#cfe6ea'><input type='checkbox' id='km-link' style='margin-right:6px'>联动共用：深鲸AI 使用法律工作台的同一把 Key</label>" +
-      "</div>" +
-      kmField("legal", "法律工作台 AI Key（sk-…）") +
-      "<div style='height:14px'></div>" +
-      kmField("dsh", "深鲸AI 中枢 Key（sk-…）") +
+      "<div class='modal glow' style='width:640px;max-height:88vh;overflow:auto'>" +
+      "<div class='card-head'><h3>算力与 Key（A款 · 自备算力）</h3></div>" +
+      "<div style='font-size:12px;color:#8ea3c2;margin-bottom:12px'>A款 = 一律自备 DeepSeek API Key（不提供集团算力）。<b>一把 Key 同时用于法律工作台与深鲸 AI</b>；仅保存在本机，直连 api.deepseek.com，不经过我们的服务器。</div>" +
+      "<div class='form-group'><label>DeepSeek API Key（sk-…）</label>" +
+      "<input id='km-legal-key' placeholder='sk-…（DeepSeek API Key，仅存本机）' type='password' autocomplete='off' style='width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.18);background:#12151c;color:#eef2f8'></div>" +
       "<div class='modal-actions'><button class='btn btn-primary' id='km-save'>保存</button><button class='btn btn-ghost' data-close>关闭</button></div>" +
       "<div id='km-msg' style='margin-top:10px;font-size:12px;color:#7ddb8a'></div>" +
       "</div>";
     document.body.appendChild(m);
     var st = status();
-    var link = m.querySelector("#km-link");
-    link.checked = st.link;
-    m.querySelector("#km-legal-key").value = (st.legal && st.legal.apiKey) || "";
-    m.querySelector("#km-dsh-key").value = (st.dsh && st.dsh.apiKey) || "";
-    function refill() {
-      // 联动时：深鲸key禁用/隐藏，用法律key
-      var dkey = m.querySelector("#km-dsh-key");
-      if (link.checked) { dkey.value = m.querySelector("#km-legal-key").value || dkey.value; dkey.disabled = true; }
-      else dkey.disabled = false;
-    }
-    refill();
-    link.addEventListener("change", refill);
-    m.querySelector("#km-legal-key").addEventListener("input", function () { if (link.checked) m.querySelector("#km-dsh-key").value = this.value; });
-
+    m.querySelector("#km-legal-key").value = (st.legal && st.legal.apiKey) || (st.dsh && st.dsh.apiKey) || "";
     m.querySelector("[data-close]").addEventListener("click", function () { m.remove(); });
     m.addEventListener("click", function (e) { if (e.target === m) m.remove(); });
     m.querySelector("#km-save").addEventListener("click", function () {
-      var legalKey = m.querySelector("#km-legal-key").value.trim();
-      var dshKey = m.querySelector("#km-dsh-key").value.trim();
-      if (!legalKey) { m.querySelector("#km-msg").textContent = "请填写法律工作台 DeepSeek API Key（A款必填）"; m.querySelector("#km-msg").style.color = "#e07070"; return; }
-      setKey("legal", legalKey, "https://api.deepseek.com/v1", DEFAULT_MODEL);
-      setKey("dsh", (link.checked ? legalKey : (dshKey || legalKey)), "https://api.deepseek.com/v1", DEFAULT_MODEL);
-      setLink(link.checked);
-      m.querySelector("#km-msg").textContent = "已保存。" + (link.checked ? "（深鲸AI 联动共用法律工作台 Key）" : "（法律工作台 与 深鲸AI 各自独立 Key）");
+      var key = m.querySelector("#km-legal-key").value.trim();
+      if (!key) { m.querySelector("#km-msg").textContent = "请填写 DeepSeek API Key（A款必填）"; m.querySelector("#km-msg").style.color = "#e07070"; return; }
+      setKey("legal", key, "https://api.deepseek.com/v1", DEFAULT_MODEL);
+      setKey("dsh", key, "https://api.deepseek.com/v1", DEFAULT_MODEL);
+      setLink(true);
+      m.querySelector("#km-msg").textContent = "已保存（一把 Key 通用）。";
       m.querySelector("#km-msg").style.color = "#7ddb8a";
     });
   }

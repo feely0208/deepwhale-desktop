@@ -1,3 +1,10 @@
+> **本仓库已归档。自 2026-11-10 起，桌面端主程序与律师端源码迁至私有仓，不再在此更新。**
+>
+> - 公开插件、法律技能与文档：https://github.com/feely0208/deepwhale-public
+> - 官方下载：https://deepwhale.org.cn/download.html
+>
+> 已发布的旧版本仍按 MIT 许可证有效；新版本源码不再公开。
+
 # DeepWhale Desktop（深鲸桌面）
 
 > 把 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）的 Web UI 装进 Electron 原生窗口的跨平台桌面壳。

@@ -53,7 +53,7 @@
 
 本协议部分条款无效不影响其他条款效力。协议更新将在官网公示，更新后继续使用视为接受更新内容。
 
-联系方式：contact@deepwhale.org.cn
+联系方式：service@deepwhale.org
 
 ---
 

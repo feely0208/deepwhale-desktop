@@ -42,6 +42,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: dsh-desktop-${{ matrix.os }}
+          retention-days: 3
           path: |
             release/*.dmg
             release/*.zip

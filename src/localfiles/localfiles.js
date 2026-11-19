@@ -492,6 +492,11 @@
       img.style.cssText = 'display:block;max-width:100%;margin:0 auto;';
       body.appendChild(img);
     } else if (res.kind === 'pdf') {
+      if (res.note) {
+        var noteEl = el('div', 'padding:8px 12px;font-size:11.5px;line-height:1.5;color:' + P.faint +
+          ';border-bottom:1px solid ' + P.border + ';', res.note);
+        body.appendChild(noteEl);
+      }
       var frame = document.createElement('iframe');
       frame.src = res.dataUri;
       frame.style.cssText = 'display:block;width:100%;height:46vh;border:0;background:#fff;';

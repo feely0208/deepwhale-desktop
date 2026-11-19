@@ -36,10 +36,20 @@
     return el;
   }
 
+  /* 设置页右侧内容容器。老结构（≤0.2.1）叫 …_content，0.2.2-rc.5 起改叫 …_options
+   * （SettingsRoot.tsx：<div className={css.options}> 包住 settings.section 的渲染结果）。
+   * 两个都要认 —— 我们要同时支持老/新两种 DOM，不能只认一边。 */
   function findContent(panel) {
     var divs = panel.querySelectorAll('div');
-    for (var i = 0; i < divs.length; i++) {
-      if (typeof divs[i].className === 'string' && divs[i].className.indexOf('content') !== -1) return divs[i];
+    var i, cls;
+    // 老结构优先（…_content）；找不到再认 0.2.2-rc.5 的 …_options。
+    for (i = 0; i < divs.length; i++) {
+      cls = typeof divs[i].className === 'string' ? divs[i].className : '';
+      if (cls.indexOf('content') !== -1) return divs[i];
+    }
+    for (i = 0; i < divs.length; i++) {
+      cls = typeof divs[i].className === 'string' ? divs[i].className : '';
+      if (cls.indexOf('options') !== -1) return divs[i];
     }
     return null;
   }
@@ -150,6 +160,9 @@
       { id: 'skin', label: '皮肤' },
     ];
     defs.forEach(function (def) {
+      // 已经在这个 navList 里就不重复插（React 重渲染常常只把我们的一部分节点带走）
+      var existing = document.getElementById(NAV_PREFIX + def.id);
+      if (existing && navList.contains(existing)) return;
       var cell = template.cloneNode(true);
       cell.id = NAV_PREFIX + def.id;
       cell.className = (cell.className || '').replace(/active/gi, '').replace(/\s+/g, ' ').trim();
@@ -164,7 +177,7 @@
     // 面板挂到内容区
     var panel = findPanel(navList);
     var content = panel ? findContent(panel) : null;
-    if (content) {
+    if (content && !document.getElementById(PANEL_ID)) {
       var wrap = document.createElement('div');
       wrap.innerHTML = buildPanelHtml();
       var panelEl = wrap.firstChild;
@@ -902,9 +915,18 @@
     maybeInjectShellVersion();
     maybeInjectSidebarProgress();
     startUpdateProgressWatch();
-    if (document.getElementById(NAV_PREFIX + 'pet')) return; // 本挂载周期已注入
     var navList = findNavList();
-    if (navList) inject(navList);
+    if (!navList) return;
+    // 0.2.2-rc.5 起设置页是**按需挂载的模态框**（关闭即整棵卸载）：不能只看"以前插过没有"，
+    // 要确认导航项与面板都还在**当前**这棵 navList/内容区里，缺哪个补哪个。
+    var haveNav = !!document.getElementById(NAV_PREFIX + 'pet');
+    var havePanel = !!document.getElementById(PANEL_ID);
+    if (haveNav && havePanel) return;
+    if (havePanel) {
+      var oldPanel = document.getElementById(PANEL_ID);
+      if (oldPanel) oldPanel.remove();
+    }
+    inject(navList);
   }
 
   // ⚠️ 2026-10-17：观察器回调必须 ①整体 try/catch（单次注入失败不能连累其它功能）

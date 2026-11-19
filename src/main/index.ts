@@ -2517,9 +2517,11 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
                 const ok = await mainWin!.webContents
                   .executeJavaScript(
                     `(() => {
-                       const els = [...document.querySelectorAll('span')];
-                       const s = els.find((e) => e.textContent.trim() === '设置');
-                       return !!(s && s.closest('button,[role="button"],a') && document.body.innerText.length > 200);
+                       // 2026-11-19（DSH 0.2.2）：侧栏把「设置」收进了「更多」子菜单，
+                       // 不再有独立的「设置」span。闸门改为：正文有内容 + 侧栏主按钮（插件/更多）存在。
+                       const sideBtns = [...document.querySelectorAll('button,[role="button"]')].map((b) => (b.textContent || '').trim());
+                       const hasMain = sideBtns.some((t) => t.includes('插件')) && sideBtns.some((t) => t.includes('更多') || t.includes('自动化任务'));
+                       return !!(hasMain && document.body.innerText.length > 200);
                      })()`,
                   )
                   .catch(() => false);
@@ -2536,9 +2538,61 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
             }
 
             const r = await mainWin!.webContents.executeJavaScript(`(async () => {
+              const sleep = (ms) => new Promise(r => setTimeout(r, ms));
               const clickTxt = (txt) => { const els = [...document.querySelectorAll('span')].filter(e => e.textContent.trim() === txt); if (els[0]) { els[0].click(); return true; } return false; };
-              clickTxt('设置');
-              await new Promise(r => setTimeout(r, 1500));
+              /* 「设置页开没开」的跨版本判定：
+                 · 0.2.2-rc.5：按需挂载的模态框，带 data-shortcut-modal="settings"；
+                 · ≤0.2.1：设置页内联在页面里，特征是导航列表 navList（≥3 个 navLabel）。
+                 两者都认，才能同时支持老/新 DOM。 */
+              const settingsVisible = () => {
+                if (document.querySelector('[data-shortcut-modal="settings"]')) return true;
+                const nl = document.querySelector('[class*="navList"]');
+                return !!(nl && nl.querySelectorAll('[class*="navLabel"]').length >= 3);
+              };
+              /* ⚠️ 0.2.2-rc.5 实测：首次启动会弹「预览版说明」模态框，并给 #root 加 inert。
+                 弹窗没关时，设置入口点不动（DOM click 与 React onClick 都不生效）——
+                 真用户也是先点「继续」才进得去。这里照做，最多等 8 秒。 */
+              for (let i = 0; i < 20 && !settingsVisible(); i += 1) {
+                const root = document.getElementById('root');
+                if (!root || !root.hasAttribute('inert')) break;
+                const dlg = [...document.querySelectorAll('[role="dialog"]')].find(d => !d.getAttribute('data-shortcut-modal'));
+                const btn = dlg ? [...dlg.querySelectorAll('button')].find(b => /继续|知道了|开始使用|关闭/.test((b.textContent || '').trim())) : null;
+                if (!btn) break;
+                btn.click();
+                await sleep(400);
+              }
+              let howOpened = 'text-span';
+              if (!clickTxt('设置')) {
+                // 0.2.2-rc.5：设置收进了 sidebar.settings 的账号菜单（按钮 aria-label=账号菜单）
+                howOpened = 'account-menu';
+                const launcher = document.querySelector('[data-slot="sidebar.settings"] button') || document.querySelector('button[aria-label="账号菜单"]');
+                if (launcher) launcher.click();
+                await sleep(900);
+                // 菜单项文本是「设置 + 快捷键」两段（例如 "设置⌥⌘,"），按前缀匹配
+                let item = [...document.querySelectorAll('[role="menuitem"]')].find(x => (x.textContent || '').trim().indexOf('设置') === 0);
+                if (!item) item = [...document.querySelectorAll('button,[role="button"]')].find(x => (x.textContent || '').trim() === '设置');
+                if (item) item.click();
+                await sleep(1500);
+              }
+              if (!settingsVisible()) {
+                // 兜底：窗口不可见/合成事件时序导致 DOM click 没走到 React 时，
+                // 直接调用入口按钮的 React onClick —— 只为把设置页打开，断言本身不变。
+                howOpened = 'react-props';
+                const launcher = document.querySelector('[data-slot="sidebar.settings"] button') || document.querySelector('button[aria-label="账号菜单"]');
+                if (launcher) {
+                  const lk = Object.keys(launcher).find(x => x.indexOf('__reactProps') === 0);
+                  try { if (lk && launcher[lk].onClick) launcher[lk].onClick(); } catch (e) { /* 打不开由下面的断言暴露 */ }
+                  await sleep(900);
+                  const item = [...document.querySelectorAll('[role="menuitem"]')].find(x => (x.textContent || '').trim().indexOf('设置') === 0);
+                  if (item) {
+                    const ik = Object.keys(item).find(x => x.indexOf('__reactProps') === 0);
+                    try { if (ik && item[ik].onClick) item[ik].onClick(); else item.click(); } catch (e2) { /* 同上 */ }
+                  }
+                  await sleep(1600);
+                }
+              }
+              if (!settingsVisible()) console.warn('[smoke] 设置入口没打开（how=' + howOpened + '）');
+              await sleep(400);
               const has = (id) => !!document.getElementById(id);
               const petNav = document.getElementById('dsh-ext-nav-pet');
               let activated = false, petItems = 0, themeItems = 0, usageRows = 0, petNavOn = false;
@@ -2552,7 +2606,7 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
                 const skinNav = document.getElementById('dsh-ext-nav-skin');
                 if (skinNav) { skinNav.click(); await new Promise(r => setTimeout(r, 400)); themeItems = document.querySelectorAll('#dsh-ext-theme-list .dsh-ext-item').length; }
                 const usageNav = document.getElementById('dsh-ext-nav-usage');
-                if (usageNav) { usageNav.click(); await new Promise(r => setTimeout(r, 400)); usageRows = document.querySelectorAll('#dsh-ext-usage-body .row').length || document.querySelectorAll('#dsh-ext-panel .dsh-ext-grid .row').length; }
+                if (usageNav) { usageNav.click(); await new Promise(r => setTimeout(r, 400)); usageRows = document.querySelectorAll('#dsh-ext-panel .dsh-ext-grid .row').length; }
               }
               // 「当前版本」那行旁边应当有壳的版本号（用户在通用设置里就能看到）
               const verEl = document.getElementById('dsh-ext-shell-version');
@@ -2560,7 +2614,7 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
               // 直接读我们贴上去那个节点的父元素 —— 别再遍历找"叶子节点"：
               // 那行被我们加了子元素之后就不再是叶子，遍历会把它跳过（第一版就踩了这个）。
               const verRow = verEl && verEl.parentElement ? verEl.parentElement.textContent.trim() : '';
-              return JSON.stringify({ navPet: has('dsh-ext-nav-pet'), navUsage: has('dsh-ext-nav-usage'), navSkin: has('dsh-ext-nav-skin'), panel: has('dsh-ext-panel'), privacy: !!document.getElementById('dsh-ext-privacy'), activated, petNavOn, petItems, themeItems, usageRows, verText, verRow });
+              return JSON.stringify({ howOpened, settingsOpen: settingsVisible(), navPet: has('dsh-ext-nav-pet'), navUsage: has('dsh-ext-nav-usage'), navSkin: has('dsh-ext-nav-skin'), panel: has('dsh-ext-panel'), privacy: !!document.getElementById('dsh-ext-privacy'), activated, petNavOn, petItems, themeItems, usageRows, verText, verRow });
             })()`);
             console.log('[smoke] settings-ext:', r);
             // ★ 断言落在用户看得见的地方：通用设置里「当前版本」旁边必须有壳版本号，
@@ -2772,15 +2826,31 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
               probe.remove();
 
               // 右栏全屏子树里的 token（预览 iframe 靠它上色）—— 与上面同理，让探针真的命中。
+              // ⚠️ 2026-11-19（DSH 0.2.2-rc.5）：真实全屏节点**同时**带 panel=fullscreen 与
+              //    data-sidebar-right-open（SidebarRight.tsx：panel={fullscreen ? 'fullscreen' : 'push'}
+              //    + open={expanded || undefined}）；而 1.0.63 的「做实」规则（348d166）只在
+              //    **open 也成立**时生效（关闭后容器仍留 fullscreen 属性，做实会变成遮罩）。
+              //    旧探针只设了 panel 属性 —— 那是一个真实渲染**不可能出现**的状态，所以这条断言
+              //    从 348d166 起就一直量到透明。这里按真实展开态补上 open 属性。
               const fsProbe = document.createElement('div');
               fsProbe.setAttribute('data-sidebar-right-panel', 'fullscreen');
+              fsProbe.setAttribute('data-sidebar-right-open', 'true');
               fsProbe.style.cssText = 'position:fixed;left:-9999px;top:0;width:4px;height:4px;';
               document.body.appendChild(fsProbe);
               const fsProbeToken = getComputedStyle(fsProbe).getPropertyValue('--dsw-alias-bg-base').trim();
               const fsProbeBg = getComputedStyle(fsProbe).backgroundColor;
               fsProbe.remove();
 
-              return JSON.stringify({ token, frameBg, basePainters, live, probeToken, probeBg, fsProbeToken, fsProbeBg, fullscreenPresent });
+              // 回归护栏（348d166）：**关闭态**（只有 fullscreen、没有 open）不能被做实 ——
+              // 否则"最大化后直接关闭"会留下一张不透明面板盖住会话区。
+              const fsClosedProbe = document.createElement('div');
+              fsClosedProbe.setAttribute('data-sidebar-right-panel', 'fullscreen');
+              fsClosedProbe.style.cssText = 'position:fixed;left:-9999px;top:0;width:4px;height:4px;';
+              document.body.appendChild(fsClosedProbe);
+              const fsClosedBg = getComputedStyle(fsClosedProbe).backgroundColor;
+              fsClosedProbe.remove();
+
+              return JSON.stringify({ token, frameBg, basePainters, live, probeToken, probeBg, fsProbeToken, fsProbeBg, fsClosedBg, fullscreenPresent });
             })()`);
             console.log('[smoke] skin-token:', skinProbe);
             {
@@ -2792,6 +2862,7 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
                 probeToken?: string;
                 fsProbeToken?: string;
                 fsProbeBg?: string;
+                fsClosedBg?: string;
                 fullscreenPresent?: boolean;
               };
               // 皮肤底色按 1.0.47 标准（用户拍板）：**不对 token 本身做要求** ——
@@ -2843,11 +2914,20 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
               {
                 const fsAlpha = alphaOf(String(sp.fsProbeBg || ''));
                 const fsTokenAlpha = alphaOf(String(sp.fsProbeToken || ''));
+                const fsClosedAlpha = alphaOf(String(sp.fsClosedBg || ''));
                 if (fsAlpha < 1 || fsTokenAlpha < 1) {
                   console.error(
                     '[smoke] ❌ 右栏全屏不是实底：面板 bg=' + String(sp.fsProbeBg) +
                       ' 子树 token=' + String(sp.fsProbeToken) +
                       ' → 全屏时会透出下层会话正文"成一坨"',
+                  );
+                  process.exitCode = 1;
+                } else if (fsClosedAlpha > 0) {
+                  // 348d166 的反向护栏：关闭态（只剩 fullscreen 属性、没有 open）不能留实底面，
+                  // 否则"最大化后直接关闭"会把会话区盖成一片空白。
+                  console.error(
+                    '[smoke] ❌ 右栏全屏关闭态仍被做实（bg=' + String(sp.fsClosedBg) +
+                      '）→ 退出全屏后会话区会被不透明面板盖住',
                   );
                   process.exitCode = 1;
                 } else if (sp.fullscreenPresent === true) {
@@ -3532,20 +3612,32 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
             }
 
             // —— 安装器冻结项：打包态也校验一次（Windows 用户安装被破坏那次事故）——
+            // ⚠️ 2026-11-19：判据已随 2026-10-14 的产品决定更新 —— Windows 恢复「用户可自选安装目录」，
+            //    所以不再是 oneClick:true + 固定目录。新的不变量是**成对约束**（与
+            //    scripts/check-installer-config.js 同源）：开了 allowToChangeInstallationDirectory，
+            //    就必须在 update-manager 里把更新的安装目标钉死在"当前正在跑的目录"，
+            //    否则就是 2026-10-04「更新完应用不见了」的原形（旧判据卡在这里，永远红）。
             try {
               const conf = fs.readFileSync(path.join(app.getAppPath(), 'electron-builder.yml'), 'utf-8');
               const must = [
-                ['oneClick: true', '一键安装器'],
-                ['allowToChangeInstallationDirectory: false', '固定安装目录'],
-                ['deleteAppDataOnUninstall: false', '卸载不删用户数据'],
                 ['appId: com.deepwhale.desktop', 'appId 冻结'],
+                ['deleteAppDataOnUninstall: false', '卸载不删用户数据'],
+                ['oneClick: false', '向导式安装（用户可自选目录）'],
+                ['allowToChangeInstallationDirectory: true', '允许自选安装目录'],
               ] as Array<[string, string]>;
               const missing = must.filter(([k]) => conf.indexOf(k) < 0).map(([, n]) => n);
+              // 成对约束的另一半：自动更新必须把安装目标钉在当前运行目录
+              const updaterSrc = fs.readFileSync(path.join(app.getAppPath(), 'src/main/update-manager.ts'), 'utf-8');
+              if (!/process\.platform\s*===\s*'win32'/.test(updaterSrc) || !/installDirectory\s*=/.test(updaterSrc)) {
+                missing.push('更新安装目标已钉死（update-manager 的 installDirectory）');
+              }
               if (missing.length) {
                 console.error('[smoke] 安装器冻结项被改动：' + missing.join('、'));
                 process.exitCode = 1;
               } else {
-                console.log('[smoke] 安装器冻结项齐备（一键安装 / 固定目录 / 不删数据 / appId 未变）✓');
+                console.log(
+                  '[smoke] 安装器冻结项齐备（appId 未变 / 不删数据 / 向导可选目录 + 更新目标钉死 = 成对）✓',
+                );
               }
             } catch (e) {
               console.warn('[smoke] 安装器冻结项检查跳过（开发态无该文件）:', e);
@@ -3595,35 +3687,42 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
                 );
                 process.exitCode = 1;
               } else {
-                // 硬判 ②：引擎二进制必须有执行位（这正是打包版坏掉的那一点）
+                // 硬判 ②：引擎二进制必须有执行位（这正是打包版坏掉的那一点）。
+                // ⚠️ 2026-11-19：原来按"文件名里含 libreoffice-kit"去扫 —— 那是**猜**的。
+                //    DSH 的 kit 实际执行的是 `<engine>/bin/dsoffice`（Windows 为 dsoffice.exe，
+                //    见 dsh-runtime/…/libreoffice-kit/lib/cli.js），文件名里根本没有 "libreoffice-kit"，
+                //    所以在 macOS/Linux 上这条断言永远搜不到可执行文件（假红）。
+                //    wasm 引擎（libreoffice-kit-wasm）没有原生可执行文件，kit 会回退 wasm，跳过。
                 let execFound = false;
+                const execMissing: string[] = [];
                 for (const e of engines) {
+                  if (e.indexOf('wasm') >= 0) continue;
                   const dir = path.join(kitDir, e);
-                  const walk = (d: string, depth: number): void => {
-                    if (execFound || depth > 4) return;
-                    let ents: fs.Dirent[] = [];
+                  const candidates = [
+                    path.join(dir, 'bin', 'dsoffice'),
+                    path.join(dir, 'bin', 'dsoffice.exe'),
+                    path.join(dir, 'dsoffice'),
+                    path.join(dir, 'dsoffice.exe'),
+                  ];
+                  let okOne = false;
+                  for (const c of candidates) {
                     try {
-                      ents = fs.readdirSync(d, { withFileTypes: true });
+                      if (!fs.existsSync(c)) continue;
+                      fs.accessSync(c, fs.constants.X_OK);
+                      okOne = true;
+                      break;
                     } catch {
-                      return;
+                      /* 没有执行位 */
                     }
-                    for (const it of ents) {
-                      const full = path.join(d, it.name);
-                      if (it.isSymbolicLink() || it.isDirectory()) walk(full, depth + 1);
-                      else if (it.name.indexOf('libreoffice-kit') >= 0) {
-                        try {
-                          fs.accessSync(full, fs.constants.X_OK);
-                          execFound = true;
-                        } catch {
-                          /* 没有执行位 */
-                        }
-                      }
-                    }
-                  };
-                  walk(dir, 0);
+                  }
+                  if (okOne) execFound = true;
+                  else execMissing.push(e);
                 }
                 if (!execFound) {
-                  console.error('[smoke] Office 引擎没有可执行文件（打包版预览 docx 会失败）');
+                  console.error(
+                    '[smoke] Office 引擎没有可执行文件（打包版预览 docx 会失败）：' +
+                      'bin/dsoffice 缺失或无执行位（' + execMissing.join('、') + '）',
+                  );
                   process.exitCode = 1;
                 } else {
                   console.log('[smoke] Office 链路：物化产物齐备，引擎带执行位 ✓');

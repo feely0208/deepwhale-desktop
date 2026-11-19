@@ -44,7 +44,27 @@ export async function convertOfficeToPdf(inputPath: string): Promise<{ ok: boole
     child.on('error', (e) => resolve({ ok: false, error: '启动转换进程失败：' + e.message }));
     child.on('close', () => {
       if (fs.existsSync(outPdf)) resolve({ ok: true, pdfPath: outPdf });
-      else resolve({ ok: false, error: '转换失败：' + out.slice(0, 200) });
+      // 失败时给「能照着做」的原因，而不是把引擎输出原样丢给用户（2026-11-19）
+      else resolve({ ok: false, error: explainConvertError(out) });
     });
   });
+}
+
+/** 把转换引擎的输出翻译成用户能照着处理的一句话。 */
+export function explainConvertError(raw: string): string {
+  const t = String(raw || '').toLowerCase();
+  if (/password|encrypt|protected|密码/.test(t)) {
+    return '文档受密码保护，无法转换。请先用 Office/WPS 打开并去掉密码，再回到这里预览。';
+  }
+  if (/incomplete|not executable|no such file|enoent|package is incomplete/.test(t)) {
+    return 'Office 转换组件不完整或缺少执行权限，请重启一次应用；仍失败请重装最新版本。';
+  }
+  if (/corrupt|damaged|broken|failed to load|不能加载|损坏/.test(t)) {
+    return '文件可能已损坏或格式不标准，转换失败。可尝试用 Office/WPS 另存为 .docx 后再预览。';
+  }
+  if (/timeout|timed out/.test(t)) {
+    return '转换超时（文件可能过大或结构复杂），请先用系统程序打开，或另存为 .docx 后重试。';
+  }
+  const tail = String(raw || '').replace(/\s+/g, ' ').trim().slice(0, 160);
+  return tail ? '转换失败：' + tail : '转换失败（未得到具体原因）';
 }

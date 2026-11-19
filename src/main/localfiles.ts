@@ -229,7 +229,17 @@ export function registerLocalFilesIpc(): void {
         const { convertOfficeToPdf } = await import('./office-preview');
         const out = await convertOfficeToPdf(p);
         if (!out.ok) return { ok: false, error: out.error || 'Office 预览不可用' };
-        return { ok: true, kind: 'pdf', dataUri: 'data:application/pdf;base64,' + fs.readFileSync(out.pdfPath as string).toString('base64'), size: st.size };
+        // 旧版二进制格式（.doc/.xls/.ppt）由 LibreOffice 渲染，版式可能与原软件有细微差异 ——
+        // 明确提示一句，避免用户拿预览当正式排版比对（2026-11-19 用户指定）。
+        const LEGACY = ['.doc', '.xls', '.ppt'];
+        const note = LEGACY.includes(ext) ? '旧版 Office 格式，预览版式可能与原软件有细微差异' : undefined;
+        return {
+          ok: true,
+          kind: 'pdf',
+          dataUri: 'data:application/pdf;base64,' + fs.readFileSync(out.pdfPath as string).toString('base64'),
+          size: st.size,
+          note,
+        };
       }
       return { ok: false, error: '这种格式暂不支持在面板内预览，请用系统程序打开' };
     } catch (e) {

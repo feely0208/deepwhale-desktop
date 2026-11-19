@@ -210,7 +210,9 @@
         provider: spawn
         toolName: subagent
         # 0.1.5 基线预设含此项；跟随版本补齐
-        modelSelectionSettings: true
+        # 0.2.2-rc.5 起只认 modelSelection / modelDiscovery，旧键会被 zod 静默剥离
+        modelSelection: true
+        modelDiscovery: true
         backgroundMode: continuable
 
     # Fork omits model selection so provider/model stay equal to the parent and

@@ -291,7 +291,14 @@ function materializeOfficeKit(
         optionalDependencies?: Record<string, string>;
       };
       for (const dep of Object.keys(pkg.dependencies || {})) copyPackage(dep);
-      for (const dep of Object.keys(pkg.optionalDependencies || {})) copyPackage(dep);
+      for (const dep of Object.keys(pkg.optionalDependencies || {})) {
+        // ⚠️ 2026-11-19：平台引擎包（libreoffice-kit-<platform>-<arch>，140MB+）**不要**走复制 ——
+        //    它们由下面的软链阶段专门处理。这里如果复制，会把整包拷进 home（慢、占空间），
+        //    而第二次 ensureOfficeSetup 时 dest 已经是指回源目录的软链，fs.cpSync 会抛
+        //    "src and dest cannot be the same"（冒烟日志里刷一屏警告，误导排查）。
+        if (/^@deepseek-ai\/libreoffice-kit-/.test(dep)) continue;
+        copyPackage(dep);
+      }
     } catch {
       /* 没 package.json 或不是 JSON，忽略 */
     }

@@ -381,6 +381,9 @@ jobs:
             release/*.deb
             release/*.blockmap
             release/*.yml
+          # 2026-11-19：产物只留 2 天。私有仓存储免费额度有限（11-18 已触发过告警），
+          # 而预览/验收包的用途就是"下下来验完就完"，不需要 90 天。
+          retention-days: 2
           if-no-files-found: error
 
       # 手动触发的预览构建：把 Windows 安装包传到 CDN 的 preview/ 目录，方便国内直接下载验证。

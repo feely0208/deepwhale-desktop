@@ -44,6 +44,11 @@ export interface GatewayOptions {
   port?: number;
   /** 配对码有效期（毫秒），默认 5 分钟 */
   pairTtlMs?: number;
+  /**
+   * 手机在页面上点「断开连接」后回调（2026-11-19）。
+   * 网关已经轮换令牌把手机踢下线，这里让面板刷新二维码/状态。
+   */
+  onUnpair?: () => void;
 }
 
 export interface GatewaySession {
@@ -274,6 +279,15 @@ export function startMobileGateway(opts: GatewayOptions): Promise<GatewayHandle>
     if (given === '' || !safeEqual(given, token)) {
       res.writeHead(401, { 'content-type': 'text/html; charset=utf-8' });
       res.end(DENY_PAGE);
+      return;
+    }
+
+    // ①.5 断开：手机端页面上点「断开连接」→ 轮换令牌（已配对设备全部下线）+ 通知面板换新码
+    if (url.pathname === '/__unpair') {
+      currentSession = newSession();
+      try { opts.onUnpair?.(); } catch { /* 面板刷新失败不影响断开 */ }
+      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+      res.end(JSON.stringify({ ok: true }));
       return;
     }
 

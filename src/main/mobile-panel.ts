@@ -212,10 +212,43 @@ async function startGatewayInternal(): Promise<Record<string, unknown>> {
     const remembered = lastGatewayPort();
     const rememberedToken = lastGatewayToken() ?? undefined;
     try {
-      gateway = await startMobileGateway({ dshBase: ep.base, dshToken: ep.token, port: remembered ?? undefined, token: rememberedToken });
+      gateway = await startMobileGateway({
+        dshBase: ep.base,
+        dshToken: ep.token,
+        port: remembered ?? undefined,
+        token: rememberedToken,
+        // 手机端点「断开连接」后：同步内存令牌、落盘新配对码，并让面板刷新二维码
+        onUnpair: () => {
+          try {
+            gatewaySessionToken = gateway?.session.token ?? '';
+            rememberPairCode(gateway?.session.pairCode ?? '');
+            rememberEnabled(true);
+            if (panel && !panel.isDestroyed()) {
+              panel.webContents.send('mobile:state', { running: true, ...sessionInfo() });
+            }
+          } catch {
+            /* 面板刷新失败不影响断开本身 */
+          }
+        },
+      });
     } catch (e) {
       // 上次的端口被别的程序占了 → 回落到随机端口（这次记新端口）
-      if (remembered) gateway = await startMobileGateway({ dshBase: ep.base, dshToken: ep.token, token: rememberedToken });
+      if (remembered) {
+        gateway = await startMobileGateway({
+          dshBase: ep.base,
+          dshToken: ep.token,
+          token: rememberedToken,
+          onUnpair: () => {
+            try {
+              gatewaySessionToken = gateway?.session.token ?? '';
+              rememberPairCode(gateway?.session.pairCode ?? '');
+              if (panel && !panel.isDestroyed()) {
+                panel.webContents.send('mobile:state', { running: true, ...sessionInfo() });
+              }
+            } catch { /* 同上 */ }
+          },
+        });
+      }
       else throw e;
     }
     gatewaySessionToken = gateway.session.token;

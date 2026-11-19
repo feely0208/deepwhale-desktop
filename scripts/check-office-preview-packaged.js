@@ -165,8 +165,39 @@ const homeCandidates = [
 ].filter(Boolean);
 // NODE_PATH 的候选：① 壳物化到 home 的真实目录（生产实际用它）
 // ② 包内 extraResources 的真实目录（CI 上还没启动过 app 时的等价物）
+// 2026-11-19（跟 rc.5 时踩到）：home 里物化的 kit 可能是**上一个版本**留下的
+// （1.0.63 的 kit 0.1.5 vs 本包 0.2.3）。壳在首启会用 appVersion 标记重建它，
+// 但守卫跑在"首启之前"，会拿着旧 kit 去配新引擎 → 假的「Office 预览不可用」。
+// 所以：只认**版本与本包一致**的 home kit；不一致就退回包内 Resources/office-kit。
+// 以**包内引擎包**的版本为准（Resources/office-kit 里那份才是这次真正会用的引擎）。
+const packagedEngineVersion = (() => {
+  try {
+    const scope = path.join(res, 'office-kit', '@deepseek-ai');
+    const name = fs.readdirSync(scope).find((n) => n.startsWith('libreoffice-kit-') && n !== 'libreoffice-kit-wasm');
+    if (!name) return null;
+    return JSON.parse(fs.readFileSync(path.join(scope, name, 'package.json'), 'utf-8')).version;
+  } catch { return null; }
+})();
+const asarKitVersion = packagedEngineVersion;
+const kitVersionOf = (dir) => {
+  try {
+    const j = JSON.parse(fs.readFileSync(path.join(dir, '@deepseek-ai', 'libreoffice-kit', 'package.json'), 'utf-8'));
+    return j.version;
+  } catch { return null; }
+};
+const homeKitDirs = homeCandidates
+  .map((h) => path.join(h, 'office-runtime', 'kit', 'node_modules'))
+  .filter((d) => {
+    const v = kitVersionOf(d);
+    if (!v) return false;
+    if (asarKitVersion && v !== asarKitVersion) {
+      console.log(`   跳过过期物化 kit（${v} ≠ 本包 ${asarKitVersion}，首启会重建）: ${path.relative(REPO, d)}`);
+      return false;
+    }
+    return true;
+  });
 const kitModules = [
-  ...homeCandidates.map((h) => path.join(h, 'office-runtime', 'kit', 'node_modules')),
+  ...homeKitDirs,
   path.join(res, 'office-kit'),
 ].find((p) => {
   // 必须含**平台引擎包**（libreoffice-kit-<plat>-<arch>）：只找到 JS 侧的 kit 不算
@@ -183,8 +214,13 @@ console.log(`   物化 kit 目录: ${kitModules ? path.relative(REPO, kitModules
 // ⚠️ 本脚本跑在**普通 node** 下：asar 路径不能用 fs.existsSync 判断（一定 false）。
 //    要用 @electron/asar 读归档目录（2026-10-15 这里也踩了一次）。
 const asarFile = path.join(res, 'app.asar');
-const innerPlugin = '/dsh-runtime/node_modules/@deepseek-ai/dsh-office-to-pdf/lib/index.js';
-const asarPlugin = path.join(asarFile, innerPlugin.replace(/^\//, ''));
+// 2026-11-19（DSH 0.2.2-rc.5）：上游把 office-to-pdf 拆成了 office-kit + tool-office + skill-office。
+// 探针要 createRequire 的「锚点包」跟着换；老结构仍然认，保证 0.2.1 与 0.2.2 都能跑这条守卫。
+const ANCHORS = [
+  '/dsh-runtime/node_modules/@deepseek-ai/dsh-office-kit/lib/index.js',      // 0.2.2+
+  '/dsh-runtime/node_modules/@deepseek-ai/dsh-office-to-pdf/lib/index.js',   // ≤0.2.1
+];
+const innerPlugin = ANCHORS.find((x) => x) || ANCHORS[1];
 function asarHas(inner) {
   try {
     // ⚠️ 2026-10-17：Windows 上 `@electron/asar` 的 listPackage() 可能返回反斜杠路径，
@@ -198,11 +234,14 @@ function asarHas(inner) {
     process.exit(1);
   }
 }
-if (!asarHas(innerPlugin)) {
-  console.error(`❌ 打包产物里没有 dsh-office-to-pdf（${innerPlugin}）`);
-  if (process.env.GITHUB_ACTIONS === 'true') console.log(`::error::打包产物里没有 dsh-office-to-pdf（${innerPlugin}）`);
+const anchorHit = ANCHORS.find((x) => asarHas(x));
+if (!anchorHit) {
+  console.error(`❌ 打包产物里既没有 dsh-office-kit 也没有 dsh-office-to-pdf（试过 ${ANCHORS.length} 个路径）`);
+  if (process.env.GITHUB_ACTIONS === 'true') console.log('::error::打包产物里缺少 Office 转换链路的锚点包（office-kit / office-to-pdf）');
   process.exit(1);
 }
+const asarPlugin = path.join(asarFile, anchorHit.replace(/^\//, ''));
+console.log(`   Office 锚点包: ${anchorHit.split('/').slice(-3).join('/')}`);
 const outPdf = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'office-cap-')), 'out.pdf');
 
 const probe = `

@@ -32,7 +32,7 @@
     "check:device-mobile": "node scripts/check-device-mobile.mjs",
     "test:dedupe-inject": "node scripts/test-dedupe-inject.js",
     "icons": "node scripts/gen-icons.js",
-    "dist": "npm run build && electron-builder",
+    "dist": "node scripts/patch-dsh-native-path.js && npm run build && electron-builder",
     "dist:mac": "npm run build && electron-builder --mac",
     "dist:win": "npm run build && electron-builder --win",
     "dist:linux": "npm run build && electron-builder --linux",
@@ -73,7 +73,9 @@
     "check:office-node": "node scripts/check-office-node-wrapper.js",
     "check:skin-theme": "node scripts/check-skin-theme-guard.js",
     "test:market": "npm run build && node scripts/test-plugin-market.js",
-    "check:native-open": "node scripts/check-native-open.js"
+    "check:native-open": "node scripts/check-native-open.js",
+    "patch:dsh-native": "node scripts/patch-dsh-native-path.js",
+    "check:dsh-native": "node scripts/check-dsh-native-path.js"
   },
   "dependencies": {
     "electron-updater": "^6.8.9",

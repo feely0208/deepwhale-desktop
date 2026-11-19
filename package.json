@@ -72,7 +72,8 @@
     "check:release-consistency": "node scripts/check-release-consistency.js",
     "check:office-node": "node scripts/check-office-node-wrapper.js",
     "check:skin-theme": "node scripts/check-skin-theme-guard.js",
-    "test:market": "npm run build && node scripts/test-plugin-market.js"
+    "test:market": "npm run build && node scripts/test-plugin-market.js",
+    "check:native-open": "node scripts/check-native-open.js"
   },
   "dependencies": {
     "electron-updater": "^6.8.9",

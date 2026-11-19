@@ -652,21 +652,35 @@
     row('官网', 'deepwhale.org.cn', function () { openExternal(OFFICIAL, '官网'); });
 
     section('关于');
-    var versionRow = row('版本', 'v' + VERSION + (desktopAppVersion ? ' · 桌面 ' + desktopAppVersion : ''), function () {
+    var versionRow = row('界面版本', 'v' + VERSION + (desktopAppVersion ? ' · 桌面 ' + desktopAppVersion : ''), function () {
       if (whatsnewFailed) return;   // 读不到就别弹"读不到"给用户看
       openWhatsnew();
     });
     // 读不到更新说明时：不留一个点了没反应的箭头（真机反馈）
     if (whatsnewFailed && versionRow) hideVersionChevron();
+    /* 断开连接（2026-11-19 真机反馈）：原来只清了页面自己的 localStorage，
+     * 手机外壳（App）里记的配对地址/令牌还在 → 切后台再打开又自动连上，用户以为"断不掉"。
+     * 现在三步都做：① 让电脑作废令牌（/__unpair）② 清页面状态 ③ 让外壳清配对并回配对页。 */
     row('断开连接', '需要重新扫码', function () {
-      try { localStorage.removeItem('dshMobile.conn'); } catch (e) {}
-      conn = null;
-      ONLINE = false;
-      stopChatStream();
-      stopApprovalPoll();
-      stopRunningPoll();
-      sessionRunning = false;
-      if (window.__dshMobile && window.__dshMobile.showPage) window.__dshMobile.showPage('connect');
+      var sure = window.confirm('断开与这台电脑的连接？断开后需要重新扫码。');
+      if (!sure) return;
+      var done = function () {
+        try { localStorage.removeItem('dshMobile.conn'); } catch (e) {}
+        conn = null;
+        ONLINE = false;
+        stopChatStream();
+        stopApprovalPoll();
+        stopRunningPoll();
+        sessionRunning = false;
+        if (window.DshBridge && window.DshBridge.clearPairing) {
+          try { window.DshBridge.clearPairing(); return; } catch (e) {}
+        }
+        if (window.__dshMobile && window.__dshMobile.showPage) window.__dshMobile.showPage('connect');
+      };
+      // 让电脑端轮换令牌（失败也继续清本地，不能卡在"断不掉"）
+      fetch('/__unpair', { method: 'POST', credentials: 'same-origin', cache: 'no-store' })
+        .catch(function () {})
+        .then(done, done);
     });
     prefetchWhatsnew();
   }

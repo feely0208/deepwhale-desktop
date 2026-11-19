@@ -35,8 +35,8 @@ app.whenReady().then(async () => {
 
   const list = await w.webContents
     .executeJavaScript(`JSON.stringify({
-      // 2026-11-19：手机端必须有「断开连接」入口（真机反馈：连上后没有退路，滑动返回只退后台）
-      unpairBtn: !!document.getElementById('btn-unpair'),
+      // 2026-11-19：手机端必须有「断开连接」入口（在「我的 → 设置」里；真机反馈过连上后没退路）
+      unpairRow: /断开连接/.test(document.body.innerText || ''),
       rows: document.querySelectorAll('.row-btn').length,
       firstId: (document.querySelector('.row-btn')||{dataset:{}}).dataset ? (document.querySelector('.row-btn')||{}).dataset.id : null,
       firstTitle: (function () {

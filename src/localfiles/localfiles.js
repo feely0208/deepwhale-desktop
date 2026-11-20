@@ -437,6 +437,17 @@
     if (!entry.dir) {
       row.appendChild(el('span', 'flex:none;font-size:11.5px;color:' + P.faint + ';', fmtSize(entry.size)));
     }
+    // 每行右侧「定位」按钮：走 Electron 原生 showItemInFolder，不经过 DSH 的路径校验
+    // （2026-11-20：官方的「显示文件位置」在我们壳里必定被 verifyDesktopPath 拒掉，用户只能看着报错）
+    var revealBtn = el('button', 'flex:none;width:26px;height:26px;border-radius:6px;cursor:pointer;' +
+      'border:1px solid ' + P.border + ';background:transparent;color:' + P.dim + ';font-size:12px;line-height:1;',
+      '📁');
+    revealBtn.title = '在资源管理器中显示';
+    revealBtn.addEventListener('click', function (ev) {
+      ev.stopPropagation();
+      if (typeof dsh.localFilesReveal === 'function') void dsh.localFilesReveal(entry.path);
+    });
+    row.appendChild(revealBtn);
     row.addEventListener('click', function () {
       if (!entry.dir) void previewFile(entry);
     });

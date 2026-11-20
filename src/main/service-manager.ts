@@ -422,6 +422,22 @@ export class ServiceManager extends EventEmitter {
       }
     }
 
+    // Windows：绝不接受 PATH 里没有系统目录（2026-11-20 用户实测根因）
+    // 更新器/自重启链可能把继承的 PATH 裁掉，只剩 runtime-bin —— 于是 DSH 里
+    // `execFile('explorer.exe')` 直接 ENOENT，「显示文件位置」「打开方式」全失败。
+    if (process.platform === 'win32') {
+      const root = process.env.SystemRoot ?? 'C:\\Windows';
+      const mustHave = [path.join(root, 'System32'), root];
+      const current = (env.PATH ?? '').split(path.delimiter).filter(Boolean);
+      // 反向插入，保证 System32 排在 Windows 目录之前
+      for (const d of mustHave.reverse()) {
+        if (!current.some((x) => x.toLowerCase() === d.toLowerCase())) current.unshift(d);
+      }
+      env.PATH = current.join(path.delimiter);
+    }
+    // 排查用：以后这类问题一眼可见（含 Windows 是否带上了 System32）
+    console.log('[service] PATH=' + String(env.PATH ?? ''));
+
     // 随包 DSH 运行时优先：用户机器上无需 Node.js / npx / 联网
     if (this.options.bundledBin) {
       this.spawnBundled(env, this.options.bundledBin);
@@ -459,7 +475,10 @@ export class ServiceManager extends EventEmitter {
     // 把可执行文件所在目录补进子进程 PATH（node 与 npx 通常同目录）。
     const exeDir = path.dirname(resolved);
     if (exeDir && exeDir !== '.') {
-      env.PATH = env.PATH ? `${exeDir}:${env.PATH}` : exeDir;
+      // Windows 分隔符是 `;`，用 `:` 会把整条 PATH 拼坏（2026-11-20）
+      env.PATH = env.PATH
+        ? `${exeDir}${path.delimiter}${env.PATH}`
+        : `${exeDir}${path.delimiter}${process.env.PATH ?? ''}`;
     }
     console.log(`[service] 启动 DSH: ${this.command}（可执行文件: ${resolved}）`);
     this.child = spawn(exec, args, {

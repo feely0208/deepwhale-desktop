@@ -204,6 +204,16 @@ export function systemBinCandidates(): string[] {
   push(path.join(home, 'Library', 'pnpm'));
   push(path.join(home, '.volta', 'bin'));
   push(path.join(home, '.local', 'bin'));
+  // Windows 系统目录（2026-11-20 用户实测根因）：缺了它们，DSH 子进程里裸名命令
+  // （explorer.exe 等）解析不到 → 「显示文件位置」「打开方式」一律失败（spawn ENOENT）。
+  if (process.platform === 'win32') {
+    const root = process.env.SystemRoot ?? 'C:\\Windows';
+    push(root);
+    push(path.join(root, 'System32'));
+    push(path.join(root, 'System32', 'Wbem'));
+    push(path.join(root, 'System32', 'WindowsPowerShell', 'v1.0'));
+    push(path.join(root, 'System32', 'OpenSSH'));
+  }
   push('/opt/homebrew/bin');
   push('/usr/local/bin');
   push('/opt/local/bin');

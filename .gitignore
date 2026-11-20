@@ -38,3 +38,6 @@ Thumbs.db
 # Python 缓存（verify-artifacts.py 被 import 时会生成）
 __pycache__/
 *.pyc
+
+# 付费律师端只在私有仓维护，禁止提交到公开仓
+lawyer/

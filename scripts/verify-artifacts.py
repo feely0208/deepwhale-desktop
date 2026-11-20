@@ -45,13 +45,19 @@ CDN = "https://dl.deepwhale.org.cn/"
 
 # 运行时按路径读取的资产 —— 少一个，对应插件就激活失败。
 # 这份清单是事故后逐个核对出来的，不是猜的。
+#
+# 2026-11-20 按 DSH 0.2.2-rc.5 重新核对（依据：解包 1.0.64 成品 deb 逐个确认）：
+#   上游把 agent-preset 的 3 个技能（editing-cordis-compositions /
+#   cordis-plugin-development / cordis-composition-reference）合并成了 1 个 dsh-doc，
+#   并新增 sandbox-windows-acl 诊断技能与 office 总入口技能。
+#   —— 旧清单里的 3 条在 0.2.2-rc.5 里已不存在，继续校验会误报「缺资产」。
 REQUIRED = [
     "dsh-runtime/node_modules/@deepseek-ai/dsh-skill-office/assets/office-docx/SKILL.md",
     "dsh-runtime/node_modules/@deepseek-ai/dsh-skill-office/assets/office-xlsx/SKILL.md",
     "dsh-runtime/node_modules/@deepseek-ai/dsh-skill-office/assets/office-pptx/SKILL.md",
-    "dsh-runtime/node_modules/@deepseek-ai/dsh-agent-preset/skills/editing-cordis-compositions/SKILL.md",
-    "dsh-runtime/node_modules/@deepseek-ai/dsh-agent-preset/skills/cordis-plugin-development/SKILL.md",
-    "dsh-runtime/node_modules/@deepseek-ai/dsh-agent-preset/skills/cordis-composition-reference/SKILL.md",
+    "dsh-runtime/node_modules/@deepseek-ai/dsh-skill-office/assets/office/SKILL.md",
+    "dsh-runtime/node_modules/@deepseek-ai/dsh-agent-preset/skills/dsh-doc/SKILL.md",
+    "dsh-runtime/node_modules/@deepseek-ai/dsh-sandbox-windows-acl/assets/diagnose-windows-sandbox-acl/SKILL.md",
 ]
 
 # 壳自己的随包载荷 —— 少任何一个，对应的功能在用户那里就是"没有"。

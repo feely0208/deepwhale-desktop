@@ -2,6 +2,24 @@
 
 本项目所有重要变更都会记录在此。
 
+## [1.0.65] — Windows「显示文件位置」修复 + 内核版本一致性（2026-11-20）
+
+### 修复：Windows 上「显示文件位置」一律失败（mac 正常）
+
+- 现象：聊天文件卡片 / 右栏文档预览点「显示文件位置」→「无法显示文件位置，请重试」；同版本 macOS 正常。
+- 根因：上游 `dsh-api-session-controller` 的 `verifyDesktopPath()` 把客户端给的路径与 `fs.realpath` 结果做**严格字符串比较**。Windows 上 realpath 会规范化盘符大小写 / 8.3 短名 / junction，一字符不同即判不等并抛 `Path has no verified Host path`，请求根本没走到 explorer。
+- 修法：打包前置补丁 `scripts/patch-dsh-win-paths.js` —— win32 下改为**大小写不敏感**比较；不相等时把 host/resolved 两侧路径打到 stderr（壳落盘到 `logs/dsh.log`）。
+- 守卫：`check:dsh-native` / 补丁幂等；产物解包验过 `dwhResolved` 存在于 app.asar。
+
+### 修复：升级后复用旧内核（壳 1.0.65 / 实际跑旧 DSH）
+
+- `ServiceManager.ensureReady()` 原来「端口有 HTTP 响应就复用」。升级后上一版遗留的 DSH 仍占着端口 → 新壳复用旧内核：手机端页面显示旧版本号、原生打开等行为仍是旧的。
+- 现在复用前用 `/mobile/api/whatsnew` 的 `appVersion` 比对当前壳版本；不一致则按端口找 PID（win: netstat / mac: lsof）杀掉重拉。
+
+### 新增：运行时输出落盘
+
+- `<userData>/logs/dsh.log`（令牌打码、2MB 轮转），界面报错只给泛化提示时可直接取现场。
+
 ## [1.0.64] — 启动自检退休旧登录凭据、头部预算提到 64KB（2026-11-04）
 
 ### 修复：`dsh-auth-*` cookie 累积到约 72 条触发 431，界面永久打不开（2026-10-31）

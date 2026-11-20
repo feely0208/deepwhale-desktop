@@ -2007,6 +2007,8 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
       },
       // 让壳拉起的 DSH 使用应用专属 home：会话与设置不落到用户自己的 ~/.dsh
       env: { DSH_HOME: legalHome },
+      // 运行时输出落盘（<userData>/logs/dsh.log）：界面报错只给泛化提示时，靠它取现场
+      logsDir: app.getPath('logs'),
       onLogLine: (line) => {
         // 冒烟：把随包运行时的**每一行**输出都打出来。
         // 为什么必须这样（2026-10-10 CI 事故）：子进程启动即退出时，日志里只有

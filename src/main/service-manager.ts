@@ -78,6 +78,11 @@ export interface ServiceOptions {
   /** 子进程退出回调 */
   onExit?: (code: number | null) => void;
   /**
+   * 运行时输出落盘目录（2026-11-20）：界面报错常常只有一句泛化提示，
+   * 真正的错误在 DSH 的 stderr 里 —— 落盘后用户报障才有现场可查。
+   */
+  logsDir?: string;
+  /**
    * 随包 DSH 运行时入口（`…/dsh-runtime/node_modules/@deepseek-ai/dsh/lib/bin.js`）。
    * 存在时优先用它：以 Electron 自带的 Node 拉起（ELECTRON_RUN_AS_NODE），
    * 用户机器上无需安装 Node.js、无需 npx、无需联网下载。
@@ -107,6 +112,10 @@ export class ServiceManager extends EventEmitter {
   private stopping = false;
   private port: number;
   private recentOutput: string[] = [];
+  /** 运行时输出落盘目录（主进程传入 app.getPath('logs')；缺省退回临时目录） */
+  private get logDir(): string {
+    return this.options.logsDir ?? path.join(os.tmpdir(), 'deepwhale-logs');
+  }
   /** DSH 宣布的服务地址（如 http://127.0.0.1:8080），拿不到时为 null */
   private webBase: string | null = null;
   /** DSH 的访问令牌（手机端网关用它在服务端建立会话） */
@@ -452,6 +461,23 @@ export class ServiceManager extends EventEmitter {
 
   private handleOutput(chunk: Buffer): void {
     const text = chunk.toString('utf-8');
+    // 2026-11-20：把运行时输出**落盘**一份（<userData>/logs/dsh.log，超 2MB 轮转）。
+    // 起因：Windows「显示文件位置」等界面报错只给一句泛化提示，真正的错误在 DSH 的 stderr 里，
+    // 而以前只留在内存环形缓冲（重启即失）→ 用户报障时我们拿不到现场，只能猜。
+    // 只落本地、不上传；令牌类字符串打码。
+    try {
+      const line = text.replace(/token=[A-Za-z0-9_-]{8,}/g, 'token=***').replace(/\r?\n+/g, '\n');
+      if (line.trim()) {
+        fs.mkdirSync(this.logDir ?? '', { recursive: true });
+        fs.appendFileSync(path.join(this.logDir ?? '.', 'dsh.log'), line + (line.endsWith('\n') ? '' : '\n'));
+        const st = fs.statSync(path.join(this.logDir ?? '.', 'dsh.log'));
+        if (st.size > 2 * 1024 * 1024) {
+          fs.renameSync(path.join(this.logDir ?? '.', 'dsh.log'), path.join(this.logDir ?? '.', 'dsh.log.1'));
+        }
+      }
+    } catch {
+      /* 落盘失败不影响任何功能 */
+    }
     for (const line of text.split(/\r?\n/)) {
       const trimmed = line.trim();
       if (!trimmed) continue;

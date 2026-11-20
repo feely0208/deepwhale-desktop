@@ -30,8 +30,10 @@ const NEW = [
   '\t\t\t\t? String(dwhResolved).toLowerCase() === String(hostPath).toLowerCase()',
   '\t\t\t\t: dwhResolved === hostPath);',
   '\t\t\tif (!dwhSame) {',
-  '\t\t\t\ttry { console.error("[dwh] verifyDesktopPath 拒绝：host=" + String(hostPath) + " resolved=" + String(dwhResolved)); } catch {}',
-  '\t\t\t\tthrow new RemoteError("gateway/bad-request", "Path has no verified Host path", {});',
+  '\t\t\t\ttry { console.error("[dwh] verifyDesktopPath 不匹配，按原路径继续：host=" + String(hostPath) + " resolved=" + String(dwhResolved)); } catch {}',
+  '\t\t\t\t// Windows 上不再拦截：realpath 会改写盘符大小写/短名/junction，严格比较必然误伤；',
+  '\t\t\t\t// 单机桌面壳里路径来自本机界面，放行后仍由 explorer 自己判断文件是否存在。',
+  '\t\t\t\tif (process.platform !== "win32") throw new RemoteError("gateway/bad-request", "Path has no verified Host path", {});',
   '\t\t\t}',
 ].join('\n');
 
@@ -51,7 +53,7 @@ function main() {
     return;
   }
   fs.writeFileSync(FILE, src.replace(OLD, NEW), 'utf-8');
-  console.log('[dsh-win-paths] ✅ verifyDesktopPath 改为 Windows 大小写不敏感比较，并记录不匹配路径');
+  console.log('[dsh-win-paths] ✅ Windows 上不再因路径比较拦截 reveal（记录不匹配并放行）');
 }
 
 main();

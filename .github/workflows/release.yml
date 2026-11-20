@@ -370,6 +370,8 @@ jobs:
           run_guard "生产依赖进包" node scripts/check-packaged-deps.js release dist
 
       - name: Upload artifacts (仅安装包，排除未打包 app 目录)
+        # 产物只是留档；存储配额打满时不该让「预览包」这类真正要用的步骤失败
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: deepwhale-desktop-${{ matrix.key }}

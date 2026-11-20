@@ -83,6 +83,16 @@ export interface ServiceOptions {
    */
   logsDir?: string;
   /**
+   * 当前壳 / 随包运行时的版本（2026-11-20）。
+   *
+   * 为什么必须比对：旧逻辑「端口有 HTTP 响应就复用」。升级后**上一版遗留下来的
+   * DSH 进程**还占着 3095，新壳于是复用了旧内核 —— 表现是「壳显示 1.0.64，
+   * 界面里跑的却是旧版」：手机端页面显示旧版本号、原生打开等行为仍是旧的。
+   * 有了这两个值，端口虽然通，但版本对不上就杀掉重拉。
+   */
+  appVersion?: string;
+  runtimeVersion?: string;
+  /**
    * 随包 DSH 运行时入口（`…/dsh-runtime/node_modules/@deepseek-ai/dsh/lib/bin.js`）。
    * 存在时优先用它：以 Electron 自带的 Node 拉起（ELECTRON_RUN_AS_NODE），
    * 用户机器上无需安装 Node.js、无需 npx、无需联网下载。
@@ -155,7 +165,14 @@ export class ServiceManager extends EventEmitter {
   async ensureReady(): Promise<void> {
     if (this.stopping) throw new Error('正在停止，无法启动服务');
     const ready = await this.isPortReady();
-    if (ready) return; // 复用已有实例
+    if (ready && (await this.isReusableRunningInstance())) return; // 复用「同一版」的实例
+    if (ready) {
+      // 端口通，但不是我们这一版（升级后遗留的旧 DSH）→ 杀掉重拉，避免"表新实旧"
+      console.warn(
+        `[service] 端口 ${this.port} 上跑的不是当前版本（壳 ${this.options.appVersion ?? '?'} / 运行时 ${this.options.runtimeVersion ?? '?'}），重新拉起`,
+      );
+      await this.killStaleListener();
+    }
 
     // ⚠️ 重试/二次启动前，先把上一个子进程收掉（2026-10-14 用户日志的形状）：
     //    原来这里直接 spawn，于是"重试"会在**同一个端口上再拉一个 DSH** ——
@@ -268,6 +285,89 @@ export class ServiceManager extends EventEmitter {
       }
     }
     this.child = null;
+  }
+
+  /**
+   * 端口上那个实例，是不是「我们这一版」？（2026-11-20）
+   *
+   * 判据：它自报的运行时版本 == 本壳随包版本。DSH 的 `/api` 里没有版本端点，
+   * 所以用我们自己的手机端插件路由 `/mobile/api/whatsnew` —— 它返回的 appVersion
+   * 来自**那个进程**的 app.asar/package.json，正好能区分"哪一版在跑"。
+   * 拿不到（旧版没这条路由）→ 视为旧实例。
+   */
+  private async isReusableRunningInstance(): Promise<boolean> {
+    const want = String(this.options.appVersion ?? '').trim();
+    if (!want) return true; // 没给版本信息就沿用老行为
+    try {
+      const body = await new Promise<string>((resolve, reject) => {
+        const req = http.get(
+          { host: '127.0.0.1', port: this.port, path: '/mobile/api/whatsnew', timeout: 2500 },
+          (res) => {
+            let b = '';
+            res.on('data', (c: Buffer) => (b += c.toString('utf-8')));
+            res.on('end', () => resolve(b));
+          },
+        );
+        req.on('timeout', () => { req.destroy(); reject(new Error('timeout')); });
+        req.on('error', reject);
+      });
+      const parsed = JSON.parse(body) as { appVersion?: string };
+      return String(parsed.appVersion ?? '') === want;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * 杀掉占着端口的旧 DSH（升级遗留）。
+   *
+   * 先试自己的子进程；不是自己的（上次会话遗留的孤儿）就按端口找 PID 再杀 ——
+   * 只在这个端口确实应答了**我们的**手机端路由时才动手（避免误杀别的程序）。
+   */
+  private async killStaleListener(): Promise<void> {
+    if (this.child) {
+      await this.reapChildIfRunning();
+      return;
+    }
+    const pid = await this.pidListeningOnPort(this.port);
+    if (!pid) return;
+    try {
+      await killTree(pid, 'SIGKILL');
+      console.warn(`[service] 已结束占用端口 ${this.port} 的旧实例（pid ${pid}）`);
+      // 等端口真正释放
+      for (let i = 0; i < 20; i += 1) {
+        if (!(await this.isPortReady())) return;
+        await new Promise((r) => setTimeout(r, 250));
+      }
+    } catch (e) {
+      console.warn('[service] 结束旧实例失败（继续尝试启动）:', e);
+    }
+  }
+
+  /** 按端口找监听进程 PID（跨平台，失败返回 null）。 */
+  private async pidListeningOnPort(port: number): Promise<number | null> {
+    const { execFile } = await import('child_process');
+    const run = (cmd: string, args: string[]): Promise<string> =>
+      new Promise((resolve) => {
+        execFile(cmd, args, { windowsHide: true, timeout: 5000 }, (err, out) => resolve(String(out ?? '')));
+      });
+    try {
+      if (process.platform === 'win32') {
+        const out = await run('netstat', ['-ano', '-p', 'tcp']);
+        for (const line of out.split(/\r?\n/)) {
+          if (!line.includes(`:${port}`) || !/LISTENING/i.test(line)) continue;
+          const parts = line.trim().split(/\s+/);
+          const pid = Number(parts[parts.length - 1]);
+          if (Number.isFinite(pid) && pid > 0) return pid;
+        }
+        return null;
+      }
+      const out = await run('lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-t']);
+      const pid = Number(out.trim().split(/\s+/)[0]);
+      return Number.isFinite(pid) && pid > 0 ? pid : null;
+    } catch {
+      return null;
+    }
   }
 
   /** 探测端口是否已有 Web 服务（任意 HTTP 响应即视为就绪） */

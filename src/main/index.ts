@@ -2009,6 +2009,16 @@ async function showStartingPage(win: BrowserWindow, failed = false): Promise<voi
       env: { DSH_HOME: legalHome },
       // 运行时输出落盘（<userData>/logs/dsh.log）：界面报错只给泛化提示时，靠它取现场
       logsDir: app.getPath('logs'),
+      // 版本一致性：端口虽然通，但若是**上一版遗留**的 DSH，必须杀掉重拉
+      // （否则"壳是 1.0.64、实际跑的是旧内核"，手机端页面版本号、原生打开等全是旧的）
+      appVersion: app.getVersion(),
+      runtimeVersion: (() => {
+        try {
+          return String(require('./dsh-version.generated').DSH_RUNTIME_VERSION || '');
+        } catch {
+          return '';
+        }
+      })(),
       onLogLine: (line) => {
         // 冒烟：把随包运行时的**每一行**输出都打出来。
         // 为什么必须这样（2026-10-10 CI 事故）：子进程启动即退出时，日志里只有
